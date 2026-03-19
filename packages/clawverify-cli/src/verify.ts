@@ -79,7 +79,19 @@ function countReceiptsFromEnvelope(envelope: unknown): number {
   if (!isRecord(payload)) return 0;
   const receipts = payload.receipts;
   if (!Array.isArray(receipts)) return 0;
-  return receipts.length;
+  return receipts.filter(
+    (receipt) => {
+      if (!isRecord(receipt)) return false;
+      if (receipt.envelope_type !== 'gateway_receipt') return false;
+      if (!isRecord(receipt.payload)) return false;
+      const binding = receipt.payload.binding;
+      return (
+        isRecord(binding) &&
+        typeof binding.event_hash_b64u === 'string' &&
+        binding.event_hash_b64u.length > 0
+      );
+    }
+  ).length;
 }
 
 function strictProofBundleReceiptVerdict(opts: {
