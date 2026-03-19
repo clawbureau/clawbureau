@@ -2,7 +2,6 @@ import type { ViewerIdentity } from './inspect-identity.js';
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const HKDF_INFO = new TextEncoder().encode('clawsig-epv-002-key-wrap');
-const HKDF_SALT = new Uint8Array(32);
 const ED25519_P = (1n << 255n) - 19n;
 
 export interface ViewerKeyEntry {
@@ -240,6 +239,15 @@ function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
   return out;
 }
 
+async function deriveHkdfSalt(
+  senderX25519PublicKey: Uint8Array,
+  recipientX25519PublicKey: Uint8Array,
+): Promise<Uint8Array> {
+  const joined = concatBytes(senderX25519PublicKey, recipientX25519PublicKey);
+  const hash = await crypto.subtle.digest('SHA-256', joined);
+  return new Uint8Array(hash);
+}
+
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -252,7 +260,9 @@ function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
 async function unwrapContentKey(
   viewerX25519PrivateKey: CryptoKey,
   entry: ViewerKeyEntry,
+  viewerX25519PublicKey: Uint8Array,
 ): Promise<Uint8Array> {
+  const ephemeralPublicRaw = fromBase64Url(entry.ephemeral_public_key_b64u);
   const ephemeralPublicKey = await crypto.subtle.importKey(
     'jwk',
     {
@@ -284,11 +294,13 @@ async function unwrapContentKey(
     ['deriveBits'],
   );
 
+  const hkdfSalt = await deriveHkdfSalt(ephemeralPublicRaw, viewerX25519PublicKey);
+
   const wrappingKeyBits = await crypto.subtle.deriveBits(
     {
       name: 'HKDF',
       hash: 'SHA-256',
-      salt: HKDF_SALT,
+      salt: hkdfSalt,
       info: HKDF_INFO,
     },
     hkdfInputKey,
@@ -473,7 +485,8 @@ export async function decryptBundleForIdentity(
       identity.publicKeyJwk,
     );
 
-    const contentKey = await unwrapContentKey(viewerPrivateKey, myEntry);
+    const viewerX25519PublicKey = ed25519PublicKeyToX25519(didPublicKey);
+    const contentKey = await unwrapContentKey(viewerPrivateKey, myEntry, viewerX25519PublicKey);
     return decryptAndVerifyPayload(contentKey, encryptedPayload);
   } catch (error) {
     if (error instanceof InspectDecryptError) {
