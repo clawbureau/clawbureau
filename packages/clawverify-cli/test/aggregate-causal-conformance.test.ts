@@ -31,6 +31,40 @@ type FixtureCase = {
   expected: FixtureExpected;
 };
 
+const SECOND_MS = 1_000;
+const HOUR_MS = 60 * 60 * SECOND_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+function isoAtOffset(baseMs: number, offsetMs: number): string {
+  return new Date(baseMs + offsetMs).toISOString();
+}
+
+type FixtureClock = {
+  eventTimestamp: string;
+  receiptTimestamp: string;
+  receiptIssuedAt: string;
+  memberIssuedAt: string;
+  aggregateCreatedAt: string;
+  manifestGeneratedAt: string;
+  aggregateIssuedAt: string;
+  aggregateExpiresAt: string;
+};
+
+function makeFixtureClock(nowMs = Date.now()): FixtureClock {
+  const issuedBaseMs = nowMs - HOUR_MS;
+
+  return {
+    eventTimestamp: isoAtOffset(issuedBaseMs, -2_000),
+    receiptTimestamp: isoAtOffset(issuedBaseMs, -1_500),
+    receiptIssuedAt: isoAtOffset(issuedBaseMs, -1_000),
+    memberIssuedAt: isoAtOffset(issuedBaseMs, -500),
+    aggregateCreatedAt: isoAtOffset(nowMs, -30 * 60 * SECOND_MS),
+    manifestGeneratedAt: isoAtOffset(nowMs, -29 * 60 * SECOND_MS),
+    aggregateIssuedAt: isoAtOffset(nowMs, -28 * 60 * SECOND_MS),
+    aggregateExpiresAt: isoAtOffset(nowMs, 30 * DAY_MS),
+  };
+}
+
 function base58Encode(bytes: Uint8Array): string {
   if (bytes.length === 0) return '';
 
@@ -143,6 +177,7 @@ async function makeProofMember(args: {
   attributionConfidence?: number;
   parentSpanId?: string;
   toolSpanId?: string;
+  clock: FixtureClock;
 }): Promise<SignedEnvelope<ProofBundlePayload>> {
   const eventPayloadHash = await computeHash(
     { type: 'llm_call', bundle_id: args.bundleId },
@@ -153,7 +188,7 @@ async function makeProofMember(args: {
     event_id: `${args.bundleId}_evt_001`,
     run_id: args.runId,
     event_type: 'llm_call',
-    timestamp: '2026-02-18T00:00:00.000Z',
+    timestamp: args.clock.eventTimestamp,
     payload_hash_b64u: eventPayloadHash,
     prev_hash_b64u: null as string | null,
   };
@@ -172,7 +207,7 @@ async function makeProofMember(args: {
       tokens_input: 25,
       tokens_output: 40,
       latency_ms: 45,
-      timestamp: '2026-02-18T00:00:00.100Z',
+      timestamp: args.clock.receiptTimestamp,
       binding: {
         run_id: args.runId,
         event_hash_b64u: eventHash,
@@ -186,7 +221,7 @@ async function makeProofMember(args: {
     envelopeType: 'gateway_receipt',
     signerDid: args.gatewayDid,
     privateKey: args.gatewayKey,
-    issuedAt: '2026-02-18T00:00:00.200Z',
+    issuedAt: args.clock.receiptIssuedAt,
   });
 
   return (await signEnvelope({
@@ -205,7 +240,7 @@ async function makeProofMember(args: {
     envelopeType: 'proof_bundle',
     signerDid: args.agentDid,
     privateKey: args.agentKey,
-    issuedAt: '2026-02-18T00:00:01.000Z',
+    issuedAt: args.clock.memberIssuedAt,
   })) as SignedEnvelope<ProofBundlePayload>;
 }
 
@@ -214,6 +249,7 @@ async function makeAggregateEnvelope(args: {
   issuerDid: string;
   issuerKey: CryptoKey;
   members: Array<SignedEnvelope<ProofBundlePayload>>;
+  clock: FixtureClock;
 }): Promise<AggregateBundleEnvelope> {
   const membersWithDigest = await Promise.all(
     args.members.map(async (member) => ({
@@ -242,11 +278,11 @@ async function makeAggregateEnvelope(args: {
     payload: {
       aggregate_version: '1',
       aggregate_id: args.aggregateId,
-      created_at: '2026-02-18T00:10:00.000Z',
+      created_at: args.clock.aggregateCreatedAt,
       issuer_did: args.issuerDid,
       manifest: {
         manifest_version: '1',
-        generated_at: '2026-02-18T00:10:01.000Z',
+        generated_at: args.clock.manifestGeneratedAt,
         entries: manifestEntries,
       },
       artifacts: {
@@ -264,12 +300,13 @@ async function makeAggregateEnvelope(args: {
     envelopeType: 'aggregate_bundle',
     signerDid: args.issuerDid,
     privateKey: args.issuerKey,
-    issuedAt: '2026-02-18T00:10:02.000Z',
-    expiresAt: '2027-03-18T00:10:02.000Z',
+    issuedAt: args.clock.aggregateIssuedAt,
+    expiresAt: args.clock.aggregateExpiresAt,
   })) as AggregateBundleEnvelope;
 }
 
 async function buildFixtureScenario(spec: FixtureCase) {
+  const clock = makeFixtureClock();
   const aggregateIssuer = await makeDidKeyEd25519();
   const gateway = await makeDidKeyEd25519();
   const agentA = await makeDidKeyEd25519();
@@ -289,6 +326,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
       responseHash: 'res_aggregate_causal_valid_a',
       spanId: 'span_shared_aggregate_001',
       phase: 'execution',
+      clock,
     });
 
     const memberB = await makeProofMember({
@@ -302,6 +340,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
       responseHash: 'res_aggregate_causal_valid_b',
       spanId: 'span_shared_aggregate_001',
       phase: 'execution',
+      clock,
     });
 
     return {
@@ -310,6 +349,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
         issuerDid: aggregateIssuer.did,
         issuerKey: aggregateIssuer.privateKey,
         members: [memberA, memberB],
+        clock,
       }),
       options: {
         allowlistedReceiptSignerDids: [gateway.did],
@@ -329,6 +369,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
       responseHash: 'res_aggregate_causal_conflict_a',
       spanId: 'span_conflict_aggregate_001',
       phase: 'execution',
+      clock,
     });
 
     const memberB = await makeProofMember({
@@ -342,6 +383,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
       responseHash: 'res_aggregate_causal_conflict_b',
       spanId: 'span_conflict_aggregate_001',
       phase: 'planning',
+      clock,
     });
 
     return {
@@ -350,6 +392,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
         issuerDid: aggregateIssuer.did,
         issuerKey: aggregateIssuer.privateKey,
         members: [memberA, memberB],
+        clock,
       }),
       options: {
         allowlistedReceiptSignerDids: [gateway.did],
@@ -368,6 +411,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
     responseHash: 'res_aggregate_replay_a',
     spanId: 'span_replay_aggregate_001',
     phase: 'execution',
+    clock,
   });
 
   const memberB = await makeProofMember({
@@ -381,6 +425,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
     responseHash: 'res_aggregate_replay_b',
     spanId: 'span_replay_aggregate_002',
     phase: 'execution',
+    clock,
   });
 
   return {
@@ -389,6 +434,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
       issuerDid: aggregateIssuer.did,
       issuerKey: aggregateIssuer.privateKey,
       members: [memberA, memberB],
+      clock,
     }),
     options: {
       allowlistedReceiptSignerDids: [gateway.did],
