@@ -21,6 +21,7 @@ import { runWorkInit } from './work-cmd.js';
 import { runWorkList } from './work-list.js';
 import { runWorkClaim } from './work-claim.js';
 import { runWorkSubmit } from './work-submit.js';
+import { runWorkStatus } from './work-status.js';
 import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
 import { rotateIdentity, RotationError } from './identity-rotation.js';
@@ -57,6 +58,7 @@ function usageText(): string {
     '  clawsig work list [--json] [--skills <csv>] [--budget-min <n>] [--repo <owner/repo>] [--marketplace <url>]',
     '  clawsig work claim --bounty <bty_id> [--idempotency-key <key>] [--cwc-worker-envelope <path>] [--marketplace <url>] [--json]',
     '  clawsig work submit --proof-bundle <path> [--bounty <bty_id>] [--commit-proof <path>] [--urm <path>] [--idempotency-key <key>] [--marketplace <url>] [--json]',
+    '  clawsig work status [submission_id] [--watch] [--interval <seconds>] [--marketplace <url>] [--json]',
     '  clawverify explain <REASON_CODE> [--json]',
     '  clawverify version [--json]',
     '',
@@ -90,6 +92,8 @@ function usageText(): string {
     '  clawsig work claim --bounty bty_1234abcd --cwc-worker-envelope ./cwc-worker-envelope.json',
     '  clawsig work submit --proof-bundle .clawsig/proof_bundle.json',
     '  clawsig work submit --bounty bty_1234abcd --proof-bundle .clawsig/proof_bundle.json --commit-proof proofs/commit.sig.json',
+    '  clawsig work status',
+    '  clawsig work status sub_1234abcd --watch --interval 5',
     '  clawsig inspect --input bundle.json',
     '  clawsig inspect --input bundle.json --decrypt --json',
     '  clawverify explain HASH_MISMATCH',
@@ -129,6 +133,7 @@ type ParsedArgs =
   | { command: 'work-list'; marketplace?: string; skills?: string; budgetMin?: number; repo?: string }
   | { command: 'work-claim'; bountyId: string; marketplace?: string; idempotencyKey?: string; cwcWorkerEnvelopePath?: string }
   | { command: 'work-submit'; proofBundlePath: string; bountyId?: string; commitProofPath?: string; urmPath?: string; idempotencyKey?: string; marketplace?: string; resultSummary?: string }
+  | { command: 'work-status'; submissionId?: string; watch: boolean; intervalSeconds?: number; marketplace?: string }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
@@ -259,9 +264,40 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       };
     }
 
+    if (argv[1] === 'status') {
+      const statusArgs = argv.slice(2);
+      let submissionId: string | undefined;
+      for (let i = 0; i < statusArgs.length; i++) {
+        const arg = statusArgs[i]!;
+        if (arg === '--watch') continue;
+        if (arg === '--interval' || arg === '--marketplace') {
+          i += 1;
+          continue;
+        }
+        if (arg.startsWith('--')) continue;
+
+        if (submissionId) {
+          throw new CliUsageError(
+            'Usage: clawsig work status [submission_id] [--watch] [--interval <seconds>] [--marketplace <url>] [--json]\n\n' +
+            'Only one optional submission_id positional argument is supported.',
+          );
+        }
+        submissionId = arg;
+      }
+
+      const watch = hasFlag(argv, '--watch');
+      const intervalRaw = readFlag(argv, '--interval');
+      const intervalSeconds = intervalRaw !== undefined ? Number(intervalRaw) : undefined;
+      if (intervalSeconds !== undefined && (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0)) {
+        throw new CliUsageError('--interval must be a positive number.');
+      }
+      const marketplace = readFlag(argv, '--marketplace');
+      return { command: 'work-status', submissionId, watch, intervalSeconds, marketplace };
+    }
+
     throw new CliUsageError(
       'Usage: clawsig work <subcommand> [options]\n\n' +
-      'Available work subcommands: init, list, claim, submit',
+      'Available work subcommands: init, list, claim, submit, status',
     );
   }
 
@@ -720,6 +756,17 @@ async function main() {
       idempotencyKey: parsed.idempotencyKey,
       marketplace: parsed.marketplace,
       resultSummary: parsed.resultSummary,
+      json: jsonMode,
+    });
+    return;
+  }
+
+  if (parsed.command === 'work-status') {
+    await runWorkStatus({
+      submissionId: parsed.submissionId,
+      watch: parsed.watch,
+      intervalSeconds: parsed.intervalSeconds,
+      marketplace: parsed.marketplace,
       json: jsonMode,
     });
     return;

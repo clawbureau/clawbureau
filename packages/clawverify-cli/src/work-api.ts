@@ -106,6 +106,26 @@ export type SubmitBountyResult =
   | { ok: true; submission: SubmitBountyResponse }
   | { ok: false; code: string; message: string; details?: unknown };
 
+export interface GetSubmissionStatusRequest {
+  workerDid: string;
+  authToken?: string;
+}
+
+export interface SubmissionStatusResponse {
+  submission_id: string;
+  status: string;
+  verification_result?: unknown;
+  approval_status?: string;
+  payout?: Record<string, unknown>;
+  reason_codes?: string[];
+  next_actions?: string[];
+  [key: string]: unknown;
+}
+
+export type GetSubmissionStatusResult =
+  | { ok: true; submission: SubmissionStatusResponse }
+  | { ok: false; code: string; message: string; details?: unknown };
+
 // ---------------------------------------------------------------------------
 // Internal: pluggable fetch for testability
 // ---------------------------------------------------------------------------
@@ -509,6 +529,102 @@ export async function submitBounty(
       ok: false,
       code: 'SUBMIT_PARSE_ERROR',
       message: 'Could not parse submit response as JSON',
+    };
+  }
+}
+
+/**
+ * Fetch current submission status.
+ *
+ * GET {marketplaceUrl}/v1/submissions/{submission_id}
+ * X-Worker-DID: <did>
+ * Authorization: Bearer <worker token> (optional)
+ */
+export async function getSubmissionStatus(
+  marketplaceUrl: string,
+  submissionId: string,
+  request: GetSubmissionStatusRequest,
+): Promise<GetSubmissionStatusResult> {
+  const url = `${marketplaceUrl.replace(/\/+$/, '')}/v1/submissions/${encodeURIComponent(submissionId)}`;
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'X-Worker-DID': request.workerDid,
+  };
+  if (request.authToken && request.authToken.trim().length > 0) {
+    headers.Authorization = `Bearer ${request.authToken}`;
+  }
+
+  let response: Response;
+  try {
+    response = await _fetch(url, { method: 'GET', headers });
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'NETWORK_ERROR',
+      message: err instanceof Error ? err.message : 'fetch failed',
+    };
+  }
+
+  if (!response.ok) {
+    const parsed = await parseApiError(response, 'SUBMISSION_STATUS_FAILED');
+    return {
+      ok: false,
+      code: parsed.code,
+      message: parsed.message,
+      ...(parsed.details !== undefined ? { details: parsed.details } : {}),
+    };
+  }
+
+  try {
+    const bodyRaw = (await response.json()) as Record<string, unknown>;
+    const submission: SubmissionStatusResponse = {
+      submission_id: typeof bodyRaw.submission_id === 'string' ? bodyRaw.submission_id : submissionId,
+      status: typeof bodyRaw.status === 'string' ? bodyRaw.status : '',
+    };
+
+    if (bodyRaw.verification_result !== undefined) {
+      submission.verification_result = bodyRaw.verification_result;
+    }
+
+    if (typeof bodyRaw.approval_status === 'string') {
+      submission.approval_status = bodyRaw.approval_status;
+    }
+
+    if (toRecord(bodyRaw.payout)) {
+      submission.payout = bodyRaw.payout as Record<string, unknown>;
+    }
+
+    if (Array.isArray(bodyRaw.reason_codes)) {
+      const reasonCodes = bodyRaw.reason_codes
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        .map((entry) => entry.trim());
+      if (reasonCodes.length > 0) {
+        submission.reason_codes = reasonCodes;
+      }
+    }
+
+    if (Array.isArray(bodyRaw.next_actions)) {
+      const nextActions = bodyRaw.next_actions
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        .map((entry) => entry.trim());
+      if (nextActions.length > 0) {
+        submission.next_actions = nextActions;
+      }
+    }
+
+    for (const [k, v] of Object.entries(bodyRaw)) {
+      if (!(k in submission)) {
+        submission[k] = v;
+      }
+    }
+
+    return { ok: true, submission };
+  } catch {
+    return {
+      ok: false,
+      code: 'SUBMISSION_STATUS_PARSE_ERROR',
+      message: 'Could not parse submission status response as JSON',
     };
   }
 }
