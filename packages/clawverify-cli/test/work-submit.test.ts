@@ -7,6 +7,7 @@ import { generateIdentity } from '../src/identity.js';
 import { saveWorkConfig, loadWorkConfig, DEFAULT_MARKETPLACE_URL } from '../src/work-config.js';
 import type { WorkConfig } from '../src/work-config.js';
 import { __setFetch } from '../src/work-api.js';
+import { saveRuntimeConfig } from '../src/runtime-config.js';
 import { runWorkSubmit } from '../src/work-submit.js';
 
 let tmpDir: string;
@@ -154,6 +155,64 @@ describe('runWorkSubmit', () => {
     expect(process.exitCode).toBe(2);
   });
 
+  it('blocks marketplace calls when runtime config disables marketplace', async () => {
+    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+    await saveRuntimeConfig(
+      {
+        configVersion: '1',
+        marketplace: { enabled: false },
+      },
+      tmpDir,
+    );
+
+    const config: WorkConfig = {
+      configVersion: '1',
+      workerDid: identity.did,
+      marketplaceUrl: DEFAULT_MARKETPLACE_URL,
+      createdAt: '2025-01-01T00:00:00Z',
+      registration: {
+        workerId: 'w-123',
+        registeredAt: '2025-01-01T00:00:01Z',
+        auth: { mode: 'token', token: 'tok_abc' },
+      },
+      activeBounty: {
+        bountyId: 'bty_test',
+        workerDid: identity.did,
+        marketplaceUrl: DEFAULT_MARKETPLACE_URL,
+        status: 'accepted',
+        claimedAt: '2025-01-01T00:00:02Z',
+        idempotencyKey: 'claim:bty_test',
+      },
+    };
+    await saveWorkConfig(config, tmpDir);
+
+    const proofPath = join(tmpDir, 'bundle.json');
+    await writeJson(proofPath, { payload: { agent_did: identity.did } });
+
+    let fetchCalled = false;
+    const restore = __setFetch(async () => {
+      fetchCalled = true;
+      return new Response('{}', { status: 200 });
+    });
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkSubmit({
+          proofBundlePath: proofPath,
+          json: true,
+          projectDir: tmpDir,
+        }),
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.error?.code).toBe('MARKETPLACE_DISABLED');
+      expect(process.exitCode).toBe(2);
+      expect(fetchCalled).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
   it('submits successfully, forwards auth header, and updates active context', async () => {
     const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
     const requesterDid = 'did:key:z6MkrRequester000000000000000000000000000001';
@@ -257,6 +316,79 @@ describe('runWorkSubmit', () => {
       expect(updated?.activeBounty?.status).toBe('pending_review');
       expect(updated?.activeBounty?.submittedAt).toBeDefined();
       expect(updated?.activeBounty?.requesterDid).toBe(requesterDid);
+    } finally {
+      restore();
+    }
+  });
+
+  it('accepts wrapped proof bundles with payload fields under envelope.payload', async () => {
+    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+
+    const config: WorkConfig = {
+      configVersion: '1',
+      workerDid: identity.did,
+      marketplaceUrl: 'https://market.example.com',
+      createdAt: '2025-01-01T00:00:00Z',
+      registration: {
+        workerId: 'w-123',
+        registeredAt: '2025-01-01T00:00:01Z',
+        auth: { mode: 'token', token: 'tok_abc' },
+      },
+      activeBounty: {
+        bountyId: 'bty_test',
+        workerDid: identity.did,
+        marketplaceUrl: 'https://market.example.com',
+        status: 'accepted',
+        claimedAt: '2025-01-01T00:00:02Z',
+        idempotencyKey: 'claim:bty_test',
+      },
+    };
+    await saveWorkConfig(config, tmpDir);
+
+    const proofPath = join(tmpDir, 'wrapped-bundle.json');
+    await writeJson(proofPath, {
+      envelope: {
+        payload: {
+          agent_did: identity.did,
+          receipts: [
+            {
+              payload: {
+                binding: {
+                  mission_id: 'bty_test',
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    let capturedBody: Record<string, unknown> = {};
+    const restore = __setFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      return new Response(
+        JSON.stringify({
+          submission_id: 'sub_wrapped',
+          bounty_id: 'bty_test',
+          status: 'pending_review',
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkSubmit({
+          proofBundlePath: proofPath,
+          json: true,
+          projectDir: tmpDir,
+        }),
+      );
+
+      expect(result.status).toBe('ok');
+      const submittedEnvelope = capturedBody.proof_bundle_envelope as Record<string, unknown>;
+      expect(isRecord(submittedEnvelope)).toBe(true);
+      expect((submittedEnvelope.payload as Record<string, unknown>).agent_did).toBe(identity.did);
     } finally {
       restore();
     }

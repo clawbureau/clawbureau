@@ -14,6 +14,7 @@ import {
 } from '../src/work-config.js';
 import type { WorkConfig } from '../src/work-config.js';
 import { registerWorker, __setFetch } from '../src/work-api.js';
+import { saveRuntimeConfig } from '../src/runtime-config.js';
 import { runWorkInit } from '../src/work-cmd.js';
 
 // ---------------------------------------------------------------------------
@@ -316,6 +317,40 @@ describe('runWorkInit', () => {
       const loaded = await loadWorkConfig(tmpDir);
       expect(loaded!.registration).toBeDefined();
       expect(loaded!.registration!.workerId).toBe('w-registered');
+    } finally {
+      restore();
+    }
+  });
+
+  it('skips registration when marketplace is disabled in runtime config', async () => {
+    const identityPath = join(tmpDir, '.clawsig', 'identity.jwk.json');
+    await generateIdentity(identityPath);
+    await saveRuntimeConfig(
+      {
+        configVersion: '1',
+        marketplace: { enabled: false },
+      },
+      tmpDir,
+    );
+
+    let fetchCalled = false;
+    const restore = __setFetch(async () => {
+      fetchCalled = true;
+      return new Response('{}', { status: 200 });
+    });
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkInit({ register: true, projectDir: tmpDir }),
+      );
+      expect(result.status).toBe('ok');
+      expect(result.registered).toBe(false);
+      expect(result.warning?.code).toBe('MARKETPLACE_DISABLED');
+      expect(fetchCalled).toBe(false);
+
+      const loaded = await loadWorkConfig(tmpDir);
+      expect(loaded).not.toBeNull();
+      expect(loaded!.registration).toBeUndefined();
     } finally {
       restore();
     }

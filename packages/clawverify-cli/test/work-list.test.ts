@@ -8,6 +8,7 @@ import { saveWorkConfig, DEFAULT_MARKETPLACE_URL } from '../src/work-config.js';
 import type { WorkConfig } from '../src/work-config.js';
 import { __setFetch } from '../src/work-api.js';
 import type { Bounty } from '../src/work-api.js';
+import { saveRuntimeConfig } from '../src/runtime-config.js';
 import {
   runWorkList,
   filterBounties,
@@ -372,6 +373,37 @@ describe('runWorkList: success', () => {
       expect(result.status).toBe('ok');
       expect(result.workerDid).toBeNull();
       expect(requestedUrl).toContain('/v1/bounties');
+    } finally {
+      restore();
+    }
+  });
+
+  it('blocks marketplace calls when runtime config disables marketplace', async () => {
+    await saveRuntimeConfig(
+      {
+        configVersion: '1',
+        marketplace: { enabled: false },
+      },
+      tmpDir,
+    );
+
+    let fetchCalled = false;
+    const restore = __setFetch(async () => {
+      fetchCalled = true;
+      return new Response(JSON.stringify({ bounties: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkList({ json: true, projectDir: tmpDir }),
+      );
+      expect(result.status).toBe('error');
+      expect(result.error?.code).toBe('MARKETPLACE_DISABLED');
+      expect(process.exitCode).toBe(2);
+      expect(fetchCalled).toBe(false);
     } finally {
       restore();
     }

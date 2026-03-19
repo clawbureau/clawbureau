@@ -11,6 +11,7 @@ import {
   loadWorkConfig,
   resolveWorkerAuthToken,
 } from './work-config.js';
+import { isMarketplaceEnabled } from './runtime-config.js';
 import { listBounties } from './work-api.js';
 import type { Bounty } from './work-api.js';
 import { printJson, printJsonError } from './json-output.js';
@@ -143,6 +144,44 @@ export function renderTable(bounties: Bounty[]): string {
 
 export async function runWorkList(options: WorkListOptions = {}): Promise<WorkListResult> {
   const jsonMode = !!options.json;
+  const marketplaceEnabled = await isMarketplaceEnabled(options.projectDir);
+  const fallbackMarketplace = options.marketplace ?? DEFAULT_MARKETPLACE_URL;
+
+  if (!marketplaceEnabled) {
+    const code = 'MARKETPLACE_DISABLED';
+    const message =
+      'Marketplace integration is disabled (.clawsig/runtime.json: marketplace.enabled=false). ' +
+      '`clawsig work list` requires marketplace access.';
+    const nextActions = [
+      'clawsig config set marketplace.enabled true',
+      'Use standalone mode commands: clawsig init, clawsig wrap, clawverify verify, clawsig inspect',
+    ];
+
+    process.exitCode = 2;
+    if (jsonMode) {
+      printJsonError({
+        code,
+        message,
+        details: { next_actions: nextActions },
+      });
+    } else {
+      process.stderr.write(`Error: ${message}\n`);
+      process.stderr.write('\nNext actions:\n');
+      for (const action of nextActions) {
+        process.stderr.write(`  ${action}\n`);
+      }
+    }
+
+    return {
+      status: 'error',
+      bounties: [],
+      total: 0,
+      filtered: 0,
+      marketplace: fallbackMarketplace,
+      workerDid: null,
+      error: { code, message },
+    };
+  }
 
   // 1. Resolve marketplace URL: flag > work config > default.
   let marketplaceUrl = options.marketplace;

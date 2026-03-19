@@ -13,6 +13,7 @@ import {
   verifyProofBundleFromFile,
 } from './verify.js';
 import { runComplianceReport } from './compliance-cmd.js';
+import { runConfigSet } from './config-cmd.js';
 import { hintForReasonCode, explainReasonCode, explainReasonCodeJson } from './hints.js';
 import { runInit } from './init.js';
 import { runMigratePolicy } from './migrate-policy.js';
@@ -54,6 +55,7 @@ function usageText(): string {
     '  clawsig identity show [--json]',
     '  clawsig identity link-github --github <username> [--json]',
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
+    '  clawsig config set marketplace.enabled <true|false> [--json]',
     '  clawsig fleet add <name> [--json]',
     '  clawsig fleet list [--json]',
     '  clawsig fleet revoke <name> [--json]',
@@ -87,6 +89,7 @@ function usageText(): string {
     '  clawsig fleet list --json',
     '  clawsig fleet revoke codex-worker',
     '  clawsig work init',
+    '  clawsig config set marketplace.enabled false',
     '  clawsig work init --marketplace https://clawbounties.clawea.workers.dev --register',
     '  clawsig work list',
     '  clawsig work list --json --skills typescript,rust --budget-min 100',
@@ -133,6 +136,7 @@ function readAllFlags(args: string[], name: string): string[] {
 type ParsedArgs =
   | { command: 'verify'; kind: CliKind; inputPath: string; configPath?: string; urmPath?: string }
   | { command: 'compliance'; inputPath: string; framework: string; outputPath?: string }
+  | { command: 'config-set'; key: string; value: string }
   | { command: 'init'; targetDir?: string; force: boolean; global: boolean }
   | { command: 'work-init'; marketplace?: string; register: boolean }
   | { command: 'work-list'; marketplace?: string; skills?: string; budgetMin?: number; repo?: string }
@@ -316,6 +320,22 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     const framework = readFlag(argv, '--framework') ?? 'soc2';
     const outputPath = readFlag(argv, '--output');
     return { command: 'compliance', inputPath, framework, outputPath };
+  }
+
+  if (argv[0] === 'config') {
+    if (argv[1] === 'set') {
+      const key = argv[2];
+      const value = argv[3];
+      if (!key || !value || argv.length !== 4) {
+        throw new CliUsageError(
+          'Usage: clawsig config set marketplace.enabled <true|false> [--json]',
+        );
+      }
+      return { command: 'config-set', key, value };
+    }
+    throw new CliUsageError(
+      'Usage: clawsig config set marketplace.enabled <true|false> [--json]',
+    );
   }
 
   if (argv[0] === 'migrate-policy') {
@@ -633,6 +653,15 @@ async function main() {
         process.stderr.write(`Error: ${message}\n`);
       }
     }
+    return;
+  }
+
+  if (parsed.command === 'config-set') {
+    await runConfigSet({
+      key: parsed.key,
+      value: parsed.value,
+      json: jsonMode,
+    });
     return;
   }
 

@@ -21,6 +21,7 @@ import {
   type WorkConfig,
 } from './work-config.js';
 import { saveActiveBounty } from './active-bounty.js';
+import { isMarketplaceEnabled } from './runtime-config.js';
 import { printJson, printJsonError } from './json-output.js';
 
 // ---------------------------------------------------------------------------
@@ -65,7 +66,7 @@ function defaultClaimIdempotencyKey(bountyId: string, workerDid: string): string
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {
-  return !!input && typeof input === 'object';
+  return !!input && typeof input === 'object' && !Array.isArray(input);
 }
 
 async function loadJsonObject(path: string): Promise<Record<string, unknown>> {
@@ -176,6 +177,30 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
   const projectDir = options.projectDir;
   const bountyId = options.bountyId.trim();
   const configPath = workConfigPath(projectDir);
+  const marketplaceEnabled = await isMarketplaceEnabled(projectDir);
+
+  if (!marketplaceEnabled) {
+    const code = 'MARKETPLACE_DISABLED';
+    const message =
+      'Marketplace integration is disabled (.clawsig/runtime.json: marketplace.enabled=false). ' +
+      '`clawsig work claim` requires marketplace access.';
+    const nextActions = [
+      'clawsig config set marketplace.enabled true',
+      'Use standalone mode commands: clawsig init, clawsig wrap, clawverify verify, clawsig inspect',
+    ];
+    process.exitCode = 2;
+    emitError(jsonMode, code, message, nextActions);
+    return makeResultError({
+      bountyId,
+      marketplace: options.marketplace ?? DEFAULT_MARKETPLACE_URL,
+      workerDid: '',
+      idempotencyKey: options.idempotencyKey ?? '',
+      configPath,
+      code,
+      message,
+      nextActions,
+    });
+  }
 
   if (!bountyId) {
     const code = 'USAGE_ERROR';

@@ -7,6 +7,7 @@ import { generateIdentity } from '../src/identity.js';
 import { saveWorkConfig, DEFAULT_MARKETPLACE_URL } from '../src/work-config.js';
 import type { WorkConfig } from '../src/work-config.js';
 import { __setFetch } from '../src/work-api.js';
+import { saveRuntimeConfig } from '../src/runtime-config.js';
 import { runWorkStatus } from '../src/work-status.js';
 
 let tmpDir: string;
@@ -75,6 +76,39 @@ describe('runWorkStatus', () => {
     expect(result.status).toBe('error');
     expect(result.error?.code).toBe('SUBMISSION_MISSING');
     expect(process.exitCode).toBe(2);
+  });
+
+  it('blocks marketplace calls when runtime config disables marketplace', async () => {
+    await saveRuntimeConfig(
+      {
+        configVersion: '1',
+        marketplace: { enabled: false },
+      },
+      tmpDir,
+    );
+
+    let fetchCalled = false;
+    const restore = __setFetch(async () => {
+      fetchCalled = true;
+      return new Response('{}', { status: 200 });
+    });
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkStatus({
+          submissionId: 'sub_test',
+          json: true,
+          projectDir: tmpDir,
+        }),
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.error?.code).toBe('MARKETPLACE_DISABLED');
+      expect(process.exitCode).toBe(2);
+      expect(fetchCalled).toBe(false);
+    } finally {
+      restore();
+    }
   });
 
   it('auto-discovers submission_id from .clawsig/active-bounty.json', async () => {
