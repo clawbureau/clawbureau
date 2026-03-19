@@ -152,6 +152,20 @@ function toRecord(input: unknown): Record<string, unknown> | null {
   return input && typeof input === 'object' ? (input as Record<string, unknown>) : null;
 }
 
+function normalizeRegistrationAuth(input: unknown): { mode: string; token: string } | null {
+  const auth = toRecord(input);
+  if (!auth) return null;
+
+  const token = typeof auth.token === 'string' ? auth.token.trim() : '';
+  if (!token) return null;
+
+  const mode = typeof auth.mode === 'string' && auth.mode.trim().length > 0
+    ? auth.mode.trim()
+    : 'token';
+
+  return { mode, token };
+}
+
 async function parseApiError(
   response: Response,
   fallbackCode: string,
@@ -345,9 +359,23 @@ export async function registerWorker(
       registeredAt: (body.registered_at as string) ?? new Date().toISOString(),
     };
 
+    const normalizedAuth = normalizeRegistrationAuth(body.auth);
+    if (normalizedAuth) {
+      registration.auth = normalizedAuth;
+    } else {
+      const fallbackTokenKeys = ['token', 'auth_token', 'worker_token', 'worker_auth_token'] as const;
+      for (const key of fallbackTokenKeys) {
+        const value = body[key];
+        if (typeof value === 'string' && value.trim().length > 0) {
+          registration.auth = { mode: 'token', token: value.trim() };
+          break;
+        }
+      }
+    }
+
     // Preserve any extra fields the marketplace returns.
     for (const [k, v] of Object.entries(body)) {
-      if (k !== 'worker_id' && k !== 'registered_at') {
+      if (k !== 'worker_id' && k !== 'registered_at' && k !== 'auth') {
         registration[k] = v;
       }
     }
