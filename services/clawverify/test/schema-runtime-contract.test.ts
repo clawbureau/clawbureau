@@ -386,3 +386,15 @@ describe('DCP-003: bounty schema minimum_proof_tier', () => {
     expect(schema.properties).toHaveProperty('minimum_proof_tier');
   });
 });
+
+// SKL-004: RunSummary schema type addition
+import { describe, it, expect } from 'vitest';
+
+describe('SKL-004: RunSummary schema type', () => {
+  it('packages/schema exports RunSummary type definition', async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const content = readFileSync(resolve(__dirname, '../../../packages/schema/index.d.ts'), 'utf8');
+    expect(content).toContain('RunSummary');
+  });
+});
