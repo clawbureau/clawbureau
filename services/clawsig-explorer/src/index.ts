@@ -51,18 +51,34 @@ import {
 import { arenaRoiPage, arenaRoiUnavailablePage } from './pages/arena-roi.js';
 import { arenaLeaguePage, arenaLeagueUnavailablePage } from './pages/arena-league.js';
 import { deriveOpsSloHealth } from './slo.js';
+import {
+  beginGithubOauth,
+  completeGithubOauth,
+  logoutGithubSession,
+  readExplorerSession,
+  type AuthEnv,
+} from './inspect-auth.js';
+import { resolveGithubViewerIdentities, type IdentityEnv } from './inspect-identity.js';
+import {
+  decryptBundleForIdentity,
+  extractPublicLayer,
+  InspectDecryptError,
+} from './inspect-crypto.js';
 
-export interface Env {
+export interface Env extends AuthEnv, IdentityEnv {
   ENVIRONMENT: string;
   VAAS_API_BASE: string;
   ARENA_API_BASE?: string;
   ARENA_ADMIN_KEY?: string;
 }
 
-function json(data: unknown, status = 200): Response {
+function json(data: unknown, status = 200, extraHeaders?: HeadersInit): Response {
+  const headers = new Headers(extraHeaders);
+  headers.set('Content-Type', 'application/json');
+
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers,
   });
 }
 
@@ -72,6 +88,16 @@ function html(body: string, status = 200, cacheSeconds = 60): Response {
     headers: {
       'Content-Type': 'text/html;charset=utf-8',
       'Cache-Control': `public, max-age=${cacheSeconds}, s-maxage=${cacheSeconds * 10}`,
+    },
+  });
+}
+
+function htmlNoStore(body: string, status = 200): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      'Content-Type': 'text/html;charset=utf-8',
+      'Cache-Control': 'private, no-store, no-cache, must-revalidate',
     },
   });
 }
@@ -96,6 +122,31 @@ function parseCursorHistory(raw: string | null): string[] {
     .map((item) => item.trim())
     .filter((item) => item.length > 0)
     .slice(0, 50);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function parseJsonObjectRequestBody(request: Request): Promise<Record<string, unknown> | null> {
+  const parsed = await request.json().catch(() => null);
+  return isRecord(parsed) ? parsed : null;
+}
+
+function parseBundleUrl(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 async function loadOpsDashboardData(apiOpts: { vaasBase: string; cache: Cache }) {
@@ -143,6 +194,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
+    const method = request.method.toUpperCase();
 
     // Cache API instance
     const cache = await caches.open("clawsig-explorer");
@@ -174,12 +226,186 @@ export default {
       );
     }
 
-    // -- Home --
-    // -- Inspector --
-    if (path === "/inspect") {
-      return html(inspectPage(), 200, 86400);
+    // -- GitHub OAuth auth flow for /inspect --
+    if (path === '/auth/github/login' && method === 'GET') {
+      return beginGithubOauth(request, env);
+    }
+    if (path === '/auth/github/callback' && method === 'GET') {
+      return completeGithubOauth(request, env);
+    }
+    if (path === '/auth/logout' && method === 'GET') {
+      return logoutGithubSession(request);
     }
 
+    // -- Inspect API: load bundle from URL --
+    if (path === '/api/inspect/load' && method === 'GET') {
+      const bundleUrl = parseBundleUrl(url.searchParams.get('bundle'));
+      if (!bundleUrl) {
+        return json({ error: 'Query parameter "bundle" must be a valid http(s) URL.' }, 400);
+      }
+
+      let upstream: Response;
+      try {
+        upstream = await fetch(bundleUrl, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'clawsig-explorer',
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return json({ error: `Failed to fetch bundle URL: ${message}` }, 502);
+      }
+
+      if (!upstream.ok) {
+        return json({
+          error: `Bundle URL request failed with HTTP ${upstream.status}.`,
+          upstream_status: upstream.status,
+        }, 502);
+      }
+
+      const bundle = await upstream.json().catch(() => null);
+      if (!isRecord(bundle)) {
+        return json({ error: 'Bundle URL did not return a JSON object.' }, 422);
+      }
+
+      return json({ bundle }, 200, {
+        'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+      });
+    }
+
+    // -- Inspect API: decrypt bundle for authenticated viewer --
+    if (path === '/api/inspect/decrypt' && method === 'POST') {
+      const body = await parseJsonObjectRequestBody(request);
+      if (!body || !isRecord(body.bundle)) {
+        return json({ status: 'invalid_bundle', message: 'Request body must include a "bundle" object.' }, 400);
+      }
+
+      const bundle = body.bundle;
+
+      let publicLayer;
+      try {
+        publicLayer = extractPublicLayer(bundle);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Bundle format is invalid.';
+        return json({
+          status: 'invalid_bundle',
+          message,
+        }, 400);
+      }
+
+      if (!publicLayer.has_encrypted_payload || publicLayer.bundle_version !== '2') {
+        return json({
+          status: 'not_encrypted',
+          message: 'Bundle has no v2 encrypted payload to decrypt.',
+          public_layer: publicLayer,
+        }, 200, {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        });
+      }
+
+      const session = await readExplorerSession(request, env);
+      if (!session) {
+        return json({
+          status: 'unauthenticated',
+          message: 'Sign in with GitHub to request bundle decryption.',
+          public_layer: publicLayer,
+        }, 401, {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        });
+      }
+
+      const identities = await resolveGithubViewerIdentities(session.login, env);
+      if (identities.length === 0) {
+        return json({
+          status: 'unauthorized',
+          message: 'You are not authorized to view this bundle\'s plaintext',
+          public_layer: publicLayer,
+        }, 200, {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        });
+      }
+
+      const viewerDidSet = new Set(publicLayer.viewer_dids);
+      const matchingIdentities = identities.filter((identity) => viewerDidSet.has(identity.did));
+      if (matchingIdentities.length === 0) {
+        return json({
+          status: 'unauthorized',
+          message: 'You are not authorized to view this bundle\'s plaintext',
+          public_layer: publicLayer,
+        }, 200, {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        });
+      }
+
+      let lastDecryptError: InspectDecryptError | null = null;
+      for (const identity of matchingIdentities) {
+        try {
+          const decryptedPayload = await decryptBundleForIdentity(bundle, identity);
+          return json({
+            status: 'decrypted',
+            viewer_did: identity.did,
+            public_layer: publicLayer,
+            decrypted_payload: decryptedPayload,
+          }, 200, {
+            'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+          });
+        } catch (error) {
+          if (error instanceof InspectDecryptError) {
+            lastDecryptError = error;
+            continue;
+          }
+
+          return json({
+            status: 'decrypt_failed',
+            message: 'Failed to decrypt bundle payload.',
+            public_layer: publicLayer,
+          }, 500);
+        }
+      }
+
+      if (lastDecryptError?.code === 'INSPECT_NOT_AUTHORIZED') {
+        return json({
+          status: 'unauthorized',
+          message: 'You are not authorized to view this bundle\'s plaintext',
+          public_layer: publicLayer,
+        }, 200, {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        });
+      }
+
+      const status = lastDecryptError?.code === 'INSPECT_INTEGRITY_FAILURE' ? 422 : 500;
+      const message = lastDecryptError?.code === 'INSPECT_INTEGRITY_FAILURE'
+        ? 'Bundle plaintext integrity check failed after decryption.'
+        : (lastDecryptError?.message ?? 'Failed to decrypt bundle payload.');
+
+      return json({
+        status: 'decrypt_failed',
+        message,
+        code: lastDecryptError?.code ?? 'INSPECT_CRYPTO_FAILURE',
+        public_layer: publicLayer,
+      }, status, {
+        'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+      });
+    }
+
+    // -- Inspector --
+    if (path === "/inspect" && method === 'GET') {
+      const session = await readExplorerSession(request, env);
+      const authStatus = normalizeQueryValue(url.searchParams.get('auth')) ?? null;
+
+      return htmlNoStore(inspectPage({
+        auth: {
+          authenticated: session !== null,
+          login: session?.login,
+          name: session?.name ?? null,
+        },
+        authStatus,
+      }), 200);
+    }
+
+    // -- Home --
     if (path === "/") {
       const data = await fetchGlobalStats(apiOpts);
       if (!data) {
