@@ -3,10 +3,25 @@ export { verifyProofBundleFromFile, verifyExportBundleFromFile } from './verify.
 export { hintForReasonCode, explainReasonCode } from './hints.js';
 export { runInit } from './init.js';
 export { generateIdentity, loadIdentity, identityToAgentDid, defaultIdentityPath } from './identity.js';
+export {
+  linkGithubIdentity,
+  showGithubIdentity,
+  defaultGithubBindingPath,
+  isGithubBindingStore,
+  GithubBindingError,
+} from './identity-github.js';
 export { wrap } from './wrap.js';
 export { addFleetAgent, listFleetAgents, revokeFleetAgent, FleetError, loadIdentityForWrap } from './fleet.js';
 export type { InitOptions, InitResult } from './init.js';
 export type { ClawsigIdentity } from './identity.js';
+export type {
+  GithubDidBindingAttestationPayload,
+  GithubDidBindingAttestationEnvelope,
+  GithubBindingStore,
+  LinkGithubOptions,
+  LinkGithubResult,
+  ShowGithubIdentityResult,
+} from './identity-github.js';
 export type { FleetAgentRecord, FleetAddResult, FleetRevokeResult, WrapIdentitySelection } from './fleet.js';
 export { runWorkInit } from './work-cmd.js';
 export { runWorkClaim } from './work-claim.js';
