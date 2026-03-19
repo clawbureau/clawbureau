@@ -9,6 +9,7 @@ interface InspectAuthState {
 interface InspectPageOptions {
   auth: InspectAuthState;
   authStatus?: string | null;
+  logoutCsrfToken?: string | null;
 }
 
 function serializeForScript(value: unknown): string {
@@ -24,6 +25,7 @@ export function inspectPage(options: InspectPageOptions): string {
 
   const authState = serializeForScript(options.auth);
   const authStatus = serializeForScript(options.authStatus ?? null);
+  const logoutCsrfToken = serializeForScript(options.logoutCsrfToken ?? null);
 
   const body = /* html */`
 <div class="inspect-root">
@@ -70,6 +72,10 @@ export function inspectPage(options: InspectPageOptions): string {
       flex-wrap: wrap;
       gap: 0.5rem;
       align-items: center;
+    }
+
+    .inspect-inline-form {
+      margin: 0;
     }
 
     .inspect-input,
@@ -291,11 +297,13 @@ export function inspectPage(options: InspectPageOptions): string {
 
   <script id="inspect-auth-state" type="application/json">${authState}</script>
   <script id="inspect-auth-status" type="application/json">${authStatus}</script>
+  <script id="inspect-logout-csrf" type="application/json">${logoutCsrfToken}</script>
 
   <script>
     (function() {
       const authState = JSON.parse(document.getElementById('inspect-auth-state').textContent || '{}');
       const authStatus = JSON.parse(document.getElementById('inspect-auth-status').textContent || 'null');
+      const logoutCsrfToken = JSON.parse(document.getElementById('inspect-logout-csrf').textContent || 'null');
 
       const bannerEl = document.getElementById('status-banner');
       const bundleUrlEl = document.getElementById('bundle-url');
@@ -341,12 +349,21 @@ export function inspectPage(options: InspectPageOptions): string {
       function renderAuth() {
         const returnTo = window.location.pathname + window.location.search;
         const signinHref = '/auth/github/login?return_to=' + encodeURIComponent(returnTo);
-        const logoutHref = '/auth/logout?return_to=' + encodeURIComponent('/inspect' + (window.location.search || ''));
+        const logoutReturnTo = '/inspect' + (window.location.search || '');
 
         if (authState && authState.authenticated) {
           const label = authState.login ? '@' + authState.login : 'authenticated user';
           authSubtitleEl.textContent = 'Signed in as ' + label + '.';
-          authActionsEl.innerHTML = '<a class="inspect-btn" href="' + escapeHtml(logoutHref) + '">Sign out</a>';
+          if (typeof logoutCsrfToken === 'string' && logoutCsrfToken.length > 0) {
+            authActionsEl.innerHTML = ''
+              + '<form class="inspect-inline-form" method="post" action="/auth/logout">'
+              + '<input type="hidden" name="return_to" value="' + escapeHtml(logoutReturnTo) + '" />'
+              + '<input type="hidden" name="csrf_token" value="' + escapeHtml(logoutCsrfToken) + '" />'
+              + '<button type="submit" class="inspect-btn">Sign out</button>'
+              + '</form>';
+          } else {
+            authActionsEl.innerHTML = '<button class="inspect-btn" disabled>Sign out unavailable</button>';
+          }
           decryptBtn.disabled = false;
         } else {
           authSubtitleEl.textContent = 'Sign in required for plaintext decryption.';
