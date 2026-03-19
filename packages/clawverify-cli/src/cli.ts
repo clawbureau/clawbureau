@@ -25,6 +25,7 @@ import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
 import { rotateIdentity, RotationError } from './identity-rotation.js';
 import { runInspect, InspectError } from './inspect-cmd.js';
+import { addFleetAgent, listFleetAgents, revokeFleetAgent, FleetError } from './fleet.js';
 import { VALID_VISIBILITY_MODES } from './epv-crypto.js';
 import type { VisibilityMode } from './epv-crypto.js';
 import type { CliOutput, CliKind, CliVerifyOutput } from './types.js';
@@ -49,6 +50,9 @@ function usageText(): string {
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
     '  clawsig inspect --input <bundle.json> [--decrypt] [--json]',
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
+    '  clawsig fleet add <name> [--json]',
+    '  clawsig fleet list [--json]',
+    '  clawsig fleet revoke <name> [--json]',
     '  clawsig work init [--marketplace <url>] [--register] [--json]',
     '  clawsig work list [--json] [--skills <csv>] [--budget-min <n>] [--repo <owner/repo>] [--marketplace <url>]',
     '  clawsig work claim --bounty <bty_id> [--idempotency-key <key>] [--cwc-worker-envelope <path>] [--marketplace <url>] [--json]',
@@ -74,6 +78,9 @@ function usageText(): string {
     '  clawverify verify proof-bundle --input bundle.json --json',
     '  clawverify compliance bundle.json --framework soc2',
     '  clawverify init',
+    '  clawsig fleet add codex-worker',
+    '  clawsig fleet list --json',
+    '  clawsig fleet revoke codex-worker',
     '  clawsig work init',
     '  clawsig work init --marketplace https://clawbounties.clawea.workers.dev --register',
     '  clawsig work list',
@@ -127,6 +134,9 @@ type ParsedArgs =
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
   | { command: 'inspect'; inputPath: string; decrypt: boolean }
   | { command: 'identity-rotate'; targetDir?: string; global: boolean }
+  | { command: 'fleet-add'; name: string }
+  | { command: 'fleet-list' }
+  | { command: 'fleet-revoke'; name: string }
   | { command: 'version' };
 
 function parseCliArgs(argv: string[]): ParsedArgs {
@@ -282,6 +292,33 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     const targetDir = readFlag(rest, '--dir');
     const global = hasFlag(rest, '--global');
     return { command: 'identity-rotate', targetDir, global };
+  }
+
+  if (argv[0] === 'fleet') {
+    if (argv[1] === 'add') {
+      const name = argv[2];
+      if (!name || name.startsWith('--')) {
+        throw new CliUsageError('Usage: clawsig fleet add <name> [--json]');
+      }
+      return { command: 'fleet-add', name };
+    }
+
+    if (argv[1] === 'list') {
+      return { command: 'fleet-list' };
+    }
+
+    if (argv[1] === 'revoke') {
+      const name = argv[2];
+      if (!name || name.startsWith('--')) {
+        throw new CliUsageError('Usage: clawsig fleet revoke <name> [--json]');
+      }
+      return { command: 'fleet-revoke', name };
+    }
+
+    throw new CliUsageError(
+      'Usage: clawsig fleet <subcommand> [options]\n\n' +
+      'Available fleet subcommands: add, list, revoke',
+    );
   }
 
   if (argv[0] === 'init') {
@@ -451,6 +488,104 @@ async function main() {
       const code = err instanceof InspectError ? err.code : 'INTERNAL_ERROR';
       if (jsonMode) {
         printJsonError({ code, message });
+      } else {
+        process.stderr.write(`Error: ${message}\n`);
+      }
+    }
+    return;
+  }
+
+  if (parsed.command === 'fleet-add') {
+    try {
+      const result = await addFleetAgent(parsed.name);
+      if (jsonMode) {
+        printJson({
+          status: 'OK',
+          name: result.name,
+          did: result.did,
+          agent_status: result.status,
+          key_path: result.keyPath,
+          registry_path: result.registryPath,
+        });
+      } else {
+        process.stdout.write('Fleet agent added.\n');
+        process.stdout.write(`  Name: ${result.name}\n`);
+        process.stdout.write(`  DID: ${result.did}\n`);
+        process.stdout.write(`  Status: ${result.status}\n`);
+      }
+    } catch (err) {
+      process.exitCode = 2;
+      const message = err instanceof Error ? err.message : String(err);
+      if (jsonMode) {
+        printJsonError({
+          code: err instanceof FleetError ? err.code : 'INTERNAL_ERROR',
+          message,
+        });
+      } else {
+        process.stderr.write(`Error: ${message}\n`);
+      }
+    }
+    return;
+  }
+
+  if (parsed.command === 'fleet-list') {
+    try {
+      const agents = await listFleetAgents();
+      if (jsonMode) {
+        printJson({
+          agents: agents.map((agent) => ({
+            name: agent.name,
+            did: agent.did,
+            status: agent.status,
+          })),
+        });
+      } else if (agents.length === 0) {
+        process.stdout.write('No fleet agents registered.\n');
+      } else {
+        process.stdout.write('Fleet agents:\n');
+        for (const agent of agents) {
+          process.stdout.write(`  ${agent.name}  ${agent.did}  ${agent.status}\n`);
+        }
+      }
+    } catch (err) {
+      process.exitCode = 2;
+      const message = err instanceof Error ? err.message : String(err);
+      if (jsonMode) {
+        printJsonError({
+          code: err instanceof FleetError ? err.code : 'INTERNAL_ERROR',
+          message,
+        });
+      } else {
+        process.stderr.write(`Error: ${message}\n`);
+      }
+    }
+    return;
+  }
+
+  if (parsed.command === 'fleet-revoke') {
+    try {
+      const result = await revokeFleetAgent(parsed.name);
+      if (jsonMode) {
+        printJson({
+          status: 'OK',
+          name: result.name,
+          did: result.did,
+          agent_status: result.status,
+        });
+      } else {
+        process.stdout.write('Fleet agent revoked.\n');
+        process.stdout.write(`  Name: ${result.name}\n`);
+        process.stdout.write(`  DID: ${result.did}\n`);
+        process.stdout.write(`  Status: ${result.status}\n`);
+      }
+    } catch (err) {
+      process.exitCode = 2;
+      const message = err instanceof Error ? err.message : String(err);
+      if (jsonMode) {
+        printJsonError({
+          code: err instanceof FleetError ? err.code : 'INTERNAL_ERROR',
+          message,
+        });
       } else {
         process.stderr.write(`Error: ${message}\n`);
       }
@@ -725,6 +860,9 @@ main().catch((err: unknown) => {
     code = 'CONFIG_ERROR';
     message = err.message;
   } else if (err instanceof RotationError) {
+    code = err.code;
+    message = err.message;
+  } else if (err instanceof FleetError) {
     code = err.code;
     message = err.message;
   } else if (err instanceof InspectError) {
