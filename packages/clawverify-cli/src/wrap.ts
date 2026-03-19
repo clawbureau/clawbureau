@@ -31,7 +31,8 @@ import {
   filterNetworkReceipts,
   computeBundleSummary,
 } from '@clawbureau/clawsig-sdk';
-import { loadIdentity, identityToAgentDid } from './identity.js';
+import { identityToAgentDid } from './identity.js';
+import { loadIdentityForWrap } from './fleet.js';
 import { validateVisibilityArgs, applyVisibility } from './epv-crypto.js';
 import type { VisibilityMode } from './epv-crypto.js';
 import type { BundleSummaryStats } from '@clawbureau/clawsig-sdk';
@@ -253,12 +254,18 @@ export async function wrap(
     process.stderr.write(`\x1b[2mclawsig: securing execution...\x1b[0m\n`);
   }
 
-  // 1. Load persistent identity or fall back to ephemeral DID
-  const persistentIdentity = await loadIdentity();
+  // 1. Load persistent identity or active fleet identity, else fall back to ephemeral DID
+  const persistentIdentity = await loadIdentityForWrap();
   let agentDid;
   if (persistentIdentity) {
-    agentDid = await identityToAgentDid(persistentIdentity);
-    process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Persistent DID: ${agentDid.did}\n`);
+    agentDid = await identityToAgentDid(persistentIdentity.identity);
+    if (persistentIdentity.source === 'fleet') {
+      process.stderr.write(
+        `\n\x1b[36m[clawsig]\x1b[0m Fleet DID (${persistentIdentity.fleetName}): ${agentDid.did}\n`,
+      );
+    } else {
+      process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Persistent DID: ${agentDid.did}\n`);
+    }
   } else {
     agentDid = await generateEphemeralDid();
     process.stderr.write(`\n\x1b[33m[clawsig]\x1b[0m No persistent identity found. Run \`clawsig init\` to create one.\n`);
@@ -279,7 +286,7 @@ export async function wrap(
     }
   }
 
-  diag(`\n\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
+  diag(`\n\x1b[36m[clawsig]\x1b[0m Agent DID: ${agentDid.did}\n`);
   diag(`\x1b[36m[clawsig]\x1b[0m Run ID: ${runId}\n`);
 
   // 2. Load local WPC policy (if present) and compile for bash sentinel
@@ -1868,4 +1875,3 @@ async function synthesizeSniGatewayReceipts(
 
   return receipts;
 }
-
