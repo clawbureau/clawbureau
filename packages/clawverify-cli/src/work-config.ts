@@ -39,6 +39,8 @@ export interface ActiveBountyContext {
   idempotencyKey: string;
   /** Optional escrow id from claim response. */
   escrowId?: string;
+  /** Optional requester DID for requester-visibility proof sharing. */
+  requesterDid?: string;
   /** Last submission id produced for this bounty (if any). */
   submissionId?: string;
   /** ISO timestamp of the last submit operation (if any). */

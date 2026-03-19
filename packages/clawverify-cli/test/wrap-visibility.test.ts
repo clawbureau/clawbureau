@@ -14,6 +14,7 @@ import {
   applyVisibility,
   VALID_VISIBILITY_MODES,
 } from '../src/epv-crypto.js';
+import { generateIdentity } from '../src/identity.js';
 import type { VisibilityMode } from '../src/epv-crypto.js';
 
 const execFileAsync = promisify(execFile);
@@ -477,6 +478,107 @@ describe('clawsig wrap --visibility (CLI integration)', () => {
     }
   });
 
+  it('--visibility requester auto-loads requester DID from .clawsig/active-bounty.json', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'epv-req-auto-'));
+    const requesterDid = generateTestDid();
+    try {
+      const identity = await generateIdentity(join(workdir, '.clawsig', 'identity.jwk.json'));
+      await mkdir(join(workdir, '.clawsig'), { recursive: true });
+      await writeFile(
+        join(workdir, '.clawsig', 'active-bounty.json'),
+        JSON.stringify({
+          schema_version: '1',
+          bounty_id: 'bty_test',
+          worker_did: identity.did,
+          marketplace_url: 'https://market.example.com',
+          status: 'accepted',
+          claimed_at: '2026-03-19T00:00:00.000Z',
+          idempotency_key: 'claim:bty_test',
+          requester_did: requesterDid,
+        }, null, 2),
+        'utf-8',
+      );
+
+      const { exitCode, bundlePath } = await runWrap(workdir, ['--visibility', 'requester']);
+      expect(exitCode).toBe(0);
+
+      const raw = await readFile(bundlePath, 'utf-8');
+      const bundle = JSON.parse(raw) as Record<string, unknown>;
+      const payload = bundle.payload as Record<string, unknown>;
+
+      expect(payload.bundle_version).toBe('2');
+      expect(payload.visibility).toBe('requester');
+
+      const vk = payload.viewer_keys as Array<Record<string, string>>;
+      expect(vk.length).toBe(2);
+      expect(vk.map((k) => k.viewer_did)).toContain(requesterDid);
+      expect(vk.map((k) => k.role)).toContain('requester');
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('--visibility requester with explicit --viewer-did does not add stale active requester DID', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'epv-req-explicit-'));
+    const explicitViewerDid = generateTestDid();
+    const staleRequesterDid = generateTestDid();
+    try {
+      await mkdir(join(workdir, '.clawsig'), { recursive: true });
+      await writeFile(
+        join(workdir, '.clawsig', 'active-bounty.json'),
+        JSON.stringify({
+          schema_version: '1',
+          bounty_id: 'bty_test',
+          worker_did: 'did:key:z6Mkworker111111111111111111111111111111111',
+          marketplace_url: 'https://market.example.com',
+          status: 'accepted',
+          claimed_at: '2026-03-19T00:00:00.000Z',
+          idempotency_key: 'claim:bty_test',
+          requester_did: staleRequesterDid,
+        }, null, 2),
+        'utf-8',
+      );
+
+      const { exitCode, bundlePath } = await runWrap(workdir, [
+        '--visibility', 'requester',
+        '--viewer-did', explicitViewerDid,
+      ]);
+      expect(exitCode).toBe(0);
+
+      const raw = await readFile(bundlePath, 'utf-8');
+      const bundle = JSON.parse(raw) as Record<string, unknown>;
+      const payload = bundle.payload as Record<string, unknown>;
+      const vk = payload.viewer_keys as Array<Record<string, string>>;
+
+      expect(vk.length).toBe(2);
+      expect(vk.map((k) => k.viewer_did)).toContain(explicitViewerDid);
+      expect(vk.map((k) => k.viewer_did)).not.toContain(staleRequesterDid);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('--visibility requester fails clearly when .clawsig/active-bounty.json is corrupt', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'epv-req-corrupt-'));
+    try {
+      await mkdir(join(workdir, '.clawsig'), { recursive: true });
+      await writeFile(
+        join(workdir, '.clawsig', 'active-bounty.json'),
+        '{"schema_version":',
+        'utf-8',
+      );
+
+      const { exitCode, stdout, stderr } = await runWrap(workdir, ['--visibility', 'requester']);
+      expect(exitCode).not.toBe(0);
+
+      const combined = stdout + stderr;
+      expect(combined).toMatch(/active bounty file/i);
+      expect(combined).toMatch(/parse JSON/i);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
   // -----------------------------------------------------------------------
   // Fail-closed tests
   // -----------------------------------------------------------------------
@@ -500,7 +602,8 @@ describe('clawsig wrap --visibility (CLI integration)', () => {
       const { exitCode, stdout, stderr } = await runWrap(workdir, ['--visibility', 'requester']);
       expect(exitCode).not.toBe(0);
       const combined = stdout + stderr;
-      expect(combined).toMatch(/requires at least one --viewer-did/);
+      expect(combined).toMatch(/No active bounty context found/);
+      expect(combined).toMatch(/pass --viewer-did <requester_did>/);
     } finally {
       await rm(workdir, { recursive: true, force: true });
     }

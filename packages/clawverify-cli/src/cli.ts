@@ -176,7 +176,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     const visibility = visibilityRaw as VisibilityMode;
     const viewerDids = readAllFlags(flagArgs, '--viewer-did');
 
-    if ((visibility === 'requester' || visibility === 'auditor') && viewerDids.length === 0) {
+    if (visibility === 'auditor' && viewerDids.length === 0) {
       throw new CliUsageError(
         `--visibility=${visibility} requires at least one --viewer-did.`,
       );
