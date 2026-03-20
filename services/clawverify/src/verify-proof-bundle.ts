@@ -1254,6 +1254,7 @@ interface ProcessorPolicyEvidence {
   };
   used_processors: ProcessorPolicyEvidenceRoute[];
   blocked_attempts: ProcessorPolicyEvidenceBlockedAttempt[];
+}
 
 type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
 

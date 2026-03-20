@@ -142,6 +142,7 @@ interface ProcessorPolicyState {
     reason_code: string;
     timestamp: string;
   }>;
+}
 
 type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
 
@@ -1286,21 +1287,6 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       plannedPrevHash = eventHash;
       eventChainEntries.push(eventChainEntry);
 
-      const processorRoute = buildProcessorRouteClaims({
-        provider,
-        bodyBuffer,
-        headers: req.headers as Record<string, string | string[] | undefined>,
-        policy: processorPolicy,
-      });
-      const processorDecision = evaluateProcessorPolicy(processorPolicy, processorRoute);
-      recordProcessorPolicyDecision(processorPolicyState, processorDecision, eventTimestamp);
-      if (!processorDecision.allowed) {
-        throw new ProcessorPolicyError(
-          processorDecision.reason_code ?? 'PRV_PROCESSOR_POLICY_DENIED',
-          processorDecision.route,
-        );
-      }
-
       // Extract provider key from the incoming request, fall back to constructor option
       const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
       const incomingKey = extractProviderKey(reqHeaders) ?? providerApiKey;
@@ -1421,6 +1407,21 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
           }));
           return;
         }
+      }
+
+      const processorRoute = buildProcessorRouteClaims({
+        provider,
+        bodyBuffer: outboundBodyBuffer,
+        headers: reqHeaders,
+        policy: processorPolicy,
+      });
+      const processorDecision = evaluateProcessorPolicy(processorPolicy, processorRoute);
+      recordProcessorPolicyDecision(processorPolicyState, processorDecision, eventTimestamp);
+      if (!processorDecision.allowed) {
+        throw new ProcessorPolicyError(
+          processorDecision.reason_code ?? 'PRV_PROCESSOR_POLICY_DENIED',
+          processorDecision.route,
+        );
       }
 
       // CAUSAL SIEVE: Process outgoing request for tool_results.
