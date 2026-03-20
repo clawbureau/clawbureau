@@ -28,6 +28,8 @@ export interface ProxyOptions {
   runId: string;
   /** Upstream clawproxy URL (default: https://clawproxy.com). */
   clawproxyUrl?: string;
+  /** Optional clawproxy CST / scoped token (forwarded as X-CST). */
+  proxyToken?: string;
   /** Provider API key for OpenAI (passed through to clawproxy). */
   providerApiKey?: string;
   /** Local WPC policy for the TCP Guillotine. */
@@ -82,6 +84,7 @@ interface CollectedReceipt {
   collectedAt: string;
   provider: string;
   model: string;
+  eventChainEntry: EventChainEntry;
 }
 
 function randomUUID(): string {
@@ -229,32 +232,67 @@ async function forwardToClawproxy(
   bodyBuffer: Buffer,
   incomingHeaders: Record<string, string | string[] | undefined>,
   providerApiKey: string | undefined,
+  proxyToken: string | undefined,
   clawproxyUrl: string,
   runId: string,
   agentDid: string,
   idempotencyKey: string,
+  eventHash: string,
 ): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean; stream?: ReadableStream<Uint8Array> | null }> {
-  const suffix = upstreamPathWithQuery.startsWith('/v1/')
-    ? upstreamPathWithQuery.slice('/v1'.length)
-    : upstreamPathWithQuery;
-  const targetUrl = `${clawproxyUrl}/v1/proxy/${provider}${suffix}`;
+  // clawproxy exposes a single canonical POST /v1/proxy/:provider endpoint.
+  // Do not forward SDK-specific suffixes like /chat/completions or /messages,
+  // or clawproxy will return NOT_FOUND and we will silently fall back to
+  // unsigned preload receipts instead of collecting signed gateway receipts.
+  const queryIndex = upstreamPathWithQuery.indexOf('?');
+  const query = queryIndex === -1 ? '' : upstreamPathWithQuery.slice(queryIndex);
+  const targetUrl = `${clawproxyUrl}/v1/proxy/${provider}${query}`;
 
-  const headers = buildUpstreamRequestHeaders(incomingHeaders, bodyBuffer);
+  let forwardedBodyBuffer = bodyBuffer;
+  if (provider === 'google' && bodyBuffer.length > 0) {
+    try {
+      const parsed = JSON.parse(bodyBuffer.toString('utf-8')) as Record<string, unknown>;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        delete parsed['store'];
+        delete parsed['prompt_cache_key'];
+        delete parsed['prompt_cache_retention'];
+        delete parsed['service_tier'];
+        delete parsed['reasoning'];
+        delete parsed['include'];
+        forwardedBodyBuffer = Buffer.from(JSON.stringify(parsed), 'utf-8');
+      }
+    } catch {
+      // Non-JSON payloads are forwarded unchanged.
+    }
+  }
+
+  const headers = buildUpstreamRequestHeaders(incomingHeaders, forwardedBodyBuffer);
+  delete headers['authorization'];
+  delete headers['Authorization'];
+  delete headers['x-goog-api-key'];
+  delete headers['X-Goog-Api-Key'];
+  delete headers['api-key'];
+  delete headers['Api-Key'];
+  delete headers['x-api-key'];
+  delete headers['X-Api-Key'];
   headers['X-Run-Id'] = runId;
+  headers['X-Event-Hash'] = eventHash;
   headers['X-Idempotency-Key'] = idempotencyKey;
   headers['X-Agent-DID'] = agentDid;
 
   if (providerApiKey) {
     headers['X-Provider-API-Key'] = providerApiKey;
   }
+  if (proxyToken && proxyToken.trim().length > 0) {
+    headers['X-CST'] = proxyToken.trim();
+  }
 
   const upperMethod = method.toUpperCase();
-  const hasBody = upperMethod !== 'GET' && upperMethod !== 'HEAD' && bodyBuffer.length > 0;
+  const hasBody = upperMethod !== 'GET' && upperMethod !== 'HEAD' && forwardedBodyBuffer.length > 0;
 
   const res = await fetch(targetUrl, {
     method: upperMethod,
     headers,
-    ...(hasBody ? { body: new Uint8Array(bodyBuffer) } : {}),
+    ...(hasBody ? { body: new Uint8Array(forwardedBodyBuffer) } : {}),
   });
 
   const contentType = res.headers.get('content-type') ?? '';
@@ -366,11 +404,40 @@ function extractReceiptFromStream(body: Buffer): {
   const text = body.toString('utf-8');
   const lines = text.split('\n');
 
+  const parseCommentEnvelope = (value: string): SignedEnvelope<GatewayReceiptPayload> | undefined => {
+    try {
+      const normalized = value.trim().replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+      const decoded = Buffer.from(padded, 'base64').toString('utf-8');
+      const parsed = JSON.parse(decoded) as SignedEnvelope<GatewayReceiptPayload>;
+      if (parsed?.envelope_type === 'gateway_receipt') return parsed;
+    } catch {
+      // ignore malformed trailer comments
+    }
+    return undefined;
+  };
+
   // Look for receipt event in SSE stream
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (!line) continue;
+
+    if (line.startsWith(':clawproxy_receipt_envelope_b64u=')) {
+      const envelope = parseCommentEnvelope(
+        line.slice(':clawproxy_receipt_envelope_b64u='.length),
+      );
+      if (envelope) {
+        return {
+          envelope,
+          provider: envelope.payload?.provider ?? 'unknown',
+          model: envelope.payload?.model ?? 'unknown',
+        };
+      }
+      continue;
+    }
+
     // Look for data lines that might contain receipt
-    if (line?.startsWith('data: ')) {
+    if (line.startsWith('data: ')) {
       const data = line.slice(6).trim();
       if (data === '[DONE]') continue;
       try {
@@ -441,6 +508,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     agentDid,
     runId,
     clawproxyUrl = 'https://clawproxy.com',
+    proxyToken,
     providerApiKey,
     policy = null,
     cwd,
@@ -450,6 +518,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
 
   const normalizedUrl = clawproxyUrl.replace(/\/+$/, '');
   const receipts: CollectedReceipt[] = [];
+  let plannedPrevHash: string | null = null;
 
   // RED TEAM FIX #7: Ephemeral run salt for privacy.
   // Generate a 16-byte random salt per run.
@@ -502,6 +571,27 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         ? Buffer.alloc(0)
         : await readBody(req);
       const idempotencyKey = randomUUID();
+      const eventId = `evt_${randomUUID()}`;
+      const eventTimestamp = new Date().toISOString();
+      const payloadHashB64u = await hashJsonB64u({
+        provider,
+        method,
+        nonce: idempotencyKey,
+      });
+      const plannedEventHeader: Omit<EventChainEntry, 'event_hash_b64u'> = {
+        event_id: eventId,
+        run_id: runId,
+        event_type: 'llm_call',
+        timestamp: eventTimestamp,
+        payload_hash_b64u: payloadHashB64u,
+        prev_hash_b64u: plannedPrevHash,
+      };
+      const eventHash = await hashJsonB64u(plannedEventHeader);
+      const eventChainEntry: EventChainEntry = {
+        ...plannedEventHeader,
+        event_hash_b64u: eventHash,
+      };
+      plannedPrevHash = eventHash;
 
       // Extract provider key from the incoming request, fall back to constructor option
       const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
@@ -530,10 +620,12 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             bodyBuffer,
             reqHeaders,
             incomingKey,
+            proxyToken,
             normalizedUrl,
             runId,
             agentDid.did,
             idempotencyKey,
+            eventHash,
           );
 
       // Force explicit content-length to match exact decompressed payload size.
@@ -578,9 +670,10 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       if (receiptInfo.envelope) {
         receipts.push({
           envelope: receiptInfo.envelope,
-          collectedAt: new Date().toISOString(),
+          collectedAt: eventTimestamp,
           provider: receiptInfo.provider,
           model: receiptInfo.model,
+          eventChainEntry,
         });
       }
 
@@ -657,38 +750,10 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
   async function compileProofBundle(): Promise<SignedEnvelope<ProofBundlePayload>> {
     const encoder = new TextEncoder();
 
-    // Build a minimal event chain from collected receipts
-    const eventChain: EventChainEntry[] = [];
-    let prevHash: string | null = null;
-
-    for (let i = 0; i < receipts.length; i++) {
-      const r = receipts[i]!;
-      const eventId = `evt_${randomUUID()}`;
-      const payloadHashB64u = await hashJsonB64u({
-        provider: r.provider,
-        model: r.model,
-        receipt_id: r.envelope.payload.receipt_id,
-      });
-
-      const eventEntry = {
-        event_id: eventId,
-        run_id: runId,
-        event_type: 'llm_call',
-        timestamp: r.collectedAt,
-        payload_hash_b64u: payloadHashB64u,
-        prev_hash_b64u: prevHash,
-      };
-
-      const eventHash = await hashJsonB64u(eventEntry);
-
-      const chainEntry: EventChainEntry = {
-        ...eventEntry,
-        event_hash_b64u: eventHash,
-      };
-
-      eventChain.push(chainEntry);
-      prevHash = eventHash;
-    }
+    // Build the event chain from the precomputed request headers used for
+    // receipt binding. The event_hash_b64u must match the exact X-Event-Hash
+    // sent to clawproxy, otherwise downstream binding verification will fail.
+    const eventChain: EventChainEntry[] = receipts.map((r) => r.eventChainEntry);
 
     const envelopes = receipts.map((r) => r.envelope);
 

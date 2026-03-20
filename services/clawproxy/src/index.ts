@@ -86,6 +86,7 @@ export { IdempotencyDurableObject } from './idempotency';
 
 import { validateScopedToken } from './scoped-token';
 import { computeTokenScopeHashB64uV1 } from './token-scope-hash';
+import { hasRequiredScope } from '../../../packages/identity-auth/src/index';
 import {
   extractPolicyFromHeaders,
   enforceProviderAllowlist,
@@ -1773,18 +1774,28 @@ async function handleProxy(
         : undefined;
 
     const tokenLane = tokenValidation.claims.token_lane;
+    const missionIdFromToken =
+      typeof tokenValidation.claims.mission_id === 'string' && tokenValidation.claims.mission_id.trim().length > 0
+        ? tokenValidation.claims.mission_id.trim()
+        : undefined;
+    const allowLegacyMissionBoundProxyToken =
+      tokenLane === 'legacy' &&
+      !!missionIdFromToken &&
+      hasRequiredScope(tokenValidation.claims.scope, ['proxy:call', 'clawproxy:call']);
 
     if (requireCanonicalCst) {
       if (!ownerDidFromToken || !controllerDidFromToken || !agentDidFromToken || tokenLane !== 'canonical') {
-        return errorResponseWithRateLimit(
-          'TOKEN_CONTROL_CHAIN_MISSING',
-          'Canonical chain claims are required: owner_did, controller_did, agent_did, token_lane=canonical',
-          401,
-          rateLimitInfo
-        );
+        if (!allowLegacyMissionBoundProxyToken) {
+          return errorResponseWithRateLimit(
+            'TOKEN_CONTROL_CHAIN_MISSING',
+            'Canonical chain claims are required: owner_did, controller_did, agent_did, token_lane=canonical',
+            401,
+            rateLimitInfo
+          );
+        }
       }
 
-      if (normalizeDid(agentDidFromToken) !== normalizeDid(tokenValidation.claims.sub)) {
+      if (agentDidFromToken && normalizeDid(agentDidFromToken) !== normalizeDid(tokenValidation.claims.sub)) {
         return errorResponseWithRateLimit(
           'TOKEN_CONTROL_SUBJECT_MISMATCH',
           'agent_did claim must match token subject (sub)',
@@ -1824,11 +1835,6 @@ async function handleProxy(
       typeof tokenValidation.claims.payment_account_did === 'string' &&
       tokenValidation.claims.payment_account_did.trim().length > 0
         ? tokenValidation.claims.payment_account_did.trim()
-        : undefined;
-
-    const missionIdFromToken =
-      typeof tokenValidation.claims.mission_id === 'string' && tokenValidation.claims.mission_id.trim().length > 0
-        ? tokenValidation.claims.mission_id.trim()
         : undefined;
 
     const spendCapFromToken =
@@ -2332,8 +2338,9 @@ async function handleProxy(
 
   // Build provider-specific URL (Gemini needs model in path)
   let providerUrl: string;
+  let openaiApi: OpenAIUpstreamApi | undefined;
   try {
-    const openaiApi: OpenAIUpstreamApi | undefined =
+    openaiApi =
       provider === 'openai' || provider === 'google'
         ? inferOpenAiUpstreamApi(request, parsedBody)
         : undefined;
@@ -2344,6 +2351,32 @@ async function handleProxy(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponseWithRateLimit('INVALID_REQUEST', message, 400, rateLimitInfo);
+  }
+
+  if (provider === 'google' && openaiApi === 'responses') {
+    try {
+      const obj = JSON.parse(finalRequestBody) as Record<string, unknown>;
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+        throw new Error('Request body must be a JSON object');
+      }
+
+      delete obj.store;
+      delete obj.prompt_cache_key;
+      delete obj.prompt_cache_retention;
+      delete obj.service_tier;
+      delete obj.reasoning;
+      delete obj.include;
+
+      finalRequestBody = JSON.stringify(stripUndefined(obj));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return errorResponseWithRateLimit(
+        'INVALID_REQUEST',
+        `Failed to normalize Google-compatible OpenAI Responses payload: ${message}`,
+        400,
+        rateLimitInfo
+      );
+    }
   }
 
   // Extend binding with policy hash and CST token scope hash (when present)
