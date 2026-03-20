@@ -1254,6 +1254,643 @@ interface ProcessorPolicyEvidence {
   };
   used_processors: ProcessorPolicyEvidenceRoute[];
   blocked_attempts: ProcessorPolicyEvidenceBlockedAttempt[];
+
+type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
+
+interface DataHandlingClassMatch {
+  class_id: string;
+  rule_id: string;
+  action: DataHandlingAction;
+  match_count: number;
+}
+
+interface DataHandlingReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  policy_version: 'prv.dlp.v1';
+  run_id: string;
+  provider: string;
+  action: DataHandlingAction;
+  reason_code: string;
+  classes: DataHandlingClassMatch[];
+  approval: {
+    required: boolean;
+    satisfied: boolean;
+    mechanism: string;
+    token_hash_b64u: string | null;
+  };
+  redaction: {
+    applied: boolean;
+    original_payload_hash_b64u: string;
+    outbound_payload_hash_b64u: string | null;
+  };
+  timestamp: string;
+}
+
+function isDataHandlingAction(value: unknown): value is DataHandlingAction {
+  return (
+    value === 'allow' ||
+    value === 'redact' ||
+    value === 'block' ||
+    value === 'require_approval'
+  );
+}
+
+function isDataHandlingClassMatch(value: unknown): value is DataHandlingClassMatch {
+  if (!isObjectRecord(value)) return false;
+  const matchCount = value.match_count;
+  return (
+    typeof value.class_id === 'string' &&
+    value.class_id.trim().length > 0 &&
+    typeof value.rule_id === 'string' &&
+    value.rule_id.trim().length > 0 &&
+    isDataHandlingAction(value.action) &&
+    typeof matchCount === 'number' &&
+    Number.isInteger(matchCount) &&
+    matchCount >= 0
+  );
+}
+
+function isValidDataHandlingReasonCode(payload: Record<string, unknown>): boolean {
+  if (typeof payload.reason_code !== 'string') return false;
+
+  if (payload.action === 'block') {
+    return payload.reason_code === 'PRV_DLP_BLOCKED';
+  }
+
+  if (payload.action === 'redact') {
+    return payload.reason_code === 'PRV_DLP_REDACTED';
+  }
+
+  if (payload.action === 'allow') {
+    if (
+      isObjectRecord(payload.approval) &&
+      payload.approval.required === true &&
+      payload.approval.satisfied === true
+    ) {
+      return payload.reason_code === 'PRV_DLP_APPROVAL_GRANTED';
+    }
+    return payload.reason_code === 'PRV_DLP_ALLOW';
+  }
+
+  if (payload.action === 'require_approval') {
+    return (
+      payload.reason_code === 'PRV_DLP_APPROVAL_REQUIRED' ||
+      payload.reason_code === 'PRV_DLP_CLASSIFIER_ERROR'
+    );
+  }
+
+  return false;
+}
+
+async function verifyDataHandlingReceiptEnvelope(args: {
+  envelope: unknown;
+  expectedSignerDid: string;
+  expectedRunId: string | null;
+  field: string;
+}):
+  Promise<
+    | { ok: true; signature_valid: boolean }
+    | {
+        ok: false;
+        code: VerificationError['code'];
+        message: string;
+        field: string;
+        signature_valid: boolean;
+      }
+  > {
+  if (!isObjectRecord(args.envelope)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt entry must be an object',
+      field: args.field,
+      signature_valid: false,
+    };
+  }
+
+  const env = args.envelope;
+  if (env.envelope_version !== '1') {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt envelope_version must be "1"',
+      field: `${args.field}.envelope_version`,
+      signature_valid: false,
+    };
+  }
+  if (env.envelope_type !== 'data_handling_receipt') {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt envelope_type must be "data_handling_receipt"',
+      field: `${args.field}.envelope_type`,
+      signature_valid: false,
+    };
+  }
+  if (env.hash_algorithm !== 'SHA-256') {
+    return {
+      ok: false,
+      code: 'UNKNOWN_HASH_ALGORITHM',
+      message: 'data handling receipt hash_algorithm must be SHA-256',
+      field: `${args.field}.hash_algorithm`,
+      signature_valid: false,
+    };
+  }
+  if (env.algorithm !== 'Ed25519') {
+    return {
+      ok: false,
+      code: 'UNKNOWN_ALGORITHM',
+      message: 'data handling receipt algorithm must be Ed25519',
+      field: `${args.field}.algorithm`,
+      signature_valid: false,
+    };
+  }
+  if (typeof env.payload_hash_b64u !== 'string' || !isValidBase64Url(env.payload_hash_b64u)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload_hash_b64u must be base64url',
+      field: `${args.field}.payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+  if (typeof env.signature_b64u !== 'string' || !isValidBase64Url(env.signature_b64u)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt signature_b64u must be base64url',
+      field: `${args.field}.signature_b64u`,
+      signature_valid: false,
+    };
+  }
+  if (typeof env.signer_did !== 'string' || !isValidDidFormat(env.signer_did)) {
+    return {
+      ok: false,
+      code: 'INVALID_DID_FORMAT',
+      message: 'data handling receipt signer_did is invalid',
+      field: `${args.field}.signer_did`,
+      signature_valid: false,
+    };
+  }
+  if (env.signer_did !== args.expectedSignerDid) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'data handling receipt signer_did must match payload.agent_did',
+      field: `${args.field}.signer_did`,
+      signature_valid: false,
+    };
+  }
+  if (!isObjectRecord(env.payload)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload must be an object',
+      field: `${args.field}.payload`,
+      signature_valid: false,
+    };
+  }
+
+  const payload = env.payload as Record<string, unknown>;
+  if (payload.receipt_version !== '1') {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.receipt_version must be "1"',
+      field: `${args.field}.payload.receipt_version`,
+      signature_valid: false,
+    };
+  }
+  if (payload.policy_version !== 'prv.dlp.v1') {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.policy_version must be "prv.dlp.v1"',
+      field: `${args.field}.payload.policy_version`,
+      signature_valid: false,
+    };
+  }
+  if (typeof payload.receipt_id !== 'string' || payload.receipt_id.trim().length === 0) {
+    return {
+      ok: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'data handling receipt payload.receipt_id is required',
+      field: `${args.field}.payload.receipt_id`,
+      signature_valid: false,
+    };
+  }
+  if (typeof payload.provider !== 'string' || payload.provider.trim().length === 0) {
+    return {
+      ok: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'data handling receipt payload.provider is required',
+      field: `${args.field}.payload.provider`,
+      signature_valid: false,
+    };
+  }
+  if (typeof payload.run_id !== 'string' || payload.run_id.trim().length === 0) {
+    return {
+      ok: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'data handling receipt payload.run_id is required',
+      field: `${args.field}.payload.run_id`,
+      signature_valid: false,
+    };
+  }
+  if (args.expectedRunId && payload.run_id !== args.expectedRunId) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'data handling receipt payload.run_id does not match proof bundle run_id',
+      field: `${args.field}.payload.run_id`,
+      signature_valid: false,
+    };
+  }
+  if (!isDataHandlingAction(payload.action)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.action is invalid',
+      field: `${args.field}.payload.action`,
+      signature_valid: false,
+    };
+  }
+  if (
+    typeof payload.reason_code !== 'string' ||
+    !payload.reason_code.startsWith('PRV_DLP_') ||
+    !isValidDataHandlingReasonCode(payload)
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.reason_code is inconsistent with payload.action/approval state',
+      field: `${args.field}.payload.reason_code`,
+      signature_valid: false,
+    };
+  }
+  if (typeof payload.timestamp !== 'string' || !isValidIsoDate(payload.timestamp)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.timestamp must be an ISO timestamp',
+      field: `${args.field}.payload.timestamp`,
+      signature_valid: false,
+    };
+  }
+
+  if (!Array.isArray(payload.classes) || !payload.classes.every((v) => isDataHandlingClassMatch(v))) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.classes must be an array of class matches',
+      field: `${args.field}.payload.classes`,
+      signature_valid: false,
+    };
+  }
+
+  if (!isObjectRecord(payload.approval)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.approval must be an object',
+      field: `${args.field}.payload.approval`,
+      signature_valid: false,
+    };
+  }
+  if (
+    typeof payload.approval.required !== 'boolean' ||
+    typeof payload.approval.satisfied !== 'boolean'
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.approval flags must be booleans',
+      field: `${args.field}.payload.approval`,
+      signature_valid: false,
+    };
+  }
+  if (
+    typeof payload.approval.mechanism !== 'string' ||
+    payload.approval.mechanism !== 'header_token'
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.approval.mechanism must be "header_token"',
+      field: `${args.field}.payload.approval.mechanism`,
+      signature_valid: false,
+    };
+  }
+  if (
+    payload.approval.token_hash_b64u !== null &&
+    (
+      typeof payload.approval.token_hash_b64u !== 'string' ||
+      !isValidBase64Url(payload.approval.token_hash_b64u)
+    )
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.approval.token_hash_b64u must be base64url or null',
+      field: `${args.field}.payload.approval.token_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+
+  if (!isObjectRecord(payload.redaction)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.redaction must be an object',
+      field: `${args.field}.payload.redaction`,
+      signature_valid: false,
+    };
+  }
+  if (typeof payload.redaction.applied !== 'boolean') {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.redaction.applied must be boolean',
+      field: `${args.field}.payload.redaction.applied`,
+      signature_valid: false,
+    };
+  }
+  if (
+    typeof payload.redaction.original_payload_hash_b64u !== 'string' ||
+    !isValidBase64Url(payload.redaction.original_payload_hash_b64u)
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt original_payload_hash_b64u must be base64url',
+      field: `${args.field}.payload.redaction.original_payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+  if (
+    payload.redaction.outbound_payload_hash_b64u !== null &&
+    (
+      typeof payload.redaction.outbound_payload_hash_b64u !== 'string' ||
+      !isValidBase64Url(payload.redaction.outbound_payload_hash_b64u)
+    )
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt outbound_payload_hash_b64u must be base64url or null',
+      field: `${args.field}.payload.redaction.outbound_payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+
+  if (payload.action === 'redact' && payload.redaction.applied !== true) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'redact action requires redaction.applied=true',
+      field: `${args.field}.payload.redaction.applied`,
+      signature_valid: false,
+    };
+  }
+  if (payload.action === 'require_approval' && payload.approval.satisfied !== false) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'require_approval action must be unsatisfied in fail-closed state',
+      field: `${args.field}.payload.approval.satisfied`,
+      signature_valid: false,
+    };
+  }
+  if (payload.approval.required === false && payload.approval.satisfied === true) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'approval.satisfied=true requires approval.required=true',
+      field: `${args.field}.payload.approval.satisfied`,
+      signature_valid: false,
+    };
+  }
+  if (
+    payload.approval.satisfied === true &&
+    payload.approval.token_hash_b64u === null
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'approval.satisfied=true requires approval.token_hash_b64u',
+      field: `${args.field}.payload.approval.token_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+  if (
+    (payload.action === 'block' || payload.action === 'require_approval') &&
+    payload.redaction.outbound_payload_hash_b64u !== null
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'blocked or approval-required actions must not report an outbound payload hash',
+      field: `${args.field}.payload.redaction.outbound_payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+  if (
+    (payload.action === 'block' || payload.action === 'require_approval') &&
+    payload.redaction.applied !== false
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'blocked or approval-required actions must not report redaction.applied=true',
+      field: `${args.field}.payload.redaction.applied`,
+      signature_valid: false,
+    };
+  }
+  if (
+    payload.action === 'allow' &&
+    payload.redaction.applied !== false
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'allow action must not report redaction.applied=true',
+      field: `${args.field}.payload.redaction.applied`,
+      signature_valid: false,
+    };
+  }
+  if (
+    (payload.action === 'allow' || payload.action === 'redact') &&
+    payload.redaction.outbound_payload_hash_b64u === null
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'allow/redact actions must include outbound_payload_hash_b64u',
+      field: `${args.field}.payload.redaction.outbound_payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+  if (
+    payload.action === 'allow' &&
+    payload.redaction.outbound_payload_hash_b64u !==
+      payload.redaction.original_payload_hash_b64u
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'allow action must preserve the outbound payload hash',
+      field: `${args.field}.payload.redaction.outbound_payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+  if (
+    payload.action === 'redact' &&
+    payload.redaction.outbound_payload_hash_b64u ===
+      payload.redaction.original_payload_hash_b64u
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'redact action must change the outbound payload hash',
+      field: `${args.field}.payload.redaction.outbound_payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+
+  let computedHash: string;
+  try {
+    computedHash = await computeHash(payload, 'SHA-256');
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'HASH_MISMATCH',
+      message: `data handling receipt hash computation failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+      field: `${args.field}.payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+
+  if (computedHash !== env.payload_hash_b64u) {
+    return {
+      ok: false,
+      code: 'HASH_MISMATCH',
+      message: 'data handling receipt payload_hash_b64u mismatch',
+      field: `${args.field}.payload_hash_b64u`,
+      signature_valid: false,
+    };
+  }
+
+  const publicKeyBytes = extractPublicKeyFromDidKey(env.signer_did);
+  if (!publicKeyBytes) {
+    return {
+      ok: false,
+      code: 'INVALID_DID_FORMAT',
+      message: 'data handling receipt signer_did is not a valid did:key Ed25519 identifier',
+      field: `${args.field}.signer_did`,
+      signature_valid: false,
+    };
+  }
+
+  try {
+    const signatureBytes = base64UrlDecode(env.signature_b64u);
+    const messageBytes = new TextEncoder().encode(env.payload_hash_b64u);
+    const signatureValid = await verifySignature(
+      env.algorithm,
+      publicKeyBytes,
+      signatureBytes,
+      messageBytes,
+    );
+    if (!signatureValid) {
+      return {
+        ok: false,
+        code: 'SIGNATURE_INVALID',
+        message: 'data handling receipt signature verification failed',
+        field: `${args.field}.signature_b64u`,
+        signature_valid: false,
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'SIGNATURE_INVALID',
+      message: `data handling receipt signature verification error: ${err instanceof Error ? err.message : 'unknown error'}`,
+      field: `${args.field}.signature_b64u`,
+      signature_valid: false,
+    };
+  }
+
+  return { ok: true, signature_valid: true };
+}
+
+async function verifyDataHandlingEvidence(args: {
+  metadataRecord: Record<string, unknown> | null;
+  expectedSignerDid: string;
+  expectedRunId: string | null;
+}):
+  Promise<
+    | { ok: true }
+    | { ok: false; code: VerificationError['code']; message: string; field: string }
+  > {
+  if (!args.metadataRecord) return { ok: true };
+
+  const dataHandling = args.metadataRecord.data_handling;
+  if (dataHandling === undefined) return { ok: true };
+  if (!isObjectRecord(dataHandling)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'payload.metadata.data_handling must be an object',
+      field: 'payload.metadata.data_handling',
+    };
+  }
+
+  if (dataHandling.policy_version !== 'prv.dlp.v1') {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'payload.metadata.data_handling.policy_version must be "prv.dlp.v1"',
+      field: 'payload.metadata.data_handling.policy_version',
+    };
+  }
+
+  if (!args.expectedRunId) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'payload.metadata.data_handling requires a valid event_chain-bound run_id',
+      field: 'payload.metadata.data_handling',
+    };
+  }
+
+  if (!Array.isArray(dataHandling.receipts) || dataHandling.receipts.length === 0) {
+    return {
+      ok: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'payload.metadata.data_handling.receipts must contain at least one signed receipt',
+      field: 'payload.metadata.data_handling.receipts',
+    };
+  }
+
+  for (let i = 0; i < dataHandling.receipts.length; i++) {
+    const result = await verifyDataHandlingReceiptEnvelope({
+      envelope: dataHandling.receipts[i],
+      expectedSignerDid: args.expectedSignerDid,
+      expectedRunId: args.expectedRunId,
+      field: `payload.metadata.data_handling.receipts[${i}]`,
+    });
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        code: result.code,
+        message: result.message,
+        field: result.field,
+      };
+    }
+  }
+
+  return { ok: true };
 }
 
 interface ClddDiscrepancySummary {
@@ -4953,6 +5590,28 @@ export async function verifyProofBundle(
       : null;
 
   const metadataRecord = isObjectRecord(payload.metadata) ? payload.metadata : null;
+
+  const dataHandlingEvidence = await verifyDataHandlingEvidence({
+    metadataRecord,
+    expectedSignerDid: payload.agent_did,
+    expectedRunId: bindingContext?.expectedRunId ?? null,
+  });
+  if (!dataHandlingEvidence.ok) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: dataHandlingEvidence.message,
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+      },
+      error: {
+        code: dataHandlingEvidence.code,
+        message: dataHandlingEvidence.message,
+        field: dataHandlingEvidence.field,
+      },
+    };
+  }
 
   const clddMetricsClaim = parseClddMetricsClaim(metadataRecord);
   if (!clddMetricsClaim.ok) {
