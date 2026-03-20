@@ -421,11 +421,15 @@ export async function wrap(
 
   // 4. Start local proxy with Causal Sieve
   // Use passthrough mode by default (forward directly to upstream provider).
-  // This preserves the agent's native auth (OAuth, API keys) without requiring
-  // clawproxy CST tokens. Gateway receipts are only available when an explicit
-  // provider API key is configured for clawproxy routing.
+  // For real gateway receipts via clawproxy, callers must opt in and provide a
+  // valid CST/scoped token via CLAWSIG_CLAWPROXY_TOKEN (or X_CST/X_SCOPED_TOKEN)
+  // plus provider auth that clawproxy can relay upstream.
   const usePassthrough = !process.env['CLAWSIG_USE_CLAWPROXY'];
   const configuredClawproxyUrl = process.env['CLAWSIG_CLAWPROXY_URL']?.trim();
+  const configuredClawproxyToken =
+    process.env['CLAWSIG_CLAWPROXY_TOKEN']?.trim() ||
+    process.env['X_CST']?.trim() ||
+    process.env['X_SCOPED_TOKEN']?.trim();
 
   const proxy = await startLocalProxy({
     agentDid,
@@ -434,6 +438,7 @@ export async function wrap(
     cwd: process.cwd(),
     passthrough: usePassthrough,
     ...(configuredClawproxyUrl ? { clawproxyUrl: configuredClawproxyUrl } : {}),
+    ...(configuredClawproxyToken ? { proxyToken: configuredClawproxyToken } : {}),
     onViolation: (v) => {
       process.stderr.write(
         `\x1b[31m[clawsig:guillotine]\x1b[0m VIOLATION: ${v.reason}\n`,
@@ -446,6 +451,9 @@ export async function wrap(
     diag(`\x1b[36m[clawsig]\x1b[0m Mode: passthrough (direct to upstream, Sieve-only)\n`);
   } else if (configuredClawproxyUrl) {
     diag(`\x1b[36m[clawsig]\x1b[0m Mode: clawproxy (${configuredClawproxyUrl})\n`);
+    if (!configuredClawproxyToken) {
+      diag(`\x1b[33m[clawsig]\x1b[0m clawproxy token missing; signed gateway receipts may not be collected\n`);
+    }
   }
 
   // 4b. Build and resolve the interposition library (Layer 6)
@@ -722,9 +730,12 @@ export async function wrap(
   if (filteredNetworkReceipts.length > 0) {
     bundle.payload.network_receipts = filteredNetworkReceipts;
   }
+  const preferCanonicalGatewayReceipts = proxy.receiptCount > 0;
+
   // Inject Agent Genealogy Receipt (full process tree with harness attribution)
+  // only when we do not already have canonical clawproxy receipts bound to this run.
   const genealogyTree = interposeOracle.getGenealogyTree();
-  if (genealogyTree && Object.keys(genealogyTree).length > 0) {
+  if (!preferCanonicalGatewayReceipts && genealogyTree && Object.keys(genealogyTree).length > 0) {
     const genealogyReceipt = {
       receipt_version: '1',
       receipt_id: `genealogy_${crypto.randomUUID()}`,
@@ -741,7 +752,8 @@ export async function wrap(
   }
 
   // Inject Security Audit Receipts (env credential hashes + DLP leak alerts)
-  if (interposeOracle.envAudits.length > 0 || interposeOracle.credLeaks.length > 0) {
+  // only in synthetic-only mode; canonical gateway receipts should remain uncluttered.
+  if (!preferCanonicalGatewayReceipts && (interposeOracle.envAudits.length > 0 || interposeOracle.credLeaks.length > 0)) {
     const securityReceipts: Record<string, unknown>[] = [];
     if (interposeOracle.envAudits.length > 0) {
       securityReceipts.push({
@@ -777,14 +789,18 @@ export async function wrap(
     bundle.payload.receipts = [...existing, ...securityReceipts.map(wrapAsGatewayReceiptEnvelope)] as typeof bundle.payload.receipts;
   }
 
-  // Inject preload + SNI + interpose FSM receipts into the bundle
+  // Inject preload + SNI + interpose FSM receipts into the bundle.
+  // If we already collected canonical signed gateway receipts from clawproxy,
+  // do not also inject synthetic gateway fallbacks from preload/SNI/interpose.
+  // Mixing signed gateway envelopes with unsigned synthetic gateway receipts can
+  // trip completeness/binding policies downstream.
   {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = (bundle.payload.receipts ?? []) as any[];
     const additions = [
-      ...preloadGatewayReceipts,
-      ...sniGatewayReceipts,
-      ...interposeReceipts.gateway,
+      ...(preferCanonicalGatewayReceipts ? [] : preloadGatewayReceipts),
+      ...(preferCanonicalGatewayReceipts ? [] : sniGatewayReceipts),
+      ...(preferCanonicalGatewayReceipts ? [] : interposeReceipts.gateway),
       ...interposeReceipts.transcript,
       ...interposeReceipts.toolCalls,
       ...interposeReceipts.anomalies,

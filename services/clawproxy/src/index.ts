@@ -86,6 +86,7 @@ export { IdempotencyDurableObject } from './idempotency';
 
 import { validateScopedToken } from './scoped-token';
 import { computeTokenScopeHashB64uV1 } from './token-scope-hash';
+import { hasRequiredScope } from '../../../packages/identity-auth/src/index';
 import {
   extractPolicyFromHeaders,
   enforceProviderAllowlist,
@@ -1773,18 +1774,28 @@ async function handleProxy(
         : undefined;
 
     const tokenLane = tokenValidation.claims.token_lane;
+    const missionIdFromToken =
+      typeof tokenValidation.claims.mission_id === 'string' && tokenValidation.claims.mission_id.trim().length > 0
+        ? tokenValidation.claims.mission_id.trim()
+        : undefined;
+    const allowLegacyMissionBoundProxyToken =
+      tokenLane === 'legacy' &&
+      !!missionIdFromToken &&
+      hasRequiredScope(tokenValidation.claims.scope, ['proxy:call', 'clawproxy:call']);
 
     if (requireCanonicalCst) {
       if (!ownerDidFromToken || !controllerDidFromToken || !agentDidFromToken || tokenLane !== 'canonical') {
-        return errorResponseWithRateLimit(
-          'TOKEN_CONTROL_CHAIN_MISSING',
-          'Canonical chain claims are required: owner_did, controller_did, agent_did, token_lane=canonical',
-          401,
-          rateLimitInfo
-        );
+        if (!allowLegacyMissionBoundProxyToken) {
+          return errorResponseWithRateLimit(
+            'TOKEN_CONTROL_CHAIN_MISSING',
+            'Canonical chain claims are required: owner_did, controller_did, agent_did, token_lane=canonical',
+            401,
+            rateLimitInfo
+          );
+        }
       }
 
-      if (normalizeDid(agentDidFromToken) !== normalizeDid(tokenValidation.claims.sub)) {
+      if (agentDidFromToken && normalizeDid(agentDidFromToken) !== normalizeDid(tokenValidation.claims.sub)) {
         return errorResponseWithRateLimit(
           'TOKEN_CONTROL_SUBJECT_MISMATCH',
           'agent_did claim must match token subject (sub)',
@@ -1824,11 +1835,6 @@ async function handleProxy(
       typeof tokenValidation.claims.payment_account_did === 'string' &&
       tokenValidation.claims.payment_account_did.trim().length > 0
         ? tokenValidation.claims.payment_account_did.trim()
-        : undefined;
-
-    const missionIdFromToken =
-      typeof tokenValidation.claims.mission_id === 'string' && tokenValidation.claims.mission_id.trim().length > 0
-        ? tokenValidation.claims.mission_id.trim()
         : undefined;
 
     const spendCapFromToken =
