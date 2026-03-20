@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { buildProofReport, renderProofReportHtml, renderProofReportText } from '../src/prove-cmd.js';
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  buildProofReport,
+  renderProofReportHtml,
+  renderProofReportText,
+  runProveReport,
+} from '../src/prove-cmd.js';
 import { renderProofReportText as renderProofReportTextFromIndex } from '../src/index.js';
 
 function makeBundle(): Record<string, unknown> {
@@ -652,5 +661,158 @@ describe('renderProofReportText', () => {
     });
 
     expect(renderProofReportTextFromIndex(report)).toContain('=== Clawsig proof report ===');
+  });
+});
+
+describe('runProveReport export pack', () => {
+  it('writes a structured privacy/compliance export pack with manifest and claim boundaries', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'clawsig-prove-export-pack-'));
+    const bundlePath = join(tempDir, 'proof_bundle.json');
+    const exportPackPath = join(tempDir, 'privacy-pack-a');
+    const exportPackPathSecond = join(tempDir, 'privacy-pack-b');
+
+    await writeFile(bundlePath, JSON.stringify(makeBundle(), null, 2) + '\n', 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const report = await runProveReport({
+        inputPath: bundlePath,
+        exportPackPath,
+        decrypt: false,
+        json: false,
+      });
+
+      expect(report.export_pack_path).toBe(exportPackPath);
+
+      await runProveReport({
+        inputPath: bundlePath,
+        exportPackPath: exportPackPathSecond,
+        decrypt: false,
+        json: false,
+      });
+    } finally {
+      stdoutSpy.mockRestore();
+    }
+
+    try {
+      const manifestRaw = await readFile(join(exportPackPath, 'manifest.json'), 'utf-8');
+      const manifest = JSON.parse(manifestRaw) as {
+        pack_type: string;
+        generated_at: string;
+        source: {
+          bundle_path: string;
+          verify_command: string;
+        };
+        entries: Array<{
+          path: string;
+          content_type: string;
+          size_bytes: number;
+          sha256_b64u: string;
+        }>;
+      };
+
+      expect(manifest.pack_type).toBe('privacy_compliance_export_pack');
+      expect(manifest.generated_at).toBe('2026-03-20T19:16:58.121Z');
+      expect(manifest.source.bundle_path).toBe('proof-bundle/proof_bundle.json');
+      expect(manifest.source.verify_command).toBe(
+        'clawverify verify proof-bundle --input proof-bundle/proof_bundle.json',
+      );
+      expect(manifest.entries.map((entry) => entry.path)).toEqual(
+        [...manifest.entries.map((entry) => entry.path)].sort((a, b) => a.localeCompare(b)),
+      );
+      expect(manifest.entries.map((entry) => entry.path)).toEqual(
+        expect.arrayContaining([
+          'README.md',
+          'proof-bundle/proof_bundle.json',
+          'privacy-evidence/egress_policy_receipt.json',
+          'privacy-evidence/runtime_profile.json',
+          'privacy-evidence/runtime_hygiene.json',
+          'privacy-evidence/data_handling.json',
+          'privacy-evidence/processor_policy.json',
+          'reports/proof-report.json',
+          'reports/proof-report.txt',
+          'reports/claims-boundary.md',
+        ]),
+      );
+      for (const entry of manifest.entries) {
+        expect(entry.size_bytes).toBeGreaterThan(0);
+        expect(entry.sha256_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
+      }
+
+      const reportJsonRaw = await readFile(join(exportPackPath, 'reports/proof-report.json'), 'utf-8');
+      expect(reportJsonRaw).toContain('"input_path": "proof-bundle/proof_bundle.json"');
+      expect(reportJsonRaw).toContain(
+        '"verify_command": "clawverify verify proof-bundle --input proof-bundle/proof_bundle.json"',
+      );
+      expect(reportJsonRaw).not.toContain('"export_pack_path"');
+      expect(reportJsonRaw).not.toContain(bundlePath);
+
+      const claimsBoundary = await readFile(join(exportPackPath, 'reports/claims-boundary.md'), 'utf-8');
+      expect(claimsBoundary).toContain('## What This Pack Proves');
+      expect(claimsBoundary).toContain('## What This Pack Does Not Prove');
+      expect(claimsBoundary).toContain(
+        'Run canonical verification first: `clawverify verify proof-bundle --input proof-bundle/proof_bundle.json`.',
+      );
+      expect(claimsBoundary).toContain(
+        'This report does not by itself prove legal or regulatory compliance.',
+      );
+
+      const reportText = await readFile(join(exportPackPath, 'reports/proof-report.txt'), 'utf-8');
+      expect(reportText).not.toContain('Export pack      :');
+
+      const filesToMatch = [
+        'README.md',
+        'manifest.json',
+        'proof-bundle/proof_bundle.json',
+        'privacy-evidence/data_handling.json',
+        'privacy-evidence/egress_policy_receipt.json',
+        'privacy-evidence/processor_policy.json',
+        'privacy-evidence/runtime_hygiene.json',
+        'privacy-evidence/runtime_profile.json',
+        'reports/claims-boundary.md',
+        'reports/proof-report.json',
+        'reports/proof-report.txt',
+      ];
+      for (const relativePath of filesToMatch) {
+        const first = await readFile(join(exportPackPath, relativePath), 'utf-8');
+        const second = await readFile(join(exportPackPathSecond, relativePath), 'utf-8');
+        expect(first).toBe(second);
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when the export-pack directory is not empty', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'clawsig-prove-export-pack-stale-'));
+    const bundlePath = join(tempDir, 'proof_bundle.json');
+    const exportPackPath = join(tempDir, 'privacy-pack');
+
+    await writeFile(bundlePath, JSON.stringify(makeBundle(), null, 2) + '\n', 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await runProveReport({
+        inputPath: bundlePath,
+        exportPackPath,
+        decrypt: false,
+        json: false,
+      });
+
+      await mkdir(join(exportPackPath, 'stale-dir'), { recursive: true });
+      await writeFile(join(exportPackPath, 'stale.txt'), 'stale\n', 'utf-8');
+
+      await expect(
+        runProveReport({
+          inputPath: bundlePath,
+          exportPackPath,
+          decrypt: false,
+          json: false,
+        }),
+      ).rejects.toThrow(/must be empty to avoid stale artifacts/);
+    } finally {
+      stdoutSpy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

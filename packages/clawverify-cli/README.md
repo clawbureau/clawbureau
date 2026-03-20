@@ -45,6 +45,24 @@ clawverify verify commit-sig --input proofs/.../commit.sig.json
 clawverify verify export-bundle --input identity-export.json
 ```
 
+### Generate a privacy/compliance export pack
+
+```bash
+clawsig prove --input .clawsig/proof_bundle.json --export-pack ./privacy-pack
+```
+
+The export pack is a reviewer-facing directory with:
+- proof bundle copy
+- privacy evidence extracted from bundle metadata when present (egress policy receipt, runtime profile/hygiene, data handling, processor policy)
+- `reports/proof-report.json` + `reports/proof-report.txt`
+- `reports/claims-boundary.md` (what is proven vs not proven)
+- `manifest.json` (file digests for sharing/tamper checks)
+
+Reviewer interpretation:
+- Run canonical verification first from inside the pack: `clawverify verify proof-bundle --input proof-bundle/proof_bundle.json`
+- Treat `claims-boundary.md` as the explicit limit on privacy/compliance claims
+- Use a new or empty destination directory so stale files cannot survive a rerun
+
 ## Options
 
 | Flag | Description |

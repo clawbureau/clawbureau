@@ -1,5 +1,6 @@
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import crypto from 'node:crypto';
 
 import { decryptBundle, extractPublicLayer, InspectError } from './inspect-cmd.js';
 
@@ -8,6 +9,7 @@ import type { ClawsigIdentity } from './identity.js';
 export interface ProveOptions {
   inputPath: string;
   htmlPath?: string;
+  exportPackPath?: string;
   decrypt: boolean;
   json: boolean;
   runSummaryPath?: string;
@@ -177,6 +179,7 @@ export interface ProofReport {
   next_steps: string[];
   verify_command: string;
   html_path?: string;
+  export_pack_path?: string;
   decrypted_payload_keys?: string[];
 }
 
@@ -347,6 +350,267 @@ function formatTopProcesses(processes: Array<{ process_name: string; count: numb
     return `${processes[0]!.process_name} (${processes[0]!.count}) and ${processes[1]!.process_name} (${processes[1]!.count})`;
   }
   return `${processes[0]!.process_name} (${processes[0]!.count}), ${processes[1]!.process_name} (${processes[1]!.count}), and ${processes.length - 2} more`;
+}
+
+interface PrivacyExportPackManifestEntry {
+  path: string;
+  content_type: string;
+  size_bytes: number;
+  sha256_b64u: string;
+}
+
+interface PrivacyExportPackManifest {
+  manifest_version: '1';
+  pack_type: 'privacy_compliance_export_pack';
+  generated_at: string;
+  source: {
+    bundle_path: string;
+    verify_command: string;
+    privacy_verdict: ProofPrivacyVerdict;
+  };
+  entries: PrivacyExportPackManifestEntry[];
+}
+
+const EXPORT_PACK_BUNDLE_PATH = 'proof-bundle/proof_bundle.json';
+const EXPORT_PACK_REPORT_JSON_PATH = 'reports/proof-report.json';
+const EXPORT_PACK_REPORT_TEXT_PATH = 'reports/proof-report.txt';
+const EXPORT_PACK_CLAIMS_BOUNDARY_PATH = 'reports/claims-boundary.md';
+const EXPORT_PACK_README_PATH = 'README.md';
+
+function sha256B64u(bytes: Buffer): string {
+  return crypto.createHash('sha256').update(bytes).digest('base64url');
+}
+
+function deriveStableExportPackTimestamp(report: ProofReport): string {
+  return report.public_layer.issued_at ?? report.harness.timestamp ?? report.gateway.timestamp ?? 'unknown';
+}
+
+function buildExportPackReport(report: ProofReport): ProofReport {
+  const generatedAt = deriveStableExportPackTimestamp(report);
+  const verifyCommand = `clawverify verify proof-bundle --input ${EXPORT_PACK_BUNDLE_PATH}`;
+  const packReport: ProofReport = {
+    ...report,
+    input_path: EXPORT_PACK_BUNDLE_PATH,
+    run_summary_path: null,
+    generated_at: generatedAt,
+    verify_command: verifyCommand,
+  };
+
+  delete packReport.html_path;
+  delete packReport.export_pack_path;
+  packReport.next_steps = deriveNextSteps({
+    gateway: packReport.gateway,
+    warnings: packReport.warnings,
+    verify_command: verifyCommand,
+    privacy_posture: packReport.privacy_posture,
+  });
+
+  return packReport;
+}
+
+function renderPrivacyClaimsBoundaryMarkdown(report: ProofReport): string {
+  const lines: string[] = [];
+  lines.push('# Privacy/Compliance Claim Boundaries');
+  lines.push('');
+  lines.push(`Generated at: ${report.generated_at}`);
+  lines.push(`Bundle ID: ${report.public_layer.bundle_id ?? 'unknown'}`);
+  lines.push(`Agent DID: ${report.public_layer.agent_did ?? 'unknown'}`);
+  lines.push(`Privacy verdict: ${report.privacy_posture.overall_verdict.toUpperCase()}`);
+  lines.push('');
+  lines.push('## What This Pack Proves');
+  if (report.privacy_posture.proven_claims.length === 0) {
+    lines.push('- No privacy proof claims could be established from the available signed evidence.');
+  } else {
+    for (const claim of report.privacy_posture.proven_claims) {
+      lines.push(`- ${claim}`);
+    }
+  }
+  lines.push('');
+  lines.push('## What This Pack Does Not Prove');
+  for (const claim of report.privacy_posture.not_proven_claims) {
+    lines.push(`- ${claim}`);
+  }
+  lines.push('');
+  lines.push('## Reviewer Notes');
+  lines.push(`- Run canonical verification first: \`${report.verify_command}\`.`);
+  lines.push('- Treat `reports/proof-report.txt` and `reports/proof-report.json` as reviewer summaries derived from bundle evidence.');
+  lines.push('- Use this claim-boundary section to avoid overstating privacy/compliance guarantees.');
+  lines.push('');
+  return lines.join('\n');
+}
+
+function renderPrivacyExportPackReadme(report: ProofReport): string {
+  const lines: string[] = [];
+  lines.push('# Clawsig Privacy/Compliance Export Pack');
+  lines.push('');
+  lines.push('This pack is a reviewer-facing snapshot of proof artifacts and privacy evidence.');
+  lines.push('It is meant for audit/security/compliance review workflows.');
+  lines.push('');
+  lines.push('## Contents');
+  lines.push('- `proof-bundle/proof_bundle.json`: proof bundle included in this export pack.');
+  lines.push('- `privacy-evidence/*.json`: privacy policy receipts/evidence extracted from bundle metadata when present.');
+  lines.push('- `reports/proof-report.json`: machine-readable prove report (includes privacy posture).');
+  lines.push('- `reports/proof-report.txt`: human-readable prove report.');
+  lines.push('- `reports/claims-boundary.md`: explicit what-is-proven / not-proven boundaries.');
+  lines.push('- `manifest.json`: deterministic file manifest with SHA-256 digests.');
+  lines.push('');
+  lines.push('## How To Interpret');
+  lines.push(`1. Verify canonical cryptographic validity with \`${report.verify_command}\`.`);
+  lines.push('2. Review claim limits in `reports/claims-boundary.md` before making privacy/compliance statements.');
+  lines.push('3. Use `manifest.json` to detect tampering when sharing this pack externally.');
+  lines.push('');
+  return lines.join('\n');
+}
+
+function collectPrivacyEvidenceFiles(bundle: Record<string, unknown>): Array<{
+  relative_path: string;
+  payload: unknown;
+}> {
+  const payload = isRecord(bundle.payload) ? bundle.payload : null;
+  const metadata = payload && isRecord(payload.metadata) ? payload.metadata : null;
+  const sentinels = metadata && isRecord(metadata.sentinels) ? metadata.sentinels : null;
+  const files: Array<{ relative_path: string; payload: unknown }> = [];
+
+  if (sentinels && sentinels.egress_policy_receipt !== undefined) {
+    files.push({
+      relative_path: 'privacy-evidence/egress_policy_receipt.json',
+      payload: sentinels.egress_policy_receipt,
+    });
+  }
+  if (sentinels && sentinels.runtime_profile !== undefined) {
+    files.push({
+      relative_path: 'privacy-evidence/runtime_profile.json',
+      payload: sentinels.runtime_profile,
+    });
+  }
+  if (sentinels && sentinels.runtime_hygiene !== undefined) {
+    files.push({
+      relative_path: 'privacy-evidence/runtime_hygiene.json',
+      payload: sentinels.runtime_hygiene,
+    });
+  }
+  if (metadata && metadata.data_handling !== undefined) {
+    files.push({
+      relative_path: 'privacy-evidence/data_handling.json',
+      payload: metadata.data_handling,
+    });
+  }
+  if (metadata && metadata.processor_policy !== undefined) {
+    files.push({
+      relative_path: 'privacy-evidence/processor_policy.json',
+      payload: metadata.processor_policy,
+    });
+  }
+
+  return files;
+}
+
+async function writeExportPackFile(
+  packRoot: string,
+  relativePath: string,
+  bytes: Buffer,
+  contentType: string,
+  entries: PrivacyExportPackManifestEntry[],
+): Promise<void> {
+  const fullPath = resolve(packRoot, relativePath);
+  await mkdir(dirname(fullPath), { recursive: true });
+  await writeFile(fullPath, bytes);
+  entries.push({
+    path: relativePath,
+    content_type: contentType,
+    size_bytes: bytes.length,
+    sha256_b64u: sha256B64u(bytes),
+  });
+}
+
+async function writePrivacyComplianceExportPack(args: {
+  packPath: string;
+  bundle: Record<string, unknown>;
+  report: ProofReport;
+}): Promise<string> {
+  const packRoot = resolve(args.packPath);
+  await mkdir(packRoot, { recursive: true });
+  const existingEntries = await readdir(packRoot);
+  if (existingEntries.length > 0) {
+    throw new Error(
+      `Export pack directory must be empty to avoid stale artifacts: ${packRoot}`,
+    );
+  }
+
+  const packReport = buildExportPackReport(args.report);
+
+  const entries: PrivacyExportPackManifestEntry[] = [];
+  const bundleBytes = Buffer.from(JSON.stringify(args.bundle, null, 2) + '\n', 'utf-8');
+  const reportJsonBytes = Buffer.from(JSON.stringify(packReport, null, 2) + '\n', 'utf-8');
+  const reportTextBytes = Buffer.from(renderProofReportText(packReport), 'utf-8');
+  const claimsBoundaryBytes = Buffer.from(renderPrivacyClaimsBoundaryMarkdown(packReport), 'utf-8');
+  const readmeBytes = Buffer.from(renderPrivacyExportPackReadme(packReport), 'utf-8');
+
+  await writeExportPackFile(
+    packRoot,
+    EXPORT_PACK_BUNDLE_PATH,
+    bundleBytes,
+    'application/json',
+    entries,
+  );
+
+  const privacyEvidenceFiles = collectPrivacyEvidenceFiles(args.bundle);
+  for (const file of privacyEvidenceFiles) {
+    const bytes = Buffer.from(JSON.stringify(file.payload, null, 2) + '\n', 'utf-8');
+    await writeExportPackFile(
+      packRoot,
+      file.relative_path,
+      bytes,
+      'application/json',
+      entries,
+    );
+  }
+
+  await writeExportPackFile(
+    packRoot,
+    EXPORT_PACK_REPORT_JSON_PATH,
+    reportJsonBytes,
+    'application/json',
+    entries,
+  );
+  await writeExportPackFile(
+    packRoot,
+    EXPORT_PACK_REPORT_TEXT_PATH,
+    reportTextBytes,
+    'text/plain; charset=utf-8',
+    entries,
+  );
+  await writeExportPackFile(
+    packRoot,
+    EXPORT_PACK_CLAIMS_BOUNDARY_PATH,
+    claimsBoundaryBytes,
+    'text/markdown; charset=utf-8',
+    entries,
+  );
+  await writeExportPackFile(
+    packRoot,
+    EXPORT_PACK_README_PATH,
+    readmeBytes,
+    'text/markdown; charset=utf-8',
+    entries,
+  );
+
+  const sortedEntries = [...entries].sort((a, b) => a.path.localeCompare(b.path));
+  const manifest: PrivacyExportPackManifest = {
+    manifest_version: '1',
+    pack_type: 'privacy_compliance_export_pack',
+    generated_at: packReport.generated_at,
+    source: {
+      bundle_path: packReport.input_path,
+      verify_command: packReport.verify_command,
+      privacy_verdict: packReport.privacy_posture.overall_verdict,
+    },
+    entries: sortedEntries,
+  };
+
+  const manifestPath = resolve(packRoot, 'manifest.json');
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+  return packRoot;
 }
 
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
@@ -1513,6 +1777,9 @@ export function renderProofReportText(report: ProofReport): string {
     lines.push('');
     lines.push(`HTML report      : ${report.html_path}`);
   }
+  if (report.export_pack_path) {
+    lines.push(`Export pack      : ${report.export_pack_path}`);
+  }
   lines.push('');
   return lines.join('\n');
 }
@@ -1553,6 +1820,14 @@ export async function runProveReport(options: ProveOptions): Promise<ProofReport
     const htmlPath = resolve(options.htmlPath);
     await writeFile(htmlPath, renderProofReportHtml(report), 'utf-8');
     report.html_path = htmlPath;
+  }
+
+  if (options.exportPackPath) {
+    report.export_pack_path = await writePrivacyComplianceExportPack({
+      packPath: options.exportPackPath,
+      bundle,
+      report,
+    });
   }
 
   if (options.json) {
