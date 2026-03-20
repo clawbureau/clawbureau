@@ -1038,6 +1038,30 @@ async function forwardToUpstream(
 /**
  * Extract receipt envelope from a clawproxy JSON response.
  */
+function isSignedGatewayReceiptEnvelope(
+  value: unknown,
+): value is SignedEnvelope<GatewayReceiptPayload> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate['envelope_version'] === '1' &&
+    candidate['envelope_type'] === 'gateway_receipt' &&
+    typeof candidate['payload'] === 'object' &&
+    candidate['payload'] !== null &&
+    !Array.isArray(candidate['payload']) &&
+    typeof candidate['payload_hash_b64u'] === 'string' &&
+    candidate['payload_hash_b64u'].length > 0 &&
+    typeof candidate['signature_b64u'] === 'string' &&
+    candidate['signature_b64u'].length > 0 &&
+    typeof candidate['signer_did'] === 'string' &&
+    candidate['signer_did'].length > 0 &&
+    typeof candidate['issued_at'] === 'string' &&
+    candidate['issued_at'].length > 0
+  );
+}
+
 function extractReceiptFromResponse(body: Buffer): {
   envelope?: SignedEnvelope<GatewayReceiptPayload>;
   provider: string;
@@ -1045,7 +1069,10 @@ function extractReceiptFromResponse(body: Buffer): {
 } {
   try {
     const parsed = JSON.parse(body.toString('utf-8')) as Record<string, unknown>;
-    const envelope = parsed['_receipt_envelope'] as SignedEnvelope<GatewayReceiptPayload> | undefined;
+    const maybeEnvelope = parsed['_receipt_envelope'];
+    const envelope = isSignedGatewayReceiptEnvelope(maybeEnvelope)
+      ? maybeEnvelope
+      : undefined;
 
     // Extract provider/model from envelope payload or legacy receipt
     let provider = 'unknown';
@@ -1085,8 +1112,8 @@ function extractReceiptFromStream(body: Buffer): {
       const normalized = value.trim().replace(/-/g, '+').replace(/_/g, '/');
       const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
       const decoded = Buffer.from(padded, 'base64').toString('utf-8');
-      const parsed = JSON.parse(decoded) as SignedEnvelope<GatewayReceiptPayload>;
-      if (parsed?.envelope_type === 'gateway_receipt') return parsed;
+      const parsed = JSON.parse(decoded) as unknown;
+      if (isSignedGatewayReceiptEnvelope(parsed)) return parsed;
     } catch {
       // ignore malformed trailer comments
     }
@@ -1119,12 +1146,14 @@ function extractReceiptFromStream(body: Buffer): {
       try {
         const parsed = JSON.parse(data) as Record<string, unknown>;
         if (parsed['_receipt_envelope']) {
-          const envelope = parsed['_receipt_envelope'] as SignedEnvelope<GatewayReceiptPayload>;
-          return {
-            envelope,
-            provider: envelope.payload?.provider ?? 'unknown',
-            model: envelope.payload?.model ?? 'unknown',
-          };
+          const maybeEnvelope = parsed['_receipt_envelope'];
+          if (isSignedGatewayReceiptEnvelope(maybeEnvelope)) {
+            return {
+              envelope: maybeEnvelope,
+              provider: maybeEnvelope.payload?.provider ?? 'unknown',
+              model: maybeEnvelope.payload?.model ?? 'unknown',
+            };
+          }
         }
       } catch {
         // Not JSON, skip

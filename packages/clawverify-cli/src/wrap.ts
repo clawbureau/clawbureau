@@ -1236,6 +1236,22 @@ export async function wrap(
   // tool + side-effect receipts before bundle compilation/signing.
   await proxy.stop();
   const bundle = await proxy.compileProofBundle();
+  const canonicalReceipts = Array.isArray(bundle.payload.receipts)
+    ? bundle.payload.receipts
+    : [];
+  const signedCanonicalReceipts = canonicalReceipts.filter((receipt) =>
+    isSignedGatewayReceiptEnvelope(receipt),
+  );
+  if (signedCanonicalReceipts.length !== canonicalReceipts.length) {
+    diag(
+      `\x1b[33m[clawsig]\x1b[0m Dropped ${canonicalReceipts.length - signedCanonicalReceipts.length} unsigned canonical receipt(s)\n`,
+    );
+  }
+  if (signedCanonicalReceipts.length > 0) {
+    bundle.payload.receipts = signedCanonicalReceipts;
+  } else {
+    delete bundle.payload.receipts;
+  }
 
   // Filter noise receipts before injecting into bundle.
   // Full data remains available in memory for verbose diagnostics.
@@ -1271,7 +1287,7 @@ export async function wrap(
   if (filteredNetworkReceipts.length > 0) {
     bundle.payload.network_receipts = filteredNetworkReceipts;
   }
-  const preferCanonicalGatewayReceipts = proxy.receiptCount > 0;
+  const preferCanonicalGatewayReceipts = signedCanonicalReceipts.length > 0;
 
   // Inject Agent Genealogy Receipt (full process tree with harness attribution)
   // only when we do not already have canonical clawproxy receipts bound to this run.

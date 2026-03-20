@@ -5,6 +5,7 @@ on:
     paths:
       - 'packages/clawverify-cli/**'
       - 'packages/clawverify-core/**'
+      - 'packages/clawsig-sdk/**'
       - 'scripts/release/run-clawsig-v0.2-package-prep.mjs'
       - 'scripts/release/check-real-usecase-evidence-pack.mjs'
       - 'scripts/release/check-causal-integrity-evidence-pack.mjs'
@@ -27,6 +28,7 @@ on:
     paths:
       - 'packages/clawverify-cli/**'
       - 'packages/clawverify-core/**'
+      - 'packages/clawsig-sdk/**'
       - 'scripts/release/run-clawsig-v0.2-package-prep.mjs'
       - 'scripts/release/check-real-usecase-evidence-pack.mjs'
       - 'scripts/release/check-causal-integrity-evidence-pack.mjs'
@@ -109,6 +111,16 @@ jobs:
           cd packages/clawverify-core
           npm ci
 
+      - name: Install clawsig-sdk deps
+        run: |
+          cd packages/clawsig-sdk
+          npm ci
+
+      - name: Build clawsig-sdk
+        run: |
+          cd packages/clawsig-sdk
+          npm run build
+
       - name: Build clawverify-core
         run: |
           cd packages/clawverify-core
@@ -118,6 +130,16 @@ jobs:
         run: |
           cd packages/clawverify-cli
           npm ci
+
+      - name: Build clawverify-cli
+        run: |
+          cd packages/clawverify-cli
+          npm run build
+
+      - name: Run proof-production reliability guardrails
+        run: |
+          cd packages/clawverify-cli
+          npm run test:proof-reliability
 
       - name: Run causal integrity burn-in quick lane
         run: |

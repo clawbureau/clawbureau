@@ -29,7 +29,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:proof-reliability": "vitest run test/work-submit.test.ts test/wrap-sigterm.test.ts test/wrap-quiet.test.ts test/proof-bundle-envelope-compat.test.ts"
   },
   "keywords": [
     "clawsig",

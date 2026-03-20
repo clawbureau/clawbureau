@@ -340,10 +340,6 @@ describe('runWorkSubmit', () => {
 
   it('accepts wrapped proof bundles with payload fields under envelope.payload', async () => {
     const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
-  it('fails before submit when task_spec requires did_signature but --commit-proof is missing', async () => {
-    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
-    const requesterDid = 'did:key:z6MkrRequester000000000000000000000000000001';
-
     const config: WorkConfig = {
       configVersion: '1',
       workerDid: identity.did,
@@ -361,8 +357,6 @@ describe('runWorkSubmit', () => {
         status: 'accepted',
         claimedAt: '2025-01-01T00:00:02Z',
         idempotencyKey: 'claim:bty_test',
-        requesterDid,
-        taskSpec: validTaskSpec,
       },
     };
     await saveWorkConfig(config, tmpDir);
@@ -397,6 +391,52 @@ describe('runWorkSubmit', () => {
         { status: 201, headers: { 'Content-Type': 'application/json' } },
       );
     });
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkSubmit({
+          proofBundlePath: proofPath,
+          json: true,
+          projectDir: tmpDir,
+        }),
+      );
+
+      expect(result.status).toBe('ok');
+      const submittedEnvelope = capturedBody.proof_bundle_envelope as Record<string, unknown>;
+      expect(isRecord(submittedEnvelope)).toBe(true);
+      expect((submittedEnvelope.payload as Record<string, unknown>).agent_did).toBe(identity.did);
+    } finally {
+      restore();
+    }
+  });
+
+  it('fails before submit when task_spec requires did_signature but --commit-proof is missing', async () => {
+    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+    const requesterDid = 'did:key:z6MkrRequester000000000000000000000000000001';
+
+    const config: WorkConfig = {
+      configVersion: '1',
+      workerDid: identity.did,
+      marketplaceUrl: 'https://market.example.com',
+      createdAt: '2025-01-01T00:00:00Z',
+      registration: {
+        workerId: 'w-123',
+        registeredAt: '2025-01-01T00:00:01Z',
+        auth: { mode: 'token', token: 'tok_abc' },
+      },
+      activeBounty: {
+        bountyId: 'bty_test',
+        workerDid: identity.did,
+        marketplaceUrl: 'https://market.example.com',
+        status: 'accepted',
+        claimedAt: '2025-01-01T00:00:02Z',
+        idempotencyKey: 'claim:bty_test',
+        requesterDid,
+        taskSpec: validTaskSpec,
+      },
+    };
+    await saveWorkConfig(config, tmpDir);
+
     const proofPath = join(tmpDir, 'bundle.json');
     await writeJson(proofPath, {
       payload: {
@@ -507,13 +547,24 @@ describe('runWorkSubmit', () => {
     await writeJson(commitProofPath, {
       envelope_version: '1',
       envelope_type: 'commit_proof',
+      payload_hash_b64u: 'abc',
+      hash_algorithm: 'SHA-256',
+      signature_b64u: 'abc',
+      algorithm: 'Ed25519',
+      signer_did: identity.did,
+      issued_at: '2025-01-01T00:00:03Z',
       payload: {
-        version: '1',
+        proof_version: '1',
+        repo_claim_id: 'claim_test',
+        commit_sha: 'abcdef1234567',
+        repository: 'clawbureau/clawverify-cli',
       },
     });
 
-    const restore = __setFetch(async () =>
-      new Response(
+    let capturedBody: Record<string, unknown> = {};
+    const restore = __setFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      return new Response(
         JSON.stringify({
           submission_id: 'sub_002',
           bounty_id: 'bty_test',
@@ -523,8 +574,8 @@ describe('runWorkSubmit', () => {
           },
         }),
         { status: 201, headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
+      );
+    });
 
     try {
       const result = await quietAsync(() =>
