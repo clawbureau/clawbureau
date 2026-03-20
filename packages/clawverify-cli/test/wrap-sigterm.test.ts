@@ -21,9 +21,9 @@ import { randomUUID } from 'node:crypto';
 const TIMEOUT = 30_000;
 
 // Resolve the clawsig CLI entry point
-function resolveClawsigBin(): string {
-  // Use the local package's bin entry
-  return join(__dirname, '..', '..', 'clawsig', 'bin', 'clawsig.js');
+function resolveClawsigCli(): string {
+  // Use this package's built CLI entry directly (workspace-independent).
+  return join(__dirname, '..', 'dist', 'cli.js');
 }
 
 describe('wrap SIGTERM handling', () => {
@@ -45,7 +45,7 @@ describe('wrap SIGTERM handling', () => {
     const exitCode = await new Promise<number>((resolve) => {
       const child = spawn(
         process.execPath,
-        [resolveClawsigBin(), 'wrap', '--output', outputPath, '--no-publish', '--', 'echo', 'hello'],
+        [resolveClawsigCli(), 'wrap', '--output', outputPath, '--no-publish', '--', 'echo', 'hello'],
         { cwd: workDir, stdio: 'pipe', env: { ...process.env, CLAWSIG_DISABLE_INTERPOSE: '1' } },
       );
 
@@ -73,7 +73,8 @@ describe('wrap SIGTERM handling', () => {
     const child = spawn(
       process.execPath,
       [
-        resolveClawsigBin(), 'wrap',
+        resolveClawsigCli(), 'wrap',
+        '--verbose',
         '--output', outputPath,
         '--no-publish',
         '--',

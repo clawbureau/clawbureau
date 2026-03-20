@@ -29,6 +29,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isSignedGatewayReceiptEnvelope(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.envelope_version === '1' &&
+    value.envelope_type === 'gateway_receipt' &&
+    isRecord(value.payload) &&
+    typeof value.payload_hash_b64u === 'string' &&
+    value.payload_hash_b64u.length > 0 &&
+    typeof value.signature_b64u === 'string' &&
+    value.signature_b64u.length > 0 &&
+    typeof value.signer_did === 'string' &&
+    value.signer_did.length > 0 &&
+    typeof value.issued_at === 'string' &&
+    value.issued_at.length > 0
+  );
+}
+
 async function readJson(pathname: string): Promise<unknown> {
   const raw = await readFile(pathname, 'utf8');
   return JSON.parse(raw) as unknown;
@@ -93,14 +110,18 @@ describe('proof bundle input compatibility', () => {
       expect(exitCode).toBe(0);
 
       const wrappedBundle = await readJson(outputPath);
-      const receiptSignerDids =
+      const bundleReceipts =
         isRecord(wrappedBundle) &&
         isRecord(wrappedBundle.payload) &&
         Array.isArray(wrappedBundle.payload.receipts)
           ? wrappedBundle.payload.receipts
-              .map((r) => (isRecord(r) ? r.signer_did : undefined))
-              .filter((v): v is string => typeof v === 'string' && v.length > 0)
           : [];
+      expect(bundleReceipts.length).toBeGreaterThan(0);
+      expect(bundleReceipts.every((receipt) => isSignedGatewayReceiptEnvelope(receipt))).toBe(true);
+      const receiptSignerDids =
+        bundleReceipts
+          .map((r) => (isRecord(r) ? r.signer_did : undefined))
+          .filter((v): v is string => typeof v === 'string' && v.length > 0);
 
       const result = await verifyProofBundleFromFile({
         inputPath: outputPath,
