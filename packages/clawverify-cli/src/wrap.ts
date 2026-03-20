@@ -123,6 +123,14 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+
+function wrapAsGatewayReceiptEnvelope(receipt: Record<string, unknown>): Record<string, unknown> {
+  if (isObjectRecord(receipt) && receipt.envelope_type === 'gateway_receipt') {
+    return receipt; // already wrapped
+  }
+  return { envelope_type: 'gateway_receipt', payload: receipt };
+}
+
 function isGatewayReceiptEnvelope(
   value: unknown,
 ): value is SignedEnvelope<GatewayReceiptPayload> {
@@ -729,7 +737,7 @@ export async function wrap(
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = (bundle.payload.receipts ?? []) as any[];
-    bundle.payload.receipts = [...existing, genealogyReceipt] as typeof bundle.payload.receipts;
+    bundle.payload.receipts = [...existing, wrapAsGatewayReceiptEnvelope(genealogyReceipt)] as typeof bundle.payload.receipts;
   }
 
   // Inject Security Audit Receipts (env credential hashes + DLP leak alerts)
@@ -766,7 +774,7 @@ export async function wrap(
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = (bundle.payload.receipts ?? []) as any[];
-    bundle.payload.receipts = [...existing, ...securityReceipts] as typeof bundle.payload.receipts;
+    bundle.payload.receipts = [...existing, ...securityReceipts.map(wrapAsGatewayReceiptEnvelope)] as typeof bundle.payload.receipts;
   }
 
   // Inject preload + SNI + interpose FSM receipts into the bundle
@@ -782,7 +790,7 @@ export async function wrap(
       ...interposeReceipts.anomalies,
     ];
     if (additions.length > 0) {
-      bundle.payload.receipts = [...existing, ...additions] as typeof bundle.payload.receipts;
+      bundle.payload.receipts = [...existing, ...additions.map(wrapAsGatewayReceiptEnvelope)] as typeof bundle.payload.receipts;
     }
   }
 
