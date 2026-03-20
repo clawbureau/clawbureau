@@ -1242,135 +1242,136 @@ async function handleVerifyBundle(
   request: Request,
   env: Env
 ): Promise<Response> {
-  // Parse request body
-  let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return errorResponse('Invalid JSON in request body', 400);
-  }
-
-  // Validate request structure
-  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
-    return errorResponse('Request must contain an "envelope" field', 400);
-  }
-
-  const { envelope, urm, execution_attestations, work_policy_contract } = body as {
-    envelope: unknown;
-    urm?: unknown;
-    execution_attestations?: unknown;
-    work_policy_contract?: unknown;
-  };
-
-  // Verify the proof bundle
-  const gatewaySignerAllowlist = parseCommaSeparatedAllowlist(
-    env.GATEWAY_RECEIPT_SIGNER_DIDS
-  );
-
-  const attesterAllowlist = parseCommaSeparatedAllowlist(
-    env.ATTESTATION_SIGNER_DIDS
-  );
-
-  const witnessSignerAllowlist = parseCommaSeparatedAllowlist(
-    env.WEB_RECEIPT_SIGNER_DIDS
-  );
-
-  const coverageAttestationSignerAllowlist = parseCommaSeparatedAllowlist(
-    env.COVERAGE_ATTESTATION_SIGNER_DIDS
-  );
-
-  const binarySemanticEvidenceSignerAllowlist = parseCommaSeparatedAllowlist(
-    env.BINARY_SEMANTIC_EVIDENCE_SIGNER_DIDS
-  );
-
-  let effectiveCoverageEnforcementPhase = parseCoverageEnforcementPhase(
-    env.COVERAGE_ENFORCEMENT_PHASE
-  );
-
-  let effectiveWitnessedWebPolicyMode = parseWitnessedWebPolicyMode(
-    env.WITNESSED_WEB_POLICY_MODE
-  );
-  let effectiveWitnessedWebQuorumM = parsePositiveInteger(
-    env.WITNESSED_WEB_QUORUM_M
-  );
-  let effectiveWitnessedWebQuorumN = parsePositiveInteger(
-    env.WITNESSED_WEB_QUORUM_N
-  );
-  let effectiveWitnessedWebTransparencyMode =
-    parseWitnessedWebTransparencyMode(env.WITNESSED_WEB_TRANSPARENCY_MODE);
-  let effectiveWitnessedWebTransparencyRequiredAfter =
-    env.WITNESSED_WEB_TRANSPARENCY_REQUIRED_AFTER;
-
-  if (work_policy_contract !== undefined) {
-    const wpcValidation = validateWorkPolicyContractV2(work_policy_contract);
-    if (!wpcValidation.valid) {
-      return errorResponse(
-        `Invalid work_policy_contract: ${wpcValidation.message}`,
-        400
-      );
+    // Parse request body
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse('Invalid JSON in request body', 400);
     }
 
-    effectiveCoverageEnforcementPhase =
-      getCoveragePhaseFromWorkPolicyContract(work_policy_contract);
-
-    const witnessedWebPolicy =
-      getWitnessedWebPolicyFromWorkPolicyContract(work_policy_contract);
-
-    if (witnessedWebPolicy.mode !== undefined) {
-      effectiveWitnessedWebPolicyMode = witnessedWebPolicy.mode;
+    // Validate request structure
+    if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+      return errorResponse('Request must contain an "envelope" field', 400);
     }
 
-    if (witnessedWebPolicy.quorumM !== undefined) {
-      effectiveWitnessedWebQuorumM = witnessedWebPolicy.quorumM;
+    const { envelope, urm, execution_attestations, work_policy_contract } = body as {
+      envelope: unknown;
+      urm?: unknown;
+      execution_attestations?: unknown;
+      work_policy_contract?: unknown;
+    };
+
+    // Verify the proof bundle
+    const gatewaySignerAllowlist = parseCommaSeparatedAllowlist(
+      env.GATEWAY_RECEIPT_SIGNER_DIDS
+    );
+
+    const attesterAllowlist = parseCommaSeparatedAllowlist(
+      env.ATTESTATION_SIGNER_DIDS
+    );
+
+    const witnessSignerAllowlist = parseCommaSeparatedAllowlist(
+      env.WEB_RECEIPT_SIGNER_DIDS
+    );
+
+    const coverageAttestationSignerAllowlist = parseCommaSeparatedAllowlist(
+      env.COVERAGE_ATTESTATION_SIGNER_DIDS
+    );
+
+    const binarySemanticEvidenceSignerAllowlist = parseCommaSeparatedAllowlist(
+      env.BINARY_SEMANTIC_EVIDENCE_SIGNER_DIDS
+    );
+
+    let effectiveCoverageEnforcementPhase = parseCoverageEnforcementPhase(
+      env.COVERAGE_ENFORCEMENT_PHASE
+    );
+
+    let effectiveWitnessedWebPolicyMode = parseWitnessedWebPolicyMode(
+      env.WITNESSED_WEB_POLICY_MODE
+    );
+    let effectiveWitnessedWebQuorumM = parsePositiveInteger(
+      env.WITNESSED_WEB_QUORUM_M
+    );
+    let effectiveWitnessedWebQuorumN = parsePositiveInteger(
+      env.WITNESSED_WEB_QUORUM_N
+    );
+    let effectiveWitnessedWebTransparencyMode =
+      parseWitnessedWebTransparencyMode(env.WITNESSED_WEB_TRANSPARENCY_MODE);
+    let effectiveWitnessedWebTransparencyRequiredAfter =
+      env.WITNESSED_WEB_TRANSPARENCY_REQUIRED_AFTER;
+
+    if (work_policy_contract !== undefined) {
+      const wpcValidation = validateWorkPolicyContractV2(work_policy_contract);
+      if (!wpcValidation.valid) {
+        return errorResponse(
+          `Invalid work_policy_contract: ${wpcValidation.message}`,
+          400
+        );
+      }
+
+      effectiveCoverageEnforcementPhase =
+        getCoveragePhaseFromWorkPolicyContract(work_policy_contract);
+
+      const witnessedWebPolicy =
+        getWitnessedWebPolicyFromWorkPolicyContract(work_policy_contract);
+
+      if (witnessedWebPolicy.mode !== undefined) {
+        effectiveWitnessedWebPolicyMode = witnessedWebPolicy.mode;
+      }
+
+      if (witnessedWebPolicy.quorumM !== undefined) {
+        effectiveWitnessedWebQuorumM = witnessedWebPolicy.quorumM;
+      }
+
+      if (witnessedWebPolicy.quorumN !== undefined) {
+        effectiveWitnessedWebQuorumN = witnessedWebPolicy.quorumN;
+      }
+
+      if (witnessedWebPolicy.transparencyMode !== undefined) {
+        effectiveWitnessedWebTransparencyMode = witnessedWebPolicy.transparencyMode;
+      }
+
+      if (witnessedWebPolicy.transparencyRequiredAfter !== undefined) {
+        effectiveWitnessedWebTransparencyRequiredAfter =
+          witnessedWebPolicy.transparencyRequiredAfter;
+      }
     }
 
-    if (witnessedWebPolicy.quorumN !== undefined) {
-      effectiveWitnessedWebQuorumN = witnessedWebPolicy.quorumN;
-    }
+    const verification = await verifyProofBundle(envelope, {
+      allowlistedReceiptSignerDids: gatewaySignerAllowlist,
+      allowlistedWitnessSignerDids: witnessSignerAllowlist,
+      witnessed_web_policy_mode: effectiveWitnessedWebPolicyMode,
+      witnessed_web_quorum_m: effectiveWitnessedWebQuorumM,
+      witnessed_web_quorum_n: effectiveWitnessedWebQuorumN,
+      witnessed_web_transparency_mode: effectiveWitnessedWebTransparencyMode,
+      witnessed_web_transparency_required_after:
+        effectiveWitnessedWebTransparencyRequiredAfter,
+      allowlistedAttesterDids: attesterAllowlist,
+      allowlistedCoverageAttestationSignerDids: coverageAttestationSignerAllowlist,
+      allowlistedBinarySemanticEvidenceSignerDids:
+        binarySemanticEvidenceSignerAllowlist,
+      coverage_enforcement_phase: effectiveCoverageEnforcementPhase,
+      causal_policy_profile: parseCausalPolicyProfile(
+        env.CAUSAL_POLICY_PROFILE
+      ),
+      vir_conflict_policy_mode: parseVirConflictPolicyMode(
+        env.VIR_CONFLICT_POLICY_MODE
+      ),
+      maxVirCorroborationSkewMs: parseNonNegativeInteger(
+        env.VIR_CORROBORATION_MAX_SKEW_MS
+      ),
+      maxCoverageLivenessGapMs: parseNonNegativeInteger(
+        env.COVERAGE_MAX_LIVENESS_GAP_MS
+      ),
+      urm,
+    });
 
-    if (witnessedWebPolicy.transparencyMode !== undefined) {
-      effectiveWitnessedWebTransparencyMode = witnessedWebPolicy.transparencyMode;
-    }
+    let finalResult = verification.result;
 
-    if (witnessedWebPolicy.transparencyRequiredAfter !== undefined) {
-      effectiveWitnessedWebTransparencyRequiredAfter =
-        witnessedWebPolicy.transparencyRequiredAfter;
-    }
-  }
-
-  const verification = await verifyProofBundle(envelope, {
-    allowlistedReceiptSignerDids: gatewaySignerAllowlist,
-    allowlistedWitnessSignerDids: witnessSignerAllowlist,
-    witnessed_web_policy_mode: effectiveWitnessedWebPolicyMode,
-    witnessed_web_quorum_m: effectiveWitnessedWebQuorumM,
-    witnessed_web_quorum_n: effectiveWitnessedWebQuorumN,
-    witnessed_web_transparency_mode: effectiveWitnessedWebTransparencyMode,
-    witnessed_web_transparency_required_after:
-      effectiveWitnessedWebTransparencyRequiredAfter,
-    allowlistedAttesterDids: attesterAllowlist,
-    allowlistedCoverageAttestationSignerDids: coverageAttestationSignerAllowlist,
-    allowlistedBinarySemanticEvidenceSignerDids:
-      binarySemanticEvidenceSignerAllowlist,
-    coverage_enforcement_phase: effectiveCoverageEnforcementPhase,
-    causal_policy_profile: parseCausalPolicyProfile(
-      env.CAUSAL_POLICY_PROFILE
-    ),
-    vir_conflict_policy_mode: parseVirConflictPolicyMode(
-      env.VIR_CONFLICT_POLICY_MODE
-    ),
-    maxVirCorroborationSkewMs: parseNonNegativeInteger(
-      env.VIR_CORROBORATION_MAX_SKEW_MS
-    ),
-    maxCoverageLivenessGapMs: parseNonNegativeInteger(
-      env.COVERAGE_MAX_LIVENESS_GAP_MS
-    ),
-    urm,
-  });
-
-  let finalResult = verification.result;
-
-  // Optional execution attestations (CEA-US-010)
-  if (finalResult.status === 'VALID' && execution_attestations !== undefined) {
+    // Optional execution attestations (CEA-US-010)
+    if (finalResult.status === 'VALID' && execution_attestations !== undefined) {
     if (!Array.isArray(execution_attestations)) {
       return errorResponse('execution_attestations must be an array when provided', 400);
     }
@@ -1576,35 +1577,39 @@ async function handleVerifyBundle(
         tee_execution_verified_count: teeExecutionVerifiedCount,
       },
     };
+    }
+
+    // Write audit log entry
+    let auditReceipt: AuditLogReceipt | undefined;
+    if (env.AUDIT_LOG_DB && finalResult.agent_did) {
+      const requestHash = await computeRequestHash(body);
+      auditReceipt = await writeAuditLogEntry(
+        env.AUDIT_LOG_DB,
+        requestHash,
+        'proof_bundle' as EnvelopeType,
+        finalResult.status,
+        finalResult.agent_did
+      );
+    }
+
+    const response: VerifyBundleResponse & { audit_receipt?: AuditLogReceipt } = {
+      ...verification,
+      result: finalResult,
+      trust_tier: finalResult.trust_tier,
+      proof_tier: finalResult.proof_tier,
+      model_identity_tier: finalResult.model_identity_tier,
+      risk_flags: finalResult.risk_flags,
+      audit_receipt: auditReceipt,
+    };
+
+    // Return 200 for valid, 422 for invalid
+    const status = finalResult.status === 'VALID' ? 200 : 422;
+
+    return jsonResponse(response, status);
+  } catch (err) {
+    console.error('Unhandled error in /v1/verify/bundle', err);
+    return errorResponse('Internal server error', 500);
   }
-
-  // Write audit log entry
-  let auditReceipt: AuditLogReceipt | undefined;
-  if (env.AUDIT_LOG_DB && finalResult.agent_did) {
-    const requestHash = await computeRequestHash(body);
-    auditReceipt = await writeAuditLogEntry(
-      env.AUDIT_LOG_DB,
-      requestHash,
-      'proof_bundle' as EnvelopeType,
-      finalResult.status,
-      finalResult.agent_did
-    );
-  }
-
-  const response: VerifyBundleResponse & { audit_receipt?: AuditLogReceipt } = {
-    ...verification,
-    result: finalResult,
-    trust_tier: finalResult.trust_tier,
-    proof_tier: finalResult.proof_tier,
-    model_identity_tier: finalResult.model_identity_tier,
-    risk_flags: finalResult.risk_flags,
-    audit_receipt: auditReceipt,
-  };
-
-  // Return 200 for valid, 422 for invalid
-  const status = finalResult.status === 'VALID' ? 200 : 422;
-
-  return jsonResponse(response, status);
 }
 
 /**
