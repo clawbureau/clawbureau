@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildProofReport, renderProofReportHtml } from '../src/prove-cmd.js';
+import { buildProofReport, renderProofReportHtml, renderProofReportText } from '../src/prove-cmd.js';
+import { renderProofReportText as renderProofReportTextFromIndex } from '../src/index.js';
 
 function makeBundle(): Record<string, unknown> {
   return {
@@ -20,7 +21,7 @@ function makeBundle(): Record<string, unknown> {
           timestamp: '2026-03-20T19:16:56.576Z',
           payload_hash_b64u: 'abc',
           prev_hash_b64u: null,
-          event_hash_b64u: 'def',
+          event_hash_b64u: 'event_hash_def123',
         },
       ],
       receipts: [
@@ -87,6 +88,153 @@ function makeBundle(): Record<string, unknown> {
               ],
             },
           },
+          egress_policy_receipt: {
+            envelope_version: '1',
+            envelope_type: 'egress_policy_receipt',
+            payload_hash_b64u: 'egress_payload_hash_1234',
+            hash_algorithm: 'SHA-256',
+            signature_b64u: 'egress_signature_1234',
+            algorithm: 'Ed25519',
+            signer_did: 'did:key:zAgent',
+            issued_at: '2026-03-20T19:16:57.351Z',
+            payload: {
+              receipt_version: '1',
+              receipt_id: 'egr_1',
+              policy_version: '1',
+              policy_hash_b64u: 'policy_hash_1234',
+              proofed_mode: true,
+              clawproxy_url: 'https://clawproxy.example',
+              allowed_proxy_destinations: ['api.openai.com', 'generativelanguage.googleapis.com'],
+              allowed_child_destinations: ['api.clawbureau.internal'],
+              direct_provider_access_blocked: true,
+              blocked_attempt_count: 2,
+              blocked_attempts_observed: true,
+              hash_algorithm: 'SHA-256',
+              agent_did: 'did:key:zAgent',
+              timestamp: '2026-03-20T19:16:57.321Z',
+              binding: {
+                run_id: 'run_1',
+                event_hash_b64u: 'event_hash_def123',
+              },
+            },
+          },
+        },
+        processor_policy: {
+          receipt_version: '1',
+          receipt_type: 'processor_policy',
+          policy_version: 'prv.proc.v1',
+          profile_id: 'processor-profile-1',
+          policy_hash_b64u: 'processor_policy_hash_123',
+          enforce: true,
+          binding: {
+            run_id: 'run_1',
+          },
+          constraints: {
+            allowed_providers: ['google'],
+            allowed_models: ['gemini-2.5-flash'],
+            allowed_regions: ['eu'],
+            allowed_retention_profiles: ['no-store'],
+            default_region: 'eu',
+            default_retention_profile: 'no-store',
+          },
+          counters: {
+            allowed_routes: 3,
+            denied_routes: 1,
+          },
+          used_processors: [
+            {
+              provider: 'google',
+              model: 'gemini-2.5-flash',
+              region: 'eu',
+              retention_profile: 'no-store',
+              count: 3,
+            },
+          ],
+          blocked_attempts: [
+            {
+              route: {
+                provider: 'openai',
+                model: 'gpt-5',
+                region: 'us',
+                retention_profile: 'default',
+              },
+              reason_code: 'PRV_POL_ROUTE_DENIED',
+              timestamp: '2026-03-20T19:16:57.401Z',
+            },
+          ],
+        },
+        data_handling: {
+          policy_version: 'prv.dlp.v1',
+          receipts: [
+            {
+              envelope_version: '1',
+              envelope_type: 'data_handling_receipt',
+              payload_hash_b64u: 'dlp_payload_hash_1',
+              hash_algorithm: 'SHA-256',
+              signature_b64u: 'dlp_signature_1',
+              algorithm: 'Ed25519',
+              signer_did: 'did:key:zAgent',
+              issued_at: '2026-03-20T19:16:56.951Z',
+              payload: {
+                receipt_version: '1',
+                receipt_id: 'dlp_1',
+                policy_version: 'prv.dlp.v1',
+                run_id: 'run_1',
+                provider: 'google',
+                action: 'redact',
+                reason_code: 'PRV_DLP_REDACTED',
+                classes: [
+                  { class_id: 'pii.email', rule_id: 'pii_email', action: 'redact', match_count: 2 },
+                ],
+                approval: {
+                  required: false,
+                  satisfied: false,
+                  mechanism: 'header_token',
+                  token_hash_b64u: null,
+                },
+                redaction: {
+                  applied: true,
+                  original_payload_hash_b64u: 'orig_hash_1',
+                  outbound_payload_hash_b64u: 'redacted_hash_1',
+                },
+                timestamp: '2026-03-20T19:16:56.921Z',
+              },
+            },
+            {
+              envelope_version: '1',
+              envelope_type: 'data_handling_receipt',
+              payload_hash_b64u: 'dlp_payload_hash_2',
+              hash_algorithm: 'SHA-256',
+              signature_b64u: 'dlp_signature_2',
+              algorithm: 'Ed25519',
+              signer_did: 'did:key:zAgent',
+              issued_at: '2026-03-20T19:16:57.041Z',
+              payload: {
+                receipt_version: '1',
+                receipt_id: 'dlp_2',
+                policy_version: 'prv.dlp.v1',
+                run_id: 'run_1',
+                provider: 'google',
+                action: 'require_approval',
+                reason_code: 'PRV_DLP_APPROVAL_REQUIRED',
+                classes: [
+                  { class_id: 'secret.api_key', rule_id: 'secret_key', action: 'require_approval', match_count: 1 },
+                ],
+                approval: {
+                  required: true,
+                  satisfied: false,
+                  mechanism: 'header_token',
+                  token_hash_b64u: null,
+                },
+                redaction: {
+                  applied: false,
+                  original_payload_hash_b64u: 'orig_hash_2',
+                  outbound_payload_hash_b64u: null,
+                },
+                timestamp: '2026-03-20T19:16:57.011Z',
+              },
+            },
+          ],
         },
       },
     },
@@ -111,7 +259,7 @@ function makeCleanBundle(): Record<string, unknown> {
           timestamp: '2026-03-20T19:16:56.576Z',
           payload_hash_b64u: 'abc',
           prev_hash_b64u: null,
-          event_hash_b64u: 'def',
+          event_hash_b64u: 'event_hash_def123',
         },
       ],
       receipts: [
@@ -172,6 +320,106 @@ function makeCleanBundle(): Record<string, unknown> {
               action_required: [],
             },
           },
+          egress_policy_receipt: {
+            envelope_version: '1',
+            envelope_type: 'egress_policy_receipt',
+            payload_hash_b64u: 'egress_payload_hash_clean_1234',
+            hash_algorithm: 'SHA-256',
+            signature_b64u: 'egress_signature_clean_1234',
+            algorithm: 'Ed25519',
+            signer_did: 'did:key:zAgent',
+            issued_at: '2026-03-20T19:16:57.351Z',
+            payload: {
+              receipt_version: '1',
+              receipt_id: 'egr_clean',
+              policy_version: '1',
+              policy_hash_b64u: 'policy_hash_clean_1234',
+              proofed_mode: true,
+              clawproxy_url: 'https://clawproxy.example',
+              allowed_proxy_destinations: ['generativelanguage.googleapis.com'],
+              allowed_child_destinations: [],
+              direct_provider_access_blocked: true,
+              blocked_attempt_count: 0,
+              blocked_attempts_observed: false,
+              hash_algorithm: 'SHA-256',
+              agent_did: 'did:key:zAgent',
+              timestamp: '2026-03-20T19:16:57.321Z',
+              binding: {
+                run_id: 'run_1',
+                event_hash_b64u: 'event_hash_def123',
+              },
+            },
+          },
+        },
+        processor_policy: {
+          receipt_version: '1',
+          receipt_type: 'processor_policy',
+          policy_version: 'prv.proc.v1',
+          profile_id: 'processor-profile-clean',
+          policy_hash_b64u: 'processor_policy_hash_clean_123',
+          enforce: true,
+          binding: {
+            run_id: 'run_1',
+          },
+          constraints: {
+            allowed_providers: ['google'],
+            allowed_models: ['gemini-2.5-flash'],
+            allowed_regions: ['eu'],
+            allowed_retention_profiles: ['no-store'],
+            default_region: 'eu',
+            default_retention_profile: 'no-store',
+          },
+          counters: {
+            allowed_routes: 1,
+            denied_routes: 0,
+          },
+          used_processors: [
+            {
+              provider: 'google',
+              model: 'gemini-2.5-flash',
+              region: 'eu',
+              retention_profile: 'no-store',
+              count: 1,
+            },
+          ],
+          blocked_attempts: [],
+        },
+        data_handling: {
+          policy_version: 'prv.dlp.v1',
+          receipts: [
+            {
+              envelope_version: '1',
+              envelope_type: 'data_handling_receipt',
+              payload_hash_b64u: 'dlp_payload_hash_clean_1',
+              hash_algorithm: 'SHA-256',
+              signature_b64u: 'dlp_signature_clean_1',
+              algorithm: 'Ed25519',
+              signer_did: 'did:key:zAgent',
+              issued_at: '2026-03-20T19:16:56.951Z',
+              payload: {
+                receipt_version: '1',
+                receipt_id: 'dlp_clean_1',
+                policy_version: 'prv.dlp.v1',
+                run_id: 'run_1',
+                provider: 'google',
+                action: 'allow',
+                reason_code: 'PRV_DLP_ALLOW',
+                classes: [],
+                approval: {
+                  required: false,
+                  satisfied: false,
+                  mechanism: 'header_token',
+                  token_hash_b64u: null,
+                },
+                redaction: {
+                  applied: false,
+                  original_payload_hash_b64u: 'allow_hash_1',
+                  outbound_payload_hash_b64u: 'allow_hash_1',
+                },
+                timestamp: '2026-03-20T19:16:56.921Z',
+              },
+            },
+          ],
         },
       },
     },
@@ -218,6 +466,37 @@ describe('buildProofReport', () => {
     });
     expect(report.sentinels.runtime_profile.profile_id).toBe('prv.run.v1.proofed-minimal');
     expect(report.sentinels.runtime_hygiene.verdict).toBe('action');
+    expect(report.privacy_posture.overall_verdict).toBe('action');
+    expect(report.privacy_posture.evidence.egress_policy_receipt_present).toBe(true);
+    expect(report.privacy_posture.evidence.processor_policy_evidence_present).toBe(true);
+    expect(report.privacy_posture.evidence.data_handling_receipts_present).toBe(true);
+    expect(report.privacy_posture.egress.blocked_attempt_count).toBe(2);
+    expect(report.privacy_posture.processor_policy.used_processors[0]).toMatchObject({
+      provider: 'google',
+      model: 'gemini-2.5-flash',
+      count: 3,
+    });
+    expect(report.privacy_posture.processor_policy.blocked_attempts[0]).toMatchObject({
+      reason_code: 'PRV_POL_ROUTE_DENIED',
+    });
+    expect(report.privacy_posture.data_handling.actions).toEqual([
+      { action: 'redact', count: 1 },
+      { action: 'require_approval', count: 1 },
+    ]);
+    expect(report.privacy_posture.data_handling.sensitive_classes).toEqual([
+      { class_id: 'pii.email', match_count: 2, actions: ['redact'] },
+      { class_id: 'secret.api_key', match_count: 1, actions: ['require_approval'] },
+    ]);
+    expect(report.privacy_posture.signal_buckets.reviewer_action_required).toContain(
+      '1 data-handling receipt required approval and did not satisfy it.',
+    );
+    expect(report.privacy_posture.proven_claims.join(' ')).toContain('signed egress policy receipt');
+    expect(report.privacy_posture.not_proven_claims).toContain(
+      'This report does not by itself prove legal or regulatory compliance.',
+    );
+    expect(report.privacy_posture.not_proven_claims).toContain(
+      'This report does not independently verify every privacy receipt signature or processor-policy hash; use clawverify verify proof-bundle for canonical validation.',
+    );
     expect(report.review_buckets[2].summary).toContain('baseline/background classifications');
     expect(report.review_buckets[3].items).toContain(
       'Review 2 suspicious network receipts in the raw bundle before external sharing.',
@@ -231,6 +510,7 @@ describe('buildProofReport', () => {
     expect(report.warnings).toContain('CLDD marked the run as escape-suspected.');
     expect(report.warnings).toContain('Runtime profile fallback is active (interpose_not_active).');
     expect(report.warnings).toContain('Runtime hygiene verdict is ACTION; reviewer follow-up is required.');
+    expect(report.warnings).toContain('Privacy posture verdict is ACTION; reviewer follow-up is required.');
   });
 
   it('keeps clean agent traffic out of the background-noise bucket', () => {
@@ -250,7 +530,59 @@ describe('buildProofReport', () => {
       tone: 'good',
       summary: 'No notable background or infrastructure traffic was recorded.',
     });
+    expect(report.privacy_posture.overall_verdict).toBe('good');
+    expect(report.privacy_posture.reviewer_action_required).toBe(false);
+    expect(report.privacy_posture.data_handling.actions).toEqual([{ action: 'allow', count: 1 }]);
+    expect(report.privacy_posture.data_handling.approval_unsatisfied_count).toBe(0);
+    expect(report.privacy_posture.signal_buckets.reviewer_action_required).toEqual([]);
     expect(report.review_buckets[3].items).toEqual(['No extra reviewer action is required.']);
+  });
+
+  it('does not treat malformed privacy metadata as proof evidence', () => {
+    const bundle = makeBundle();
+    const payload = bundle.payload as {
+      metadata?: {
+        sentinels?: {
+          egress_policy_receipt?: Record<string, unknown>;
+        };
+        data_handling?: {
+          receipts?: Array<Record<string, unknown>>;
+        };
+        processor_policy?: Record<string, unknown>;
+      };
+    };
+
+    if (payload.metadata?.sentinels?.egress_policy_receipt) {
+      delete payload.metadata.sentinels.egress_policy_receipt.signature_b64u;
+    }
+    if (payload.metadata?.data_handling?.receipts?.[0]) {
+      delete payload.metadata.data_handling.receipts[0].signature_b64u;
+    }
+    if (payload.metadata?.processor_policy) {
+      delete payload.metadata.processor_policy.binding;
+    }
+
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle,
+      runSummary: {
+        status: 'PASS',
+        tier: 'gateway',
+      },
+    });
+
+    expect(report.privacy_posture.evidence.egress_policy_receipt_present).toBe(false);
+    expect(report.privacy_posture.evidence.processor_policy_evidence_present).toBe(false);
+    expect(report.privacy_posture.evidence.data_handling_receipts_present).toBe(true);
+    expect(report.privacy_posture.signal_buckets.caution).toContain(
+      'An egress policy object is present, but it is not a structurally complete signed receipt envelope.',
+    );
+    expect(report.privacy_posture.signal_buckets.caution).toContain(
+      'A processor policy object is present, but it is missing required evidence fields.',
+    );
+    expect(report.privacy_posture.signal_buckets.caution).toContain(
+      'Some data-handling entries are present, but not all of them are structurally complete signed receipt envelopes.',
+    );
   });
 });
 
@@ -277,7 +609,48 @@ describe('renderProofReportHtml', () => {
     expect(html).toContain('did:web:clawproxy.com');
     expect(html).toContain('Background noise / ignorable infra');
     expect(html).toContain('Reviewer action needed');
+    expect(html).toContain('Privacy posture');
+    expect(html).toContain('Allowed processors and blocked routes');
+    expect(html).toContain('Sensitive classes and actions');
+    expect(html).toContain('What Is Not Proven');
     expect(html).toContain('needs &lt;review&gt; &amp; confirmation');
     expect(html).toContain('clawverify verify proof-bundle --input /tmp/proof_bundle.json');
+  });
+});
+
+describe('renderProofReportText', () => {
+  it('prints a privacy posture section with proven and not-proven boundaries', () => {
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle: makeBundle(),
+      runSummary: {
+        status: 'PASS',
+        tier: 'gateway',
+      },
+    });
+
+    const text = renderProofReportText(report);
+    expect(text).toContain('Privacy posture:');
+    expect(text).toContain('Allowed egress destinations:');
+    expect(text).toContain('Allowed processors used:');
+    expect(text).toContain('Blocked processor attempts:');
+    expect(text).toContain('Sensitive classes/actions:');
+    expect(text).toContain('Caution privacy signals:');
+    expect(text).toContain('What is proven:');
+    expect(text).toContain('Not proven / claim limits:');
+    expect(text).toContain('Runtime hygiene posture');
+  });
+
+  it('is exported from the package entrypoint', () => {
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle: makeCleanBundle(),
+      runSummary: {
+        status: 'PASS',
+        tier: 'gateway',
+      },
+    });
+
+    expect(renderProofReportTextFromIndex(report)).toContain('=== Clawsig proof report ===');
   });
 });

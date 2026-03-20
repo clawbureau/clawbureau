@@ -51,6 +51,87 @@ export interface ProofRuntimeHygiene {
   action_required_signals: string[];
 }
 
+type ProofPrivacyVerdict = 'good' | 'caution' | 'action';
+
+type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
+
+export interface ProofPrivacyProcessorRoute {
+  provider: string;
+  model: string;
+  region: string;
+  retention_profile: string;
+  count: number;
+}
+
+export interface ProofPrivacyProcessorBlockedAttempt {
+  route: Omit<ProofPrivacyProcessorRoute, 'count'>;
+  reason_code: string;
+  timestamp: string | null;
+}
+
+export interface ProofPrivacySensitiveClass {
+  class_id: string;
+  match_count: number;
+  actions: DataHandlingAction[];
+}
+
+export interface ProofPrivacyActionCount {
+  action: DataHandlingAction;
+  count: number;
+}
+
+export interface ProofPrivacyPosture {
+  overall_verdict: ProofPrivacyVerdict;
+  reviewer_action_required: boolean;
+  evidence: {
+    egress_policy_receipt_present: boolean;
+    runtime_profile_present: boolean;
+    runtime_hygiene_present: boolean;
+    data_handling_receipts_present: boolean;
+    processor_policy_evidence_present: boolean;
+  };
+  egress: {
+    proofed_mode: boolean | null;
+    direct_provider_access_blocked: boolean | null;
+    blocked_attempt_count: number | null;
+    blocked_attempts_observed: boolean | null;
+    allowed_proxy_destinations: string[];
+    allowed_child_destinations: string[];
+  };
+  processor_policy: {
+    profile_id: string | null;
+    policy_version: string | null;
+    enforce: boolean | null;
+    allowed_routes: number | null;
+    denied_routes: number | null;
+    used_processors: ProofPrivacyProcessorRoute[];
+    blocked_attempts: ProofPrivacyProcessorBlockedAttempt[];
+  };
+  data_handling: {
+    policy_version: string | null;
+    receipt_count: number;
+    actions: ProofPrivacyActionCount[];
+    sensitive_classes: ProofPrivacySensitiveClass[];
+    approval_required_count: number;
+    approval_satisfied_count: number;
+    approval_unsatisfied_count: number;
+    redaction_applied_count: number;
+    reason_codes: string[];
+  };
+  runtime: {
+    profile_id: string | null;
+    profile_status: string | null;
+    hygiene_verdict: ProofRuntimeHygiene['verdict'];
+  };
+  signal_buckets: {
+    background_noise: string[];
+    caution: string[];
+    reviewer_action_required: string[];
+  };
+  proven_claims: string[];
+  not_proven_claims: string[];
+}
+
 export interface ProofReport {
   input_path: string;
   run_summary_path: string | null;
@@ -90,6 +171,7 @@ export interface ProofReport {
     classification_counts: Record<string, number>;
     top_processes: Array<{ process_name: string; count: number }>;
   };
+  privacy_posture: ProofPrivacyPosture;
   review_buckets: ProofReviewBucket[];
   warnings: string[];
   next_steps: string[];
@@ -119,6 +201,10 @@ function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -128,6 +214,122 @@ function asStringArray(value: unknown): string[] {
 
 function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return count === 1 ? singular : plural;
+}
+
+function dedupeStrings(values: string[]): string[] {
+  const normalized = values
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  return [...new Set(normalized)];
+}
+
+function isDataHandlingAction(value: unknown): value is DataHandlingAction {
+  return value === 'allow' || value === 'redact' || value === 'block' || value === 'require_approval';
+}
+
+function isBase64UrlLike(value: string | null, minLength = 8): boolean {
+  return value !== null && value.length >= minLength && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+function isSignedEnvelopeLike(envelope: Record<string, unknown>, expectedType: string): boolean {
+  return (
+    asString(envelope.envelope_version) === '1' &&
+    asString(envelope.envelope_type) === expectedType &&
+    isRecord(envelope.payload) &&
+    asString(envelope.hash_algorithm) === 'SHA-256' &&
+    asString(envelope.algorithm) === 'Ed25519' &&
+    asString(envelope.signer_did) !== null &&
+    asString(envelope.issued_at) !== null &&
+    isBase64UrlLike(asString(envelope.payload_hash_b64u)) &&
+    isBase64UrlLike(asString(envelope.signature_b64u))
+  );
+}
+
+function hasStructuredEgressPolicyReceipt(envelope: Record<string, unknown> | null): envelope is Record<string, unknown> {
+  if (!envelope || !isSignedEnvelopeLike(envelope, 'egress_policy_receipt')) {
+    return false;
+  }
+
+  const payload = isRecord(envelope.payload) ? envelope.payload : null;
+  const binding = payload && isRecord(payload.binding) ? payload.binding : null;
+
+  return (
+    asString(payload?.receipt_version) === '1' &&
+    asString(payload?.receipt_id) !== null &&
+    asString(payload?.policy_version) === '1' &&
+    isBase64UrlLike(asString(payload?.policy_hash_b64u)) &&
+    asBoolean(payload?.proofed_mode) !== null &&
+    asString(payload?.clawproxy_url) !== null &&
+    Array.isArray(payload?.allowed_proxy_destinations) &&
+    Array.isArray(payload?.allowed_child_destinations) &&
+    asBoolean(payload?.direct_provider_access_blocked) !== null &&
+    asNumber(payload?.blocked_attempt_count) !== null &&
+    asBoolean(payload?.blocked_attempts_observed) !== null &&
+    asString(payload?.hash_algorithm) === 'SHA-256' &&
+    asString(payload?.agent_did) !== null &&
+    asString(payload?.timestamp) !== null &&
+    binding !== null &&
+    asString(binding.run_id) !== null &&
+    isBase64UrlLike(asString(binding.event_hash_b64u))
+  );
+}
+
+function hasStructuredProcessorPolicyEvidence(evidence: Record<string, unknown> | null): evidence is Record<string, unknown> {
+  if (!evidence) {
+    return false;
+  }
+
+  const binding = isRecord(evidence.binding) ? evidence.binding : null;
+  const counters = isRecord(evidence.counters) ? evidence.counters : null;
+
+  return (
+    asString(evidence.receipt_version) === '1' &&
+    asString(evidence.receipt_type) === 'processor_policy' &&
+    asString(evidence.policy_version) !== null &&
+    asString(evidence.profile_id) !== null &&
+    isBase64UrlLike(asString(evidence.policy_hash_b64u)) &&
+    asBoolean(evidence.enforce) !== null &&
+    binding !== null &&
+    asString(binding.run_id) !== null &&
+    counters !== null &&
+    asNumber(counters.allowed_routes) !== null &&
+    asNumber(counters.denied_routes) !== null &&
+    Array.isArray(evidence.used_processors)
+  );
+}
+
+function getStructuredDataHandlingPayload(envelope: Record<string, unknown>): Record<string, unknown> | null {
+  if (!isSignedEnvelopeLike(envelope, 'data_handling_receipt')) {
+    return null;
+  }
+
+  const payload = isRecord(envelope.payload) ? envelope.payload : null;
+  const approval = payload && isRecord(payload.approval) ? payload.approval : null;
+  const redaction = payload && isRecord(payload.redaction) ? payload.redaction : null;
+
+  if (
+    !payload ||
+    asString(payload.receipt_version) !== '1' ||
+    asString(payload.receipt_id) === null ||
+    asString(payload.policy_version) === null ||
+    asString(payload.run_id) === null ||
+    asString(payload.provider) === null ||
+    !isDataHandlingAction(payload.action) ||
+    asString(payload.reason_code) === null ||
+    !Array.isArray(payload.classes) ||
+    !approval ||
+    asBoolean(approval.required) === null ||
+    asBoolean(approval.satisfied) === null ||
+    asString(approval.mechanism) === null ||
+    !redaction ||
+    asBoolean(redaction.applied) === null ||
+    asString(redaction.original_payload_hash_b64u) === null ||
+    asString(payload.timestamp) === null
+  ) {
+    return null;
+  }
+
+  return payload;
 }
 
 const BACKGROUND_NETWORK_CLASSIFICATIONS = new Set([
@@ -264,6 +466,347 @@ function summarizeSentinels(payload: Record<string, unknown>): ProofReport['sent
       caution_signals: asStringArray(hygieneBuckets?.caution),
       action_required_signals: asStringArray(hygieneBuckets?.action_required),
     },
+  };
+}
+
+const DATA_HANDLING_ACTION_ORDER: DataHandlingAction[] = ['allow', 'redact', 'block', 'require_approval'];
+
+function summarizePrivacyPosture(args: {
+  payload: Record<string, unknown>;
+  sentinels: ProofReport['sentinels'];
+}): ProofPrivacyPosture {
+  const { payload, sentinels } = args;
+  const metadata = isRecord(payload.metadata) ? payload.metadata : null;
+  const sentinelMetadata = metadata && isRecord(metadata.sentinels) ? metadata.sentinels : null;
+  const rawEgressEnvelope = sentinelMetadata && isRecord(sentinelMetadata.egress_policy_receipt)
+    ? sentinelMetadata.egress_policy_receipt
+    : null;
+  const egressEnvelope = hasStructuredEgressPolicyReceipt(rawEgressEnvelope) ? rawEgressEnvelope : null;
+  const egressPayload = egressEnvelope && isRecord(egressEnvelope.payload) ? egressEnvelope.payload : null;
+
+  const rawProcessorPolicy = metadata && isRecord(metadata.processor_policy) ? metadata.processor_policy : null;
+  const processorPolicy = hasStructuredProcessorPolicyEvidence(rawProcessorPolicy) ? rawProcessorPolicy : null;
+  const usedProcessors: ProofPrivacyProcessorRoute[] = asArray(processorPolicy?.used_processors)
+    .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    .map((route) => {
+      const provider = asString(route.provider);
+      const model = asString(route.model);
+      const region = asString(route.region);
+      const retentionProfile = asString(route.retention_profile);
+      const count = asNumber(route.count);
+      if (!provider || !model || !region || !retentionProfile || count === null) {
+        return null;
+      }
+      return {
+        provider,
+        model,
+        region,
+        retention_profile: retentionProfile,
+        count,
+      };
+    })
+    .filter((entry): entry is ProofPrivacyProcessorRoute => entry !== null);
+  const processorBlockedAttempts: ProofPrivacyProcessorBlockedAttempt[] = asArray(processorPolicy?.blocked_attempts)
+    .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    .map((attempt) => {
+      const route = isRecord(attempt.route) ? attempt.route : null;
+      const provider = asString(route?.provider);
+      const model = asString(route?.model);
+      const region = asString(route?.region);
+      const retentionProfile = asString(route?.retention_profile);
+      const reasonCode = asString(attempt.reason_code);
+      if (!provider || !model || !region || !retentionProfile || !reasonCode) {
+        return null;
+      }
+      return {
+        route: {
+          provider,
+          model,
+          region,
+          retention_profile: retentionProfile,
+        },
+        reason_code: reasonCode,
+        timestamp: asString(attempt.timestamp),
+      };
+    })
+    .filter((entry): entry is ProofPrivacyProcessorBlockedAttempt => entry !== null);
+
+  const dataHandling = metadata && isRecord(metadata.data_handling) ? metadata.data_handling : null;
+  const rawDataHandlingReceiptCount = asArray(dataHandling?.receipts).filter((entry): entry is Record<string, unknown> => isRecord(entry)).length;
+  const dataHandlingPayloads = asArray(dataHandling?.receipts)
+    .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    .map((entry) => getStructuredDataHandlingPayload(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== null);
+  const actionCounts = new Map<DataHandlingAction, number>();
+  for (const action of DATA_HANDLING_ACTION_ORDER) {
+    actionCounts.set(action, 0);
+  }
+  const classMap = new Map<string, { class_id: string; match_count: number; actions: Set<DataHandlingAction> }>();
+  const reasonCodes = new Set<string>();
+  let approvalRequiredCount = 0;
+  let approvalSatisfiedCount = 0;
+  let approvalUnsatisfiedCount = 0;
+  let redactionAppliedCount = 0;
+
+  for (const receiptPayload of dataHandlingPayloads) {
+    const action = isDataHandlingAction(receiptPayload.action) ? receiptPayload.action : null;
+    if (action) {
+      actionCounts.set(action, (actionCounts.get(action) ?? 0) + 1);
+    }
+
+    const reasonCode = asString(receiptPayload.reason_code);
+    if (reasonCode) {
+      reasonCodes.add(reasonCode);
+    }
+
+    const approval = isRecord(receiptPayload.approval) ? receiptPayload.approval : null;
+    if (approval?.required === true) approvalRequiredCount += 1;
+    if (approval?.satisfied === true) approvalSatisfiedCount += 1;
+    if (approval?.required === true && approval?.satisfied !== true) approvalUnsatisfiedCount += 1;
+
+    const redaction = isRecord(receiptPayload.redaction) ? receiptPayload.redaction : null;
+    if (redaction?.applied === true) redactionAppliedCount += 1;
+
+    const classEntries = asArray(receiptPayload.classes).filter((entry): entry is Record<string, unknown> => isRecord(entry));
+    for (const classEntry of classEntries) {
+      const classId = asString(classEntry.class_id);
+      const classAction = isDataHandlingAction(classEntry.action)
+        ? classEntry.action
+        : action;
+      const matchCount = asNumber(classEntry.match_count) ?? 0;
+      if (!classId || !classAction) continue;
+
+      const existing = classMap.get(classId);
+      if (existing) {
+        existing.match_count += matchCount;
+        existing.actions.add(classAction);
+      } else {
+        classMap.set(classId, {
+          class_id: classId,
+          match_count: matchCount,
+          actions: new Set([classAction]),
+        });
+      }
+    }
+  }
+
+  const sensitiveClasses = [...classMap.values()]
+    .map((entry) => ({
+      class_id: entry.class_id,
+      match_count: entry.match_count,
+      actions: DATA_HANDLING_ACTION_ORDER.filter((action) => entry.actions.has(action)),
+    }))
+    .sort((a, b) => b.match_count - a.match_count || a.class_id.localeCompare(b.class_id));
+  const dataHandlingActions = DATA_HANDLING_ACTION_ORDER
+    .map((action) => ({ action, count: actionCounts.get(action) ?? 0 }))
+    .filter((entry) => entry.count > 0);
+
+  const runtimeProfilePresent =
+    sentinels.runtime_profile.profile_id !== null ||
+    sentinels.runtime_profile.status !== null ||
+    sentinels.runtime_profile.mode !== null ||
+    sentinels.runtime_profile.baseline_process_count !== null ||
+    sentinels.runtime_profile.baseline_process_hash_b64u !== null;
+  const runtimeHygienePresent =
+    sentinels.runtime_hygiene.verdict !== null ||
+    sentinels.runtime_hygiene.background_signals.length > 0 ||
+    sentinels.runtime_hygiene.caution_signals.length > 0 ||
+    sentinels.runtime_hygiene.action_required_signals.length > 0;
+  const evidence = {
+    egress_policy_receipt_present: egressPayload !== null,
+    runtime_profile_present: runtimeProfilePresent,
+    runtime_hygiene_present: runtimeHygienePresent,
+    data_handling_receipts_present: dataHandlingPayloads.length > 0,
+    processor_policy_evidence_present: processorPolicy !== null,
+  };
+
+  const cautionSignals: string[] = [];
+  const reviewerActionSignals: string[] = [];
+  const backgroundSignals = dedupeStrings(sentinels.runtime_hygiene.background_signals);
+  cautionSignals.push(...sentinels.runtime_hygiene.caution_signals);
+  reviewerActionSignals.push(...sentinels.runtime_hygiene.action_required_signals);
+
+  if (!evidence.egress_policy_receipt_present) {
+    cautionSignals.push('No signed egress policy receipt is present in this bundle.');
+    if (rawEgressEnvelope !== null) {
+      cautionSignals.push('An egress policy object is present, but it is not a structurally complete signed receipt envelope.');
+    }
+  } else {
+    if (egressPayload?.proofed_mode === false) {
+      reviewerActionSignals.push('Egress policy evidence reports proofed_mode=false.');
+    }
+    if (egressPayload?.direct_provider_access_blocked === false) {
+      reviewerActionSignals.push('Egress policy evidence reports direct provider access is not blocked.');
+    }
+    const egressBlockedAttemptCount = asNumber(egressPayload?.blocked_attempt_count) ?? 0;
+    if (egressBlockedAttemptCount > 0) {
+      cautionSignals.push(
+        `${egressBlockedAttemptCount} blocked egress ${pluralize(egressBlockedAttemptCount, 'attempt')} were observed.`,
+      );
+    }
+  }
+
+  if (!evidence.processor_policy_evidence_present) {
+    cautionSignals.push('No processor policy evidence is present in this bundle.');
+    if (rawProcessorPolicy !== null) {
+      cautionSignals.push('A processor policy object is present, but it is missing required evidence fields.');
+    }
+  } else {
+    if (processorPolicy?.enforce === false) {
+      reviewerActionSignals.push('Processor policy evidence reports enforce=false.');
+    }
+    const deniedRoutes = asNumber(processorPolicy?.counters && isRecord(processorPolicy.counters) ? processorPolicy.counters.denied_routes : null) ?? 0;
+    if (deniedRoutes > 0) {
+      cautionSignals.push(
+        `${deniedRoutes} processor route ${pluralize(deniedRoutes, 'attempt')} were blocked by policy.`,
+      );
+    }
+  }
+
+  if (!evidence.data_handling_receipts_present) {
+    cautionSignals.push('No signed data-handling receipts are present in this bundle.');
+    if (rawDataHandlingReceiptCount > 0) {
+      cautionSignals.push('Data-handling metadata is present, but it does not contain structurally complete signed receipt envelopes.');
+    }
+  } else {
+    if (rawDataHandlingReceiptCount > dataHandlingPayloads.length) {
+      cautionSignals.push('Some data-handling entries are present, but not all of them are structurally complete signed receipt envelopes.');
+    }
+    if (approvalUnsatisfiedCount > 0) {
+      reviewerActionSignals.push(
+        `${approvalUnsatisfiedCount} data-handling ${pluralize(approvalUnsatisfiedCount, 'receipt')} required approval and did not satisfy it.`,
+      );
+    }
+    const redactCount = actionCounts.get('redact') ?? 0;
+    if (redactCount > 0) {
+      cautionSignals.push(
+        `${redactCount} data-handling ${pluralize(redactCount, 'receipt')} applied redaction before egress.`,
+      );
+    }
+    const blockCount = actionCounts.get('block') ?? 0;
+    if (blockCount > 0) {
+      cautionSignals.push(
+        `${blockCount} data-handling ${pluralize(blockCount, 'receipt')} blocked outbound payloads.`,
+      );
+    }
+  }
+
+  if (!evidence.runtime_profile_present) {
+    cautionSignals.push('Runtime profile evidence is missing.');
+  }
+  if (!evidence.runtime_hygiene_present) {
+    cautionSignals.push('Runtime hygiene evidence is missing.');
+  }
+  if (sentinels.runtime_hygiene.reviewer_action_required) {
+    reviewerActionSignals.push('Runtime hygiene marked reviewer_action_required=true.');
+  }
+  if (!sentinels.interpose_active) {
+    cautionSignals.push('Interpose monitoring was not active for this run.');
+  }
+  if (sentinels.escapes_suspected) {
+    reviewerActionSignals.push('CLDD marked the run as escape-suspected.');
+  }
+  if (sentinels.unmonitored_spawns > 0) {
+    reviewerActionSignals.push(
+      `${sentinels.unmonitored_spawns} unmonitored ${pluralize(sentinels.unmonitored_spawns, 'spawn')} were observed.`,
+    );
+  }
+
+  const dedupedCautionSignals = dedupeStrings(cautionSignals);
+  const dedupedReviewerActionSignals = dedupeStrings(reviewerActionSignals);
+  const overallVerdict: ProofPrivacyVerdict = dedupedReviewerActionSignals.length > 0
+    ? 'action'
+    : dedupedCautionSignals.length > 0
+      ? 'caution'
+      : 'good';
+
+  const provenClaims: string[] = [];
+  if (evidence.egress_policy_receipt_present) {
+    const blockedCount = asNumber(egressPayload?.blocked_attempt_count) ?? 0;
+    provenClaims.push(
+      `Bundle carries a signed egress policy receipt recording proofed mode=${egressPayload?.proofed_mode === true ? 'true' : 'false'}, direct provider blocked=${egressPayload?.direct_provider_access_blocked === true ? 'true' : 'false'}, and ${blockedCount} blocked egress ${pluralize(blockedCount, 'attempt')}.`,
+    );
+  }
+  if (evidence.processor_policy_evidence_present) {
+    const usedCount = usedProcessors.reduce((sum, route) => sum + route.count, 0);
+    provenClaims.push(
+      `Bundle metadata includes processor policy evidence for profile ${(asString(processorPolicy?.profile_id) ?? 'unknown')} declaring ${usedCount} allowed processor ${pluralize(usedCount, 'route invocation')} and ${processorBlockedAttempts.length} blocked processor route ${pluralize(processorBlockedAttempts.length, 'attempt')}.`,
+    );
+  }
+  if (evidence.data_handling_receipts_present) {
+    provenClaims.push(
+      `Bundle carries ${dataHandlingPayloads.length} data-handling receipt ${pluralize(dataHandlingPayloads.length, 'envelope')} covering outbound payload decision ${pluralize(dataHandlingPayloads.length, 'event')} with actions ${dataHandlingActions.length > 0 ? dataHandlingActions.map((entry) => `${entry.action}:${entry.count}`).join(', ') : 'none recorded'}.`,
+    );
+  }
+  if (evidence.runtime_profile_present || evidence.runtime_hygiene_present) {
+    provenClaims.push(
+      `Runtime evidence reports profile ${(sentinels.runtime_profile.profile_id ?? 'unknown')} (${sentinels.runtime_profile.status ?? 'unknown'}) with hygiene verdict ${(sentinels.runtime_hygiene.verdict ?? 'unknown')}.`,
+    );
+  }
+
+  const notProvenClaims: string[] = [];
+  if (!evidence.egress_policy_receipt_present) {
+    notProvenClaims.push('Cannot prove fail-closed egress policy posture because no signed egress policy receipt is present.');
+  }
+  if (!evidence.processor_policy_evidence_present) {
+    notProvenClaims.push('Cannot prove processor/model/region/retention enforcement because processor policy evidence is missing.');
+  }
+  if (!evidence.data_handling_receipts_present) {
+    notProvenClaims.push('Cannot prove sensitive-data class actions before egress because no signed data-handling receipts are present.');
+  }
+  if (!evidence.runtime_hygiene_present) {
+    notProvenClaims.push('Cannot prove runtime hygiene posture because runtime hygiene evidence is missing.');
+  }
+  notProvenClaims.push('This report does not independently verify every privacy receipt signature or processor-policy hash; use clawverify verify proof-bundle for canonical validation.');
+  notProvenClaims.push('This report does not by itself prove legal or regulatory compliance.');
+  notProvenClaims.push('This report does not prove what third-party processors retained or deleted after receipt.');
+  notProvenClaims.push('This report does not replace legal, contractual, or policy review.');
+  notProvenClaims.push('This report does not include remote attestation or measured boot guarantees.');
+
+  return {
+    overall_verdict: overallVerdict,
+    reviewer_action_required: dedupedReviewerActionSignals.length > 0,
+    evidence,
+    egress: {
+      proofed_mode: asBoolean(egressPayload?.proofed_mode),
+      direct_provider_access_blocked: asBoolean(egressPayload?.direct_provider_access_blocked),
+      blocked_attempt_count: asNumber(egressPayload?.blocked_attempt_count),
+      blocked_attempts_observed: asBoolean(egressPayload?.blocked_attempts_observed),
+      allowed_proxy_destinations: asStringArray(egressPayload?.allowed_proxy_destinations),
+      allowed_child_destinations: asStringArray(egressPayload?.allowed_child_destinations),
+    },
+    processor_policy: {
+      profile_id: asString(processorPolicy?.profile_id),
+      policy_version: asString(processorPolicy?.policy_version),
+      enforce: asBoolean(processorPolicy?.enforce),
+      allowed_routes: asNumber(processorPolicy?.counters && isRecord(processorPolicy.counters) ? processorPolicy.counters.allowed_routes : null),
+      denied_routes: asNumber(processorPolicy?.counters && isRecord(processorPolicy.counters) ? processorPolicy.counters.denied_routes : null),
+      used_processors: usedProcessors,
+      blocked_attempts: processorBlockedAttempts,
+    },
+    data_handling: {
+      policy_version: asString(dataHandling?.policy_version),
+      receipt_count: dataHandlingPayloads.length,
+      actions: dataHandlingActions,
+      sensitive_classes: sensitiveClasses,
+      approval_required_count: approvalRequiredCount,
+      approval_satisfied_count: approvalSatisfiedCount,
+      approval_unsatisfied_count: approvalUnsatisfiedCount,
+      redaction_applied_count: redactionAppliedCount,
+      reason_codes: [...reasonCodes].sort((a, b) => a.localeCompare(b)),
+    },
+    runtime: {
+      profile_id: sentinels.runtime_profile.profile_id,
+      profile_status: sentinels.runtime_profile.status,
+      hygiene_verdict: sentinels.runtime_hygiene.verdict,
+    },
+    signal_buckets: {
+      background_noise: backgroundSignals,
+      caution: dedupedCautionSignals,
+      reviewer_action_required: dedupedReviewerActionSignals,
+    },
+    proven_claims: dedupeStrings(provenClaims),
+    not_proven_claims: dedupeStrings(notProvenClaims),
   };
 }
 
@@ -430,16 +973,33 @@ function deriveWarnings(report: ProofReportBase): string[] {
   } else if (report.sentinels.runtime_hygiene.verdict === 'caution') {
     warnings.push('Runtime hygiene verdict is CAUTION; confirm the noted runtime signals are expected.');
   }
+  if (report.privacy_posture.overall_verdict === 'action') {
+    warnings.push('Privacy posture verdict is ACTION; reviewer follow-up is required.');
+  } else if (report.privacy_posture.overall_verdict === 'caution') {
+    warnings.push('Privacy posture verdict is CAUTION; verify missing/flagged privacy evidence before external sharing.');
+  }
+  for (const signal of report.privacy_posture.signal_buckets.reviewer_action_required.slice(0, 3)) {
+    warnings.push(`Privacy signal: ${signal}`);
+  }
 
   return warnings;
 }
 
-function deriveNextSteps(report: Pick<ProofReport, 'gateway' | 'warnings' | 'verify_command'>): string[] {
+function deriveNextSteps(
+  report: Pick<ProofReport, 'gateway' | 'warnings' | 'verify_command' | 'privacy_posture'>,
+): string[] {
   const steps: string[] = [];
   if (report.gateway.signed_count > 0) {
     steps.push('Signed gateway evidence is present; attach this report to PRs, submissions, or reviews.');
   } else {
     steps.push('Re-run under clawproxy mode until a signed gateway receipt is present.');
+  }
+  if (report.privacy_posture.reviewer_action_required) {
+    steps.push('Resolve reviewer-action-required privacy signals before making external privacy-assurance claims.');
+  } else if (report.privacy_posture.overall_verdict === 'caution') {
+    steps.push('Confirm caution-level privacy signals are expected before sharing this report externally.');
+  } else {
+    steps.push('Privacy posture evidence is clean enough for reviewer-facing discussion, subject to claim limits.');
   }
   steps.push(`Canonical offline verifier command: ${report.verify_command}`);
   if (report.warnings.length > 0) {
@@ -460,6 +1020,7 @@ export function buildProofReport(args: {
   const gateway = summarizeGateway(payload);
   const sentinels = summarizeSentinels(payload);
   const network = summarizeNetwork(payload);
+  const privacyPosture = summarizePrivacyPosture({ payload, sentinels });
 
   const base: ProofReportBase = {
     public_layer: publicLayer,
@@ -482,6 +1043,7 @@ export function buildProofReport(args: {
     gateway,
     sentinels,
     network,
+    privacy_posture: privacyPosture,
     decrypted_payload_keys: decryptedPayload ? Object.keys(decryptedPayload) : undefined,
   };
 
@@ -496,7 +1058,12 @@ export function buildProofReport(args: {
     ...base,
     review_buckets: reviewBuckets,
     warnings,
-    next_steps: deriveNextSteps({ gateway, warnings, verify_command: verifyCommand }),
+    next_steps: deriveNextSteps({
+      gateway,
+      warnings,
+      verify_command: verifyCommand,
+      privacy_posture: privacyPosture,
+    }),
     verify_command: verifyCommand,
   };
 }
@@ -519,6 +1086,27 @@ function renderKeyValueRows(rows: Array<[string, string | number | null | undefi
   return rows
     .map(([label, value]) => `<div class="row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value == null ? '—' : String(value))}</strong></div>`)
     .join('');
+}
+
+function formatProcessorRoute(route: ProofPrivacyProcessorRoute): string {
+  return `${route.provider} / ${route.model} (${route.region}, ${route.retention_profile}) x${route.count}`;
+}
+
+function formatProcessorBlockedAttempt(attempt: ProofPrivacyProcessorBlockedAttempt): string {
+  const route = `${attempt.route.provider} / ${attempt.route.model} (${attempt.route.region}, ${attempt.route.retention_profile})`;
+  return `${route} — ${attempt.reason_code}${attempt.timestamp ? ` @ ${attempt.timestamp}` : ''}`;
+}
+
+function formatActionCount(actionCount: ProofPrivacyActionCount): string {
+  return `${actionCount.action}: ${actionCount.count}`;
+}
+
+function formatSensitiveClass(entry: ProofPrivacySensitiveClass): string {
+  return `${entry.class_id} — matches=${entry.match_count}, actions=${entry.actions.join(', ')}`;
+}
+
+function formatAllowedEgressDestination(kind: 'proxy' | 'child', host: string): string {
+  return `${kind}: ${host}`;
 }
 
 function toneToPillClass(tone: ProofReviewBucketTone): string {
@@ -549,6 +1137,15 @@ export function renderProofReportHtml(report: ProofReport): string {
   const reviewerActionBucket = report.review_buckets.find((bucket) => bucket.key === 'reviewer_action_needed');
   const warningsClass = (reviewerActionBucket?.tone === 'action' || report.warnings.length > 0) ? 'warn' : 'ok';
   const reviewerActionCount = reviewerActionBucket?.items.length ?? 0;
+  const privacyPillClass = toneToPillClass(report.privacy_posture.overall_verdict);
+  const usedProcessorItems = report.privacy_posture.processor_policy.used_processors.map(formatProcessorRoute);
+  const blockedProcessorItems = report.privacy_posture.processor_policy.blocked_attempts.map(formatProcessorBlockedAttempt);
+  const dataHandlingActionItems = report.privacy_posture.data_handling.actions.map(formatActionCount);
+  const sensitiveClassItems = report.privacy_posture.data_handling.sensitive_classes.map(formatSensitiveClass);
+  const allowedEgressItems = [
+    ...report.privacy_posture.egress.allowed_proxy_destinations.map((host) => formatAllowedEgressDestination('proxy', host)),
+    ...report.privacy_posture.egress.allowed_child_destinations.map((host) => formatAllowedEgressDestination('child', host)),
+  ];
   const rawJson = escapeHtml(JSON.stringify(report, null, 2));
 
   return `<!doctype html>
@@ -617,6 +1214,7 @@ export function renderProofReportHtml(report: ProofReport): string {
     details { margin-top: 16px; }
     summary { cursor: pointer; color: var(--accent); }
     .footer-note { color: var(--muted); font-size: 13px; margin-top: 18px; }
+    .subheading { margin-top: 14px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
   </style>
 </head>
 <body>
@@ -629,12 +1227,81 @@ export function renderProofReportHtml(report: ProofReport): string {
         <span class="pill ok">Harness status: ${escapeHtml(report.harness.status ?? 'unknown')}</span>
         <span class="pill ok">Claimed tier: ${escapeHtml(report.harness.tier ?? 'unknown')}</span>
         <span class="pill ${warningsClass}">Reviewer actions: ${reviewerActionCount}</span>
+        <span class="pill ${privacyPillClass}">Privacy verdict: ${escapeHtml(report.privacy_posture.overall_verdict.toUpperCase())}</span>
         <span class="pill ok">Signed gateway receipts: ${report.gateway.signed_count}</span>
       </div>
     </section>
 
     <section class="grid" style="margin-bottom:16px;">
       ${report.review_buckets.map(renderReviewBucket).join('')}
+    </section>
+
+    <section class="grid" style="margin-bottom:16px;">
+      <article class="card">
+        <h2>Privacy posture</h2>
+        ${renderKeyValueRows([
+          ['Overall verdict', report.privacy_posture.overall_verdict],
+          ['Reviewer action required', report.privacy_posture.reviewer_action_required ? 'yes' : 'no'],
+          ['Egress policy evidence', report.privacy_posture.evidence.egress_policy_receipt_present ? 'present' : 'missing'],
+          ['Processor policy evidence', report.privacy_posture.evidence.processor_policy_evidence_present ? 'present' : 'missing'],
+          ['Data-handling evidence', report.privacy_posture.evidence.data_handling_receipts_present ? 'present' : 'missing'],
+          ['Runtime hygiene evidence', report.privacy_posture.evidence.runtime_hygiene_present ? 'present' : 'missing'],
+        ])}
+        <div class="subheading">What Is Proven</div>
+        <ul>${renderList(report.privacy_posture.proven_claims)}</ul>
+        <div class="subheading">What Is Not Proven</div>
+        <ul>${renderList(report.privacy_posture.not_proven_claims)}</ul>
+      </article>
+
+      <article class="card">
+        <h2>Allowed processors and blocked routes</h2>
+        ${renderKeyValueRows([
+          ['Processor profile', report.privacy_posture.processor_policy.profile_id],
+          ['Policy version', report.privacy_posture.processor_policy.policy_version],
+          ['Policy enforce', report.privacy_posture.processor_policy.enforce === null ? null : report.privacy_posture.processor_policy.enforce ? 'true' : 'false'],
+          ['Allowed routes', report.privacy_posture.processor_policy.allowed_routes],
+          ['Denied routes', report.privacy_posture.processor_policy.denied_routes],
+          ['Blocked egress attempts', report.privacy_posture.egress.blocked_attempt_count],
+          ['Direct providers blocked', report.privacy_posture.egress.direct_provider_access_blocked === null ? null : report.privacy_posture.egress.direct_provider_access_blocked ? 'true' : 'false'],
+        ])}
+        <div class="subheading">Used Processors</div>
+        <ul>${renderList(usedProcessorItems)}</ul>
+        <div class="subheading">Blocked Processor Attempts</div>
+        <ul>${renderList(blockedProcessorItems)}</ul>
+      </article>
+
+      <article class="card">
+        <h2>Sensitive classes and actions</h2>
+        ${renderKeyValueRows([
+          ['Data-handling policy', report.privacy_posture.data_handling.policy_version],
+          ['Data-handling receipts', report.privacy_posture.data_handling.receipt_count],
+          ['Approval required', report.privacy_posture.data_handling.approval_required_count],
+          ['Approval satisfied', report.privacy_posture.data_handling.approval_satisfied_count],
+          ['Approval unsatisfied', report.privacy_posture.data_handling.approval_unsatisfied_count],
+          ['Redaction applied', report.privacy_posture.data_handling.redaction_applied_count],
+          ['Runtime hygiene verdict', report.privacy_posture.runtime.hygiene_verdict],
+          ['Runtime profile', report.privacy_posture.runtime.profile_id],
+          ['Runtime profile status', report.privacy_posture.runtime.profile_status],
+        ])}
+        <div class="subheading">Data-handling actions</div>
+        <ul>${renderList(dataHandlingActionItems)}</ul>
+        <div class="subheading">Sensitive classes</div>
+        <ul>${renderList(sensitiveClassItems)}</ul>
+        <div class="subheading">Reason codes</div>
+        <ul>${renderList(report.privacy_posture.data_handling.reason_codes)}</ul>
+      </article>
+
+      <article class="card">
+        <h2>Privacy signal buckets</h2>
+        <div class="subheading">Background noise</div>
+        <ul>${renderList(report.privacy_posture.signal_buckets.background_noise)}</ul>
+        <div class="subheading">Caution</div>
+        <ul>${renderList(report.privacy_posture.signal_buckets.caution)}</ul>
+        <div class="subheading">Reviewer action required</div>
+        <ul>${renderList(report.privacy_posture.signal_buckets.reviewer_action_required)}</ul>
+        <div class="subheading">Allowed egress destinations</div>
+        <ul>${renderList(allowedEgressItems)}</ul>
+      </article>
     </section>
 
     <section class="grid">
@@ -731,33 +1398,127 @@ export function renderProofReportHtml(report: ProofReport): string {
 </html>`;
 }
 
-function printHumanReadable(report: ProofReport): void {
-  process.stdout.write('\n=== Clawsig proof report ===\n\n');
-  process.stdout.write(`Bundle ID        : ${report.public_layer.bundle_id ?? '—'}\n`);
-  process.stdout.write(`Agent DID        : ${report.public_layer.agent_did ?? '—'}\n`);
-  process.stdout.write(`Harness status   : ${report.harness.status ?? 'unknown'}\n`);
-  process.stdout.write(`Claimed tier     : ${report.harness.tier ?? 'unknown'}\n`);
-  process.stdout.write(`Gateway proof    : ${report.gateway.signed_count > 0 ? 'SIGNED' : 'MISSING'}\n`);
-  process.stdout.write(`Gateway signer   : ${report.gateway.signer_dids[0] ?? '—'}\n`);
-  process.stdout.write(`Provider/model   : ${(report.gateway.provider ?? '—')} / ${(report.gateway.model ?? '—')}\n`);
-  process.stdout.write(`Runtime profile  : ${report.sentinels.runtime_profile.profile_id ?? '—'} (${report.sentinels.runtime_profile.status ?? 'unknown'})\n`);
-  process.stdout.write(`Hygiene verdict  : ${report.sentinels.runtime_hygiene.verdict ?? 'unknown'}\n`);
-  process.stdout.write(`Evidence counts  : event_chain=${report.evidence.event_chain_count}, receipts=${report.evidence.receipt_count}, network=${report.evidence.network_receipt_count}, execution=${report.evidence.execution_receipt_count}\n`);
-  process.stdout.write('\nReview buckets:\n');
+export function renderProofReportText(report: ProofReport): string {
+  const lines: string[] = [];
+  const allowedEgressItems = [
+    ...report.privacy_posture.egress.allowed_proxy_destinations.map((host) => formatAllowedEgressDestination('proxy', host)),
+    ...report.privacy_posture.egress.allowed_child_destinations.map((host) => formatAllowedEgressDestination('child', host)),
+  ];
+  lines.push('');
+  lines.push('=== Clawsig proof report ===');
+  lines.push('');
+  lines.push(`Bundle ID        : ${report.public_layer.bundle_id ?? '—'}`);
+  lines.push(`Agent DID        : ${report.public_layer.agent_did ?? '—'}`);
+  lines.push(`Harness status   : ${report.harness.status ?? 'unknown'}`);
+  lines.push(`Claimed tier     : ${report.harness.tier ?? 'unknown'}`);
+  lines.push(`Gateway proof    : ${report.gateway.signed_count > 0 ? 'SIGNED' : 'MISSING'}`);
+  lines.push(`Gateway signer   : ${report.gateway.signer_dids[0] ?? '—'}`);
+  lines.push(`Provider/model   : ${(report.gateway.provider ?? '—')} / ${(report.gateway.model ?? '—')}`);
+  lines.push(`Runtime profile  : ${report.sentinels.runtime_profile.profile_id ?? '—'} (${report.sentinels.runtime_profile.status ?? 'unknown'})`);
+  lines.push(`Hygiene verdict  : ${report.sentinels.runtime_hygiene.verdict ?? 'unknown'}`);
+  lines.push(`Evidence counts  : event_chain=${report.evidence.event_chain_count}, receipts=${report.evidence.receipt_count}, network=${report.evidence.network_receipt_count}, execution=${report.evidence.execution_receipt_count}`);
+  lines.push('');
+  lines.push('Review buckets:');
   for (const bucket of report.review_buckets) {
-    process.stdout.write(`  ${bucket.label.padEnd(31)} [${bucket.tone.toUpperCase()}] ${bucket.summary}\n`);
+    lines.push(`  ${bucket.label.padEnd(31)} [${bucket.tone.toUpperCase()}] ${bucket.summary}`);
     for (const item of bucket.items) {
-      process.stdout.write(`    - ${item}\n`);
+      lines.push(`    - ${item}`);
     }
   }
-  process.stdout.write('\nNext steps:\n');
+  lines.push('');
+  lines.push('Privacy posture:');
+  lines.push(`  Overall verdict             : ${report.privacy_posture.overall_verdict.toUpperCase()}`);
+  lines.push(`  Reviewer action required    : ${report.privacy_posture.reviewer_action_required ? 'yes' : 'no'}`);
+  lines.push(`  Egress policy evidence      : ${report.privacy_posture.evidence.egress_policy_receipt_present ? 'present' : 'missing'}`);
+  lines.push(`  Processor policy evidence   : ${report.privacy_posture.evidence.processor_policy_evidence_present ? 'present' : 'missing'}`);
+  lines.push(`  Data-handling evidence      : ${report.privacy_posture.evidence.data_handling_receipts_present ? 'present' : 'missing'}`);
+  lines.push(`  Runtime hygiene evidence    : ${report.privacy_posture.evidence.runtime_hygiene_present ? 'present' : 'missing'}`);
+  lines.push(`  Blocked egress attempts     : ${report.privacy_posture.egress.blocked_attempt_count ?? 0}`);
+  lines.push(`  Direct providers blocked    : ${report.privacy_posture.egress.direct_provider_access_blocked === null ? 'unknown' : report.privacy_posture.egress.direct_provider_access_blocked ? 'true' : 'false'}`);
+  lines.push(`  Proofed mode                : ${report.privacy_posture.egress.proofed_mode === null ? 'unknown' : report.privacy_posture.egress.proofed_mode ? 'true' : 'false'}`);
+  lines.push(`  Runtime hygiene posture     : ${(report.privacy_posture.runtime.hygiene_verdict ?? 'unknown').toUpperCase()}`);
+  lines.push('  Allowed egress destinations:');
+  if (allowedEgressItems.length === 0) {
+    lines.push('    - none recorded');
+  } else {
+    for (const item of allowedEgressItems) {
+      lines.push(`    - ${item}`);
+    }
+  }
+  lines.push('  Allowed processors used:');
+  if (report.privacy_posture.processor_policy.used_processors.length === 0) {
+    lines.push('    - none recorded');
+  } else {
+    for (const route of report.privacy_posture.processor_policy.used_processors) {
+      lines.push(`    - ${formatProcessorRoute(route)}`);
+    }
+  }
+  lines.push('  Blocked processor attempts:');
+  if (report.privacy_posture.processor_policy.blocked_attempts.length === 0) {
+    lines.push('    - none recorded');
+  } else {
+    for (const attempt of report.privacy_posture.processor_policy.blocked_attempts) {
+      lines.push(`    - ${formatProcessorBlockedAttempt(attempt)}`);
+    }
+  }
+  lines.push('  Sensitive classes/actions:');
+  if (report.privacy_posture.data_handling.sensitive_classes.length === 0) {
+    lines.push('    - none recorded');
+  } else {
+    for (const entry of report.privacy_posture.data_handling.sensitive_classes) {
+      lines.push(`    - ${formatSensitiveClass(entry)}`);
+    }
+  }
+  if (report.privacy_posture.data_handling.actions.length > 0) {
+    lines.push(`  Data-handling action counts : ${report.privacy_posture.data_handling.actions.map(formatActionCount).join(', ')}`);
+  }
+  lines.push('  Background privacy signals:');
+  for (const signal of report.privacy_posture.signal_buckets.background_noise) {
+    lines.push(`    - ${signal}`);
+  }
+  if (report.privacy_posture.signal_buckets.background_noise.length === 0) {
+    lines.push('    - none');
+  }
+  lines.push('  Caution privacy signals:');
+  for (const signal of report.privacy_posture.signal_buckets.caution) {
+    lines.push(`    - ${signal}`);
+  }
+  if (report.privacy_posture.signal_buckets.caution.length === 0) {
+    lines.push('    - none');
+  }
+  lines.push('  Reviewer-action privacy signals:');
+  for (const signal of report.privacy_posture.signal_buckets.reviewer_action_required) {
+    lines.push(`    - ${signal}`);
+  }
+  if (report.privacy_posture.signal_buckets.reviewer_action_required.length === 0) {
+    lines.push('    - none');
+  }
+  lines.push('  What is proven:');
+  for (const claim of report.privacy_posture.proven_claims) {
+    lines.push(`    - ${claim}`);
+  }
+  if (report.privacy_posture.proven_claims.length === 0) {
+    lines.push('    - no privacy evidence claims could be established from this bundle');
+  }
+  lines.push('  Not proven / claim limits:');
+  for (const claim of report.privacy_posture.not_proven_claims) {
+    lines.push(`    - ${claim}`);
+  }
+  lines.push('');
+  lines.push('Next steps:');
   for (const step of report.next_steps) {
-    process.stdout.write(`  - ${step}\n`);
+    lines.push(`  - ${step}`);
   }
   if (report.html_path) {
-    process.stdout.write(`\nHTML report      : ${report.html_path}\n`);
+    lines.push('');
+    lines.push(`HTML report      : ${report.html_path}`);
   }
-  process.stdout.write('\n');
+  lines.push('');
+  return lines.join('\n');
+}
+
+function printHumanReadable(report: ProofReport): void {
+  process.stdout.write(renderProofReportText(report));
 }
 
 export async function runProveReport(options: ProveOptions): Promise<ProofReport> {
