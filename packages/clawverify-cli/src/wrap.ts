@@ -27,6 +27,7 @@ import {
   compilePolicyToBash,
   InterposeState,
   hashJsonB64u,
+  resolveEffectivePolicyFromSignedBundle,
   filterExecutionReceipts,
   filterNetworkReceipts,
   computeBundleSummary,
@@ -44,6 +45,7 @@ import type {
   NetworkReceiptPayload,
   GatewayReceiptPayload,
   EgressPolicyReceiptPayload,
+  EffectivePolicyBindingMetadata,
   LocalPolicy,
   CommandAnalysis,
   FsEvent,
@@ -170,6 +172,12 @@ interface RuntimeHygieneEvidence {
     caution: string[];
     action_required: string[];
   };
+}
+
+interface LoadedPolicyArtifacts {
+  policy: LocalPolicy | null;
+  policySourcePath: string | null;
+  policyBinding: EffectivePolicyBindingMetadata | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -774,17 +782,33 @@ export async function wrap(
   diag(`\n\x1b[36m[clawsig]\x1b[0m Agent DID: ${agentDid.did}\n`);
   diag(`\x1b[36m[clawsig]\x1b[0m Run ID: ${runId}\n`);
 
-  // 2. Load local WPC policy (if present) and compile for bash sentinel
-  const policy = await loadLocalPolicy();
+  // 2. Load local policy source (signed bundle preferred) and compile for bash sentinel
+  let loadedPolicy: LoadedPolicyArtifacts;
+  try {
+    loadedPolicy = await loadPolicyArtifacts();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`\x1b[31m[clawsig]\x1b[0m Policy load failure: ${message}\n`);
+    return 2;
+  }
+
+  const policy = loadedPolicy.policy;
   if (policy) {
-    const policyJsonPath = join(process.cwd(), '.clawsig', 'policy.json');
     const compiledPolicyPath = join(process.cwd(), '.clawsig', 'policy.compiled');
-    if (!isWindows) {
-      await compilePolicyToBash(policyJsonPath, compiledPolicyPath).catch(() => {});
+    if (!isWindows && loadedPolicy.policySourcePath) {
+      await compilePolicyToBash(loadedPolicy.policySourcePath, compiledPolicyPath).catch(() => {});
       diag(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (compiled for sentinel)\n`);
     } else {
       diag(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (active in Sieve)\n`);
     }
+  }
+
+  if (loadedPolicy.policyBinding) {
+    diag(
+      `\x1b[36m[clawsig]\x1b[0m Effective policy resolved: ` +
+      `${loadedPolicy.policyBinding.effective_policy_hash_b64u} ` +
+      `(layers=${loadedPolicy.policyBinding.effective_policy_snapshot.applied_layers.length})\n`,
+    );
   }
 
   // 3. Set up deep execution sentinels
@@ -852,6 +876,13 @@ export async function wrap(
   if (proofedMode && !parsedProofedClawproxyUrl) {
     process.stderr.write(
       '\x1b[31m[clawsig]\x1b[0m PRV_EGRESS_CONFIG_INVALID: CLAWSIG_CLAWPROXY_URL must be a valid absolute URL in proofed mode.\n',
+    );
+    return 2;
+  }
+
+  if (proofedMode && !loadedPolicy.policyBinding) {
+    process.stderr.write(
+      '\x1b[31m[clawsig]\x1b[0m PRV_POLICY_BINDING_REQUIRED: proofed mode requires a signed policy bundle via CLAWSIG_POLICY_BUNDLE_PATH or .clawsig/policy.bundle.json.\n',
     );
     return 2;
   }
@@ -1409,6 +1440,7 @@ export async function wrap(
     exitCode,
   });
 
+  const effectivePolicyBinding = loadedPolicy.policyBinding;
   let egressPolicyReceiptEnvelope: SignedEnvelope<EgressPolicyReceiptPayload> | undefined;
   if (proofedMode && parsedProofedClawproxyUrl) {
     const allowedProxyDestinations = normalizeCanonicalHostList(proofedEgressAllowlist);
@@ -1421,7 +1453,8 @@ export async function wrap(
       allowed_child_destinations: allowedChildDestinations,
       direct_provider_access_blocked: true,
     };
-    const policyHashB64u = await hashJsonB64u(policyDescriptor);
+    const descriptorPolicyHashB64u = await hashJsonB64u(policyDescriptor);
+    const effectivePolicyHashB64u = effectivePolicyBinding?.effective_policy_hash_b64u;
     const eventHashB64u =
       bundle.payload.event_chain && bundle.payload.event_chain.length > 0
         ? bundle.payload.event_chain[0]?.event_hash_b64u
@@ -1438,7 +1471,10 @@ export async function wrap(
       receipt_version: '1',
       receipt_id: `epr_${crypto.randomUUID()}`,
       policy_version: '1',
-      policy_hash_b64u: policyHashB64u,
+      policy_hash_b64u: descriptorPolicyHashB64u,
+      ...(effectivePolicyHashB64u
+        ? { effective_policy_hash_b64u: effectivePolicyHashB64u }
+        : {}),
       proofed_mode: true,
       clawproxy_url: parsedProofedClawproxyUrl.toString(),
       allowed_proxy_destinations: allowedProxyDestinations,
@@ -1475,6 +1511,7 @@ export async function wrap(
 
   bundle.payload.metadata = {
     ...bundle.payload.metadata,
+    ...(effectivePolicyBinding ? { policy_binding: effectivePolicyBinding } : {}),
     sentinels: {
       ...(sentinelsMetadata as NonNullable<NonNullable<ProofBundlePayload['metadata']>['sentinels']>),
       ...(egressPolicyReceiptEnvelope
@@ -1946,21 +1983,126 @@ function resolveNodePreloadSentinelPath(): string {
   }
 }
 
-/**
- * Load local WPC policy from .clawsig/policy.json (if present).
- * Returns null if no policy file exists.
- */
-async function loadLocalPolicy(): Promise<LocalPolicy | null> {
+async function pathExists(path: string): Promise<boolean> {
   try {
-    const policyPath = join(process.cwd(), '.clawsig', 'policy.json');
-    const raw = await readFile(policyPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed?.statements && Array.isArray(parsed.statements)) {
-      return { statements: parsed.statements };
-    }
-    return null;
+    await stat(path);
+    return true;
   } catch {
-    return null;
+    return false;
+  }
+}
+
+function resolvePolicyResolutionContextFromEnv(): {
+  org_id: string;
+  project_id?: string;
+  task_id?: string;
+} {
+  const orgId =
+    process.env['CLAWSIG_POLICY_ORG_ID']?.trim() ||
+    process.env['CLAWSIG_ORG_ID']?.trim() ||
+    'local';
+
+  const projectId =
+    process.env['CLAWSIG_POLICY_PROJECT_ID']?.trim() ||
+    process.env['CLAWSIG_PROJECT_ID']?.trim();
+
+  const taskId =
+    process.env['CLAWSIG_POLICY_TASK_ID']?.trim() ||
+    process.env['CLAWSIG_TASK_ID']?.trim();
+
+  return {
+    org_id: orgId,
+    ...(projectId ? { project_id: projectId } : {}),
+    ...(taskId ? { task_id: taskId } : {}),
+  };
+}
+
+/**
+ * Load policy artifacts for wrap:
+ * 1) signed policy bundle envelope (preferred, fail-closed)
+ * 2) fallback local policy.json (legacy behavior)
+ */
+async function loadPolicyArtifacts(): Promise<LoadedPolicyArtifacts> {
+  const cwd = process.cwd();
+  const envBundlePath = process.env['CLAWSIG_POLICY_BUNDLE_PATH']?.trim();
+  const defaultBundleCandidates = [
+    join(cwd, '.clawsig', 'policy.bundle.json'),
+    join(cwd, '.clawsig', 'signed-policy.bundle.json'),
+  ];
+
+  let bundlePath: string | null = null;
+  if (envBundlePath) {
+    if (!(await pathExists(envBundlePath))) {
+      throw new Error(
+        `CLAWSIG_POLICY_BUNDLE_PATH does not exist: ${envBundlePath}`,
+      );
+    }
+    bundlePath = envBundlePath;
+  } else {
+    for (const candidate of defaultBundleCandidates) {
+      if (await pathExists(candidate)) {
+        bundlePath = candidate;
+        break;
+      }
+    }
+  }
+
+  if (bundlePath) {
+    let rawBundle: unknown;
+    try {
+      rawBundle = JSON.parse(await readFile(bundlePath, 'utf-8'));
+    } catch (err) {
+      throw new Error(
+        `failed to parse signed policy bundle at ${bundlePath}: ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
+    }
+
+    const resolutionContext = resolvePolicyResolutionContextFromEnv();
+    const resolved = await resolveEffectivePolicyFromSignedBundle(
+      rawBundle,
+      resolutionContext,
+    );
+
+    const effectivePolicyPath = join(cwd, '.clawsig', 'policy.effective.json');
+    await writeJsonAtomic(effectivePolicyPath, resolved.effective_policy, 2);
+
+    return {
+      policy: resolved.effective_policy as LocalPolicy,
+      policySourcePath: effectivePolicyPath,
+      policyBinding: {
+        binding_version: '1',
+        effective_policy_hash_b64u: resolved.effective_policy_hash_b64u,
+        effective_policy_snapshot: resolved.effective_policy_snapshot,
+        signed_policy_bundle_envelope: resolved.signed_policy_bundle_envelope,
+      },
+    };
+  }
+
+  const policyPath = join(cwd, '.clawsig', 'policy.json');
+  if (!(await pathExists(policyPath))) {
+    return {
+      policy: null,
+      policySourcePath: null,
+      policyBinding: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(await readFile(policyPath, 'utf-8')) as {
+      statements?: unknown;
+    };
+    if (!Array.isArray(parsed.statements)) {
+      throw new Error('policy.json must include a statements array');
+    }
+    return {
+      policy: { statements: parsed.statements } as LocalPolicy,
+      policySourcePath: policyPath,
+      policyBinding: null,
+    };
+  } catch (err) {
+    throw new Error(
+      `failed to parse local policy at ${policyPath}: ${err instanceof Error ? err.message : 'unknown error'}`,
+    );
   }
 }
 
