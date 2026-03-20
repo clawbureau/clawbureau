@@ -204,6 +204,28 @@ export interface GatewayReceiptPayload {
   };
 }
 
+/** Signed egress policy receipt payload (PRV-EGR-003). */
+export interface EgressPolicyReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  policy_version: '1';
+  policy_hash_b64u: string;
+  proofed_mode: boolean;
+  clawproxy_url: string;
+  allowed_proxy_destinations: string[];
+  allowed_child_destinations: string[];
+  direct_provider_access_blocked: boolean;
+  blocked_attempt_count: number;
+  blocked_attempts_observed: boolean;
+  hash_algorithm: 'SHA-256';
+  agent_did: string;
+  timestamp: string;
+  binding: {
+    run_id: string;
+    event_hash_b64u: string;
+  };
+}
+
 /** Signed envelope (matches clawverify). */
 export interface SignedEnvelope<T = unknown> {
   envelope_version: '1';
@@ -307,6 +329,8 @@ export interface ProofBundlePayload {
           escapes_suspected: boolean;
         };
       };
+      /** PRV-EGR-003: signed egress policy evidence for proofed runs. */
+      egress_policy_receipt?: SignedEnvelope<EgressPolicyReceiptPayload>;
     };
     [key: string]: unknown;
   };

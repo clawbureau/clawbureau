@@ -451,6 +451,75 @@ describe('proofed mode privacy egress controls (PRV-EGR-001/002)', () => {
     }
   });
 
+  it('proofed mode emits signed egress policy receipt with blocked-attempt telemetry', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-egress-receipt-'));
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "try{" +
+        "await fetch('https://api.openai.com/v1/models');" +
+        "console.error('expected PRV_EGRESS_DENIED');" +
+        "process.exit(1);" +
+        "}catch(err){" +
+        "if(err&&err.code==='PRV_EGRESS_DENIED'){process.exit(0);}" +
+        "console.error(err);" +
+        "process.exit(1);" +
+        "}" +
+        "})();";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: 'https://clawproxy.com',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+
+      const raw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(raw) as {
+        payload: {
+          agent_did: string;
+          metadata?: {
+            sentinels?: {
+              egress_policy_receipt?: {
+                envelope_type?: string;
+                signer_did?: string;
+                payload?: {
+                  proofed_mode?: boolean;
+                  direct_provider_access_blocked?: boolean;
+                  blocked_attempt_count?: number;
+                  blocked_attempts_observed?: boolean;
+                  allowed_proxy_destinations?: string[];
+                  allowed_child_destinations?: string[];
+                };
+              };
+            };
+          };
+        };
+      };
+
+      const receipt = bundle.payload.metadata?.sentinels?.egress_policy_receipt;
+      expect(receipt).toBeDefined();
+      expect(receipt?.envelope_type).toBe('egress_policy_receipt');
+      expect(receipt?.signer_did).toBe(bundle.payload.agent_did);
+      expect(receipt?.payload?.proofed_mode).toBe(true);
+      expect(receipt?.payload?.direct_provider_access_blocked).toBe(true);
+      expect(typeof receipt?.payload?.blocked_attempt_count).toBe('number');
+      expect(receipt?.payload?.blocked_attempt_count).toBeGreaterThanOrEqual(0);
+      expect(receipt?.payload?.blocked_attempts_observed).toBe(
+        (receipt?.payload?.blocked_attempt_count ?? 0) > 0
+      );
+      expect(receipt?.payload?.allowed_proxy_destinations).toContain('clawproxy.com');
+      expect(receipt?.payload?.allowed_child_destinations).toContain('127.0.0.1');
+      expect(receipt?.payload?.allowed_child_destinations).toContain('localhost');
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
   it('proofed mode forces clawproxy path (no passthrough fallback)', async () => {
     const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-proxy-'));
 

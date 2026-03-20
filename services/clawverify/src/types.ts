@@ -262,6 +262,41 @@ export interface GatewayReceiptPayload {
   metadata?: GatewayReceiptMetadata;
 }
 
+/** PRV-EGR-003: signed egress policy receipt payload embedded in bundle metadata.sentinels. */
+export interface EgressPolicyReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  policy_version: '1';
+  policy_hash_b64u: string;
+  proofed_mode: boolean;
+  clawproxy_url: string;
+  allowed_proxy_destinations: string[];
+  allowed_child_destinations: string[];
+  direct_provider_access_blocked: boolean;
+  blocked_attempt_count: number;
+  blocked_attempts_observed: boolean;
+  hash_algorithm: 'SHA-256';
+  agent_did: string;
+  timestamp: string;
+  binding: {
+    run_id: string;
+    event_hash_b64u: string;
+  };
+}
+
+/** PRV-EGR-003: signed egress policy receipt envelope. */
+export interface EgressPolicyReceiptEnvelope {
+  envelope_version: '1';
+  envelope_type: 'egress_policy_receipt';
+  payload: EgressPolicyReceiptPayload;
+  payload_hash_b64u: string;
+  hash_algorithm: HashAlgorithm;
+  signature_b64u: string;
+  algorithm: Algorithm;
+  signer_did: string;
+  issued_at: string;
+}
+
 /** VIR observation source strength order: tls_decrypt > gateway > interpose > preload > sni. */
 export type VirSource = 'tls_decrypt' | 'gateway' | 'interpose' | 'preload' | 'sni';
 
@@ -1066,6 +1101,8 @@ export interface SentinelTelemetry {
   tls_sni_receipts?: number;
   tls_decrypt_receipts?: number;
   vir_receipts?: number;
+  /** PRV-EGR-003 signed policy receipt for proofed egress controls. */
+  egress_policy_receipt?: EgressPolicyReceiptEnvelope;
   interpose_state?: {
     pid_tree_size?: number;
     bound_ports?: number[];
@@ -1335,6 +1372,12 @@ export interface ProofBundleVerificationResult {
     system_prompt_report_valid?: boolean;
 
     receipts_valid?: boolean;
+    /** PRV-EGR-003 signed egress policy receipt presence. */
+    egress_policy_receipt_present?: boolean;
+    /** PRV-EGR-003 signature/hash verification status for egress policy receipt. */
+    egress_policy_receipt_signature_verified?: boolean;
+    /** PRV-EGR-003 full semantic verification status for egress policy receipt. */
+    egress_policy_receipt_valid?: boolean;
     vir_receipts_valid?: boolean;
     web_receipts_valid?: boolean;
     coverage_attestations_valid?: boolean;

@@ -460,6 +460,140 @@
             "tls_sni_receipts": { "type": "number", "minimum": 0 },
             "tls_decrypt_receipts": { "type": "number", "minimum": 0 },
             "vir_receipts": { "type": "number", "minimum": 0 },
+            "runtime_profile": { "type": "object" },
+            "runtime_hygiene": { "type": "object" },
+            "egress_policy_receipt": {
+              "type": "object",
+              "description": "Signed canonical egress-policy evidence for proofed privacy runs.",
+              "additionalProperties": false,
+              "required": [
+                "envelope_version",
+                "envelope_type",
+                "payload",
+                "payload_hash_b64u",
+                "hash_algorithm",
+                "signature_b64u",
+                "algorithm",
+                "signer_did",
+                "issued_at"
+              ],
+              "properties": {
+                "envelope_version": { "const": "1" },
+                "envelope_type": { "const": "egress_policy_receipt" },
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "receipt_version",
+                    "receipt_id",
+                    "policy_version",
+                    "policy_hash_b64u",
+                    "proofed_mode",
+                    "clawproxy_url",
+                    "allowed_proxy_destinations",
+                    "allowed_child_destinations",
+                    "direct_provider_access_blocked",
+                    "blocked_attempt_count",
+                    "blocked_attempts_observed",
+                    "hash_algorithm",
+                    "agent_did",
+                    "timestamp",
+                    "binding"
+                  ],
+                  "properties": {
+                    "receipt_version": { "const": "1" },
+                    "receipt_id": { "type": "string", "minLength": 1 },
+                    "policy_version": { "const": "1" },
+                    "policy_hash_b64u": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "minLength": 8
+                    },
+                    "proofed_mode": { "const": true },
+                    "clawproxy_url": {
+                      "type": "string",
+                      "format": "uri",
+                      "minLength": 1
+                    },
+                    "allowed_proxy_destinations": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9.*:-]+$",
+                        "minLength": 1
+                      }
+                    },
+                    "allowed_child_destinations": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9.*:-]+$",
+                        "minLength": 1
+                      }
+                    },
+                    "direct_provider_access_blocked": { "const": true },
+                    "blocked_attempt_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "blocked_attempts_observed": { "type": "boolean" },
+                    "hash_algorithm": { "const": "SHA-256" },
+                    "agent_did": {
+                      "type": "string",
+                      "pattern": "^did:"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "binding": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["run_id", "event_hash_b64u"],
+                      "properties": {
+                        "run_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "event_hash_b64u": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]+$",
+                          "minLength": 8
+                        }
+                      }
+                    }
+                  }
+                },
+                "payload_hash_b64u": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "minLength": 8
+                },
+                "hash_algorithm": {
+                  "type": "string",
+                  "enum": ["SHA-256"]
+                },
+                "signature_b64u": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "minLength": 8
+                },
+                "algorithm": {
+                  "type": "string",
+                  "enum": ["Ed25519"]
+                },
+                "signer_did": {
+                  "type": "string",
+                  "pattern": "^did:"
+                },
+                "issued_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
             "interpose_state": { "type": "object" }
           }
         }
