@@ -144,6 +144,64 @@ interface ProcessorPolicyState {
   }>;
 }
 
+type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
+
+type DataHandlingClassId =
+  | 'secret'
+  | 'credential'
+  | 'pii_email'
+  | 'customer_restricted';
+
+interface DataHandlingRule {
+  class_id: DataHandlingClassId;
+  rule_id: string;
+  action: DataHandlingAction;
+  pattern: RegExp;
+  redaction_token?: string;
+}
+
+interface DataHandlingClassMatch {
+  class_id: DataHandlingClassId;
+  rule_id: string;
+  action: DataHandlingAction;
+  match_count: number;
+}
+
+interface DataHandlingDecision {
+  action: DataHandlingAction;
+  reason_code: string;
+  classes: DataHandlingClassMatch[];
+  approval_required: boolean;
+  approval_satisfied: boolean;
+  redaction_applied: boolean;
+  outboundBody: Buffer;
+  original_payload_hash_b64u: string;
+  outbound_payload_hash_b64u: string | null;
+}
+
+interface DataHandlingReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  policy_version: 'prv.dlp.v1';
+  run_id: string;
+  provider: string;
+  action: DataHandlingAction;
+  reason_code: string;
+  classes: DataHandlingClassMatch[];
+  approval: {
+    required: boolean;
+    satisfied: boolean;
+    mechanism: 'header_token';
+    token_hash_b64u: string | null;
+  };
+  redaction: {
+    applied: boolean;
+    original_payload_hash_b64u: string;
+    outbound_payload_hash_b64u: string | null;
+  };
+  timestamp: string;
+}
+
 class EgressPolicyError extends Error {
   readonly code = 'PRV_EGRESS_DENIED';
   readonly destination: string;
@@ -555,6 +613,155 @@ function randomUUID(): string {
   return crypto.randomUUID();
 }
 
+const DLP_POLICY_VERSION = 'prv.dlp.v1' as const;
+const DLP_APPROVAL_HEADER = 'x-clawsig-approval-token';
+const DLP_APPROVAL_TOKEN_ENV = 'CLAWSIG_DLP_APPROVAL_TOKEN';
+
+const DLP_RULES: readonly DataHandlingRule[] = [
+  {
+    class_id: 'secret',
+    rule_id: 'prv.dlp.secret.api_key.v1',
+    action: 'redact',
+    pattern: /\b(sk-(?:proj-)?[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,})\b/g,
+    redaction_token: '[REDACTED_SECRET]',
+  },
+  {
+    class_id: 'credential',
+    rule_id: 'prv.dlp.credential.inline.v1',
+    action: 'require_approval',
+    pattern: /"(password|passwd|pwd|api[_-]?key|token|secret)"\s*:\s*"[^"]+"/gi,
+  },
+  {
+    class_id: 'pii_email',
+    rule_id: 'prv.dlp.pii.email.v1',
+    action: 'allow',
+    pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+  },
+  {
+    class_id: 'customer_restricted',
+    rule_id: 'prv.dlp.customer.restricted.v1',
+    action: 'block',
+    pattern: /\b(customer[_-]restricted|customer[_-]confidential|nda[_-]?restricted)\b/gi,
+  },
+] as const;
+
+function cloneRegex(regex: RegExp): RegExp {
+  return new RegExp(regex.source, regex.flags);
+}
+
+function readSingleHeader(
+  headers: Record<string, string | string[] | undefined>,
+  key: string,
+): string | undefined {
+  const wanted = key.toLowerCase();
+  for (const [headerKey, value] of Object.entries(headers)) {
+    if (headerKey.toLowerCase() !== wanted || value === undefined) continue;
+    if (Array.isArray(value)) return value[0]?.trim();
+    return value.trim();
+  }
+  return undefined;
+}
+
+function buildDataHandlingReasonCode(decision: DataHandlingDecision): string {
+  if (decision.action === 'block') return 'PRV_DLP_BLOCKED';
+  if (decision.action === 'redact') return 'PRV_DLP_REDACTED';
+  if (decision.action === 'require_approval') return 'PRV_DLP_APPROVAL_REQUIRED';
+  if (decision.approval_required && decision.approval_satisfied) return 'PRV_DLP_APPROVAL_GRANTED';
+  return 'PRV_DLP_ALLOW';
+}
+
+async function evaluateDataHandlingPolicy(args: {
+  bodyBuffer: Buffer;
+  approvalTokenHeader: string | undefined;
+  configuredApprovalToken: string | undefined;
+}): Promise<DataHandlingDecision> {
+  const originalText = args.bodyBuffer.toString('utf-8');
+  let redactedText = originalText;
+  const classes: DataHandlingClassMatch[] = [];
+
+  for (const rule of DLP_RULES) {
+    const matcher = cloneRegex(rule.pattern);
+    const matches = originalText.match(matcher);
+    const matchCount = matches?.length ?? 0;
+    if (matchCount === 0) continue;
+
+    classes.push({
+      class_id: rule.class_id,
+      rule_id: rule.rule_id,
+      action: rule.action,
+      match_count: matchCount,
+    });
+
+    if (rule.action === 'redact') {
+      const redactor = cloneRegex(rule.pattern);
+      const replacement = rule.redaction_token ?? '[REDACTED]';
+      redactedText = redactedText.replace(redactor, replacement);
+    }
+  }
+
+  const approvalRequired = classes.some((c) => c.action === 'require_approval');
+  const configuredApprovalToken = args.configuredApprovalToken?.trim();
+  const approvalTokenHeader = args.approvalTokenHeader?.trim();
+  const approvalSatisfied =
+    approvalRequired &&
+    !!configuredApprovalToken &&
+    !!approvalTokenHeader &&
+    approvalTokenHeader === configuredApprovalToken;
+
+  let action: DataHandlingAction = 'allow';
+  if (classes.some((c) => c.action === 'block')) {
+    action = 'block';
+  } else if (approvalRequired && !approvalSatisfied) {
+    action = 'require_approval';
+  } else if (classes.some((c) => c.action === 'redact')) {
+    action = 'redact';
+  }
+
+  const outboundBody =
+    action === 'redact'
+      ? Buffer.from(redactedText, 'utf-8')
+      : args.bodyBuffer;
+  const redactionApplied = action === 'redact' && outboundBody.toString('utf-8') !== originalText;
+  const originalHash = await sha256B64u(new Uint8Array(args.bodyBuffer));
+  const outboundHash =
+    action === 'block' || action === 'require_approval'
+      ? null
+      : await sha256B64u(new Uint8Array(outboundBody));
+
+  const decision: DataHandlingDecision = {
+    action,
+    reason_code: 'PRV_DLP_ALLOW',
+    classes,
+    approval_required: approvalRequired,
+    approval_satisfied: approvalSatisfied,
+    redaction_applied: redactionApplied,
+    outboundBody,
+    original_payload_hash_b64u: originalHash,
+    outbound_payload_hash_b64u: outboundHash,
+  };
+  decision.reason_code = buildDataHandlingReasonCode(decision);
+  return decision;
+}
+
+async function signDataHandlingReceipt(
+  payload: DataHandlingReceiptPayload,
+  signer: { did: string; sign(data: Uint8Array): Promise<string> },
+): Promise<SignedEnvelope<DataHandlingReceiptPayload>> {
+  const payloadHash = await hashJsonB64u(payload);
+  const signature = await signer.sign(new TextEncoder().encode(payloadHash));
+  return {
+    envelope_version: '1',
+    envelope_type: 'data_handling_receipt',
+    payload,
+    payload_hash_b64u: payloadHash,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: signature,
+    algorithm: 'Ed25519',
+    signer_did: signer.did,
+    issued_at: payload.timestamp,
+  };
+}
+
 /**
  * Read the full request body from an IncomingMessage.
  */
@@ -648,6 +855,7 @@ function buildUpstreamRequestHeaders(
     'transfer-encoding',
     'proxy-connection',
     'keep-alive',
+    DLP_APPROVAL_HEADER,
   ]);
 
   for (const [key, value] of Object.entries(incomingHeaders)) {
@@ -1001,7 +1209,9 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
   };
   const eventChainEntries: EventChainEntry[] = [];
   const receipts: CollectedReceipt[] = [];
+  const dataHandlingReceipts: SignedEnvelope<DataHandlingReceiptPayload>[] = [];
   let plannedPrevHash: string | null = null;
+  const configuredApprovalToken = process.env[DLP_APPROVAL_TOKEN_ENV];
 
   // RED TEAM FIX #7: Ephemeral run salt for privacy.
   // Generate a 16-byte random salt per run.
@@ -1077,10 +1287,132 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       plannedPrevHash = eventHash;
       eventChainEntries.push(eventChainEntry);
 
+      // Extract provider key from the incoming request, fall back to constructor option
+      const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
+      const incomingKey = extractProviderKey(reqHeaders) ?? providerApiKey;
+      let outboundBodyBuffer = bodyBuffer;
+
+      if (egressPolicy?.enforce) {
+        const approvalTokenHeader = readSingleHeader(reqHeaders, DLP_APPROVAL_HEADER);
+        const contentEncoding = readSingleHeader(reqHeaders, 'content-encoding');
+        const classifierTimestamp = new Date().toISOString();
+
+        try {
+          if (
+            bodyBuffer.length > 0 &&
+            contentEncoding !== undefined &&
+            contentEncoding.trim().length > 0 &&
+            contentEncoding.trim().toLowerCase() !== 'identity'
+          ) {
+            throw new Error(
+              `Data handling classifier does not support content-encoding=${contentEncoding}.`,
+            );
+          }
+
+          const decision = await evaluateDataHandlingPolicy({
+            bodyBuffer,
+            approvalTokenHeader,
+            configuredApprovalToken,
+          });
+          outboundBodyBuffer = decision.outboundBody;
+          const approvalTokenHash = approvalTokenHeader
+            ? await sha256B64u(new TextEncoder().encode(approvalTokenHeader))
+            : null;
+
+          const receiptPayload: DataHandlingReceiptPayload = {
+            receipt_version: '1',
+            receipt_id: `dhr_${randomUUID()}`,
+            policy_version: DLP_POLICY_VERSION,
+            run_id: runId,
+            provider,
+            action: decision.action,
+            reason_code: decision.reason_code,
+            classes: decision.classes,
+            approval: {
+              required: decision.approval_required,
+              satisfied: decision.approval_satisfied,
+              mechanism: 'header_token',
+              token_hash_b64u: approvalTokenHash,
+            },
+            redaction: {
+              applied: decision.redaction_applied,
+              original_payload_hash_b64u: decision.original_payload_hash_b64u,
+              outbound_payload_hash_b64u: decision.outbound_payload_hash_b64u,
+            },
+            timestamp: classifierTimestamp,
+          };
+
+          dataHandlingReceipts.push(
+            await signDataHandlingReceipt(receiptPayload, {
+              did: agentDid.did,
+              sign: (data) => agentDid.sign(data),
+            }),
+          );
+
+          if (decision.action === 'block' || decision.action === 'require_approval') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: decision.reason_code,
+              reason_code: decision.reason_code,
+              action: decision.action,
+              classes: decision.classes,
+              message:
+                decision.action === 'block'
+                  ? 'Outbound payload blocked by data handling policy.'
+                  : 'Outbound payload requires explicit approval and no valid approval token was provided.',
+            }));
+            return;
+          }
+        } catch (err) {
+          const fallbackPayload: DataHandlingReceiptPayload = {
+            receipt_version: '1',
+            receipt_id: `dhr_${randomUUID()}`,
+            policy_version: DLP_POLICY_VERSION,
+            run_id: runId,
+            provider,
+            action: 'require_approval',
+            reason_code: 'PRV_DLP_CLASSIFIER_ERROR',
+            classes: [],
+            approval: {
+              required: true,
+              satisfied: false,
+              mechanism: 'header_token',
+              token_hash_b64u: null,
+            },
+            redaction: {
+              applied: false,
+              original_payload_hash_b64u: await sha256B64u(new Uint8Array(bodyBuffer)),
+              outbound_payload_hash_b64u: null,
+            },
+            timestamp: classifierTimestamp,
+          };
+
+          try {
+            dataHandlingReceipts.push(
+              await signDataHandlingReceipt(fallbackPayload, {
+                did: agentDid.did,
+                sign: (data) => agentDid.sign(data),
+              }),
+            );
+          } catch {
+            // best effort; return fail-closed even if nested receipt signing fails
+          }
+
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'PRV_DLP_CLASSIFIER_ERROR',
+            reason_code: 'PRV_DLP_CLASSIFIER_ERROR',
+            action: 'require_approval',
+            message: err instanceof Error ? err.message : 'Data handling classifier failed closed.',
+          }));
+          return;
+        }
+      }
+
       const processorRoute = buildProcessorRouteClaims({
         provider,
-        bodyBuffer,
-        headers: req.headers as Record<string, string | string[] | undefined>,
+        bodyBuffer: outboundBodyBuffer,
+        headers: reqHeaders,
         policy: processorPolicy,
       });
       const processorDecision = evaluateProcessorPolicy(processorPolicy, processorRoute);
@@ -1092,18 +1424,14 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         );
       }
 
-      // Extract provider key from the incoming request, fall back to constructor option
-      const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
-      const incomingKey = extractProviderKey(reqHeaders) ?? providerApiKey;
-
       // CAUSAL SIEVE: Process outgoing request for tool_results.
       // This detects when the agent sends tool execution results back
       // to the LLM, which means a tool just finished executing.
       // We run git diff to capture file mutations from that tool.
       const providerType = (provider === 'anthropic' ? 'anthropic' : 'openai') as 'openai' | 'anthropic';
-      if (bodyBuffer.length > 0) {
+      if (outboundBodyBuffer.length > 0) {
         try {
-          await sieve.processAgentRequest(providerType, bodyBuffer.toString('utf-8'));
+          await sieve.processAgentRequest(providerType, outboundBodyBuffer.toString('utf-8'));
         } catch {
           // Sieve errors must not break the proxy pipeline
         }
@@ -1115,7 +1443,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             provider,
             upstreamPathWithQuery,
             method,
-            bodyBuffer,
+            outboundBodyBuffer,
             reqHeaders,
             egressPolicy,
           )
@@ -1123,7 +1451,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             provider,
             upstreamPathWithQuery,
             method,
-            bodyBuffer,
+            outboundBodyBuffer,
             reqHeaders,
             incomingKey,
             proxyToken,
@@ -1352,6 +1680,16 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
 
     if (envelopes.length > 0) {
       payload.receipts = envelopes;
+    }
+
+    if (dataHandlingReceipts.length > 0) {
+      payload.metadata = {
+        ...payload.metadata,
+        data_handling: {
+          policy_version: DLP_POLICY_VERSION,
+          receipts: dataHandlingReceipts,
+        },
+      };
     }
 
     // CAUSAL SIEVE: Include synthesized tool and side-effect receipts.

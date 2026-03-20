@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -112,6 +113,88 @@ async function runWrapRaw(
       summaryPath: join(workdir, '.clawsig', 'run_summary.json'),
     };
   }
+}
+
+interface MockClawproxyRequest {
+  method: string;
+  url: string;
+  body: string;
+  headers: Record<string, string | string[] | undefined>;
+}
+
+async function readBody(req: IncomingMessage): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+    req.on('error', reject);
+  });
+}
+
+async function startMockClawproxy(): Promise<{
+  url: string;
+  requests: MockClawproxyRequest[];
+  stop: () => Promise<void>;
+}> {
+  const requests: MockClawproxyRequest[] = [];
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    if (req.method === 'POST' && req.url?.startsWith('/v1/proxy/')) {
+      const body = await readBody(req);
+      requests.push({
+        method: req.method ?? 'POST',
+        url: req.url ?? '',
+        body,
+        headers: req.headers,
+      });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 'mock-ok', object: 'chat.completion', choices: [] }));
+      return;
+    }
+
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'NOT_FOUND' }));
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => resolve());
+    server.on('error', reject);
+  });
+  const address = server.address();
+  if (!address || typeof address !== 'object') {
+    throw new Error('Failed to start mock clawproxy server');
+  }
+
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    requests,
+    stop: async () =>
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      }),
+  };
+}
+
+function extractDataHandlingActions(bundle: {
+  payload?: {
+    metadata?: {
+      data_handling?: {
+        receipts?: Array<{
+          payload?: {
+            action?: string;
+            reason_code?: string;
+          };
+        }>;
+      };
+    };
+  };
+}): Array<{ action: string; reason_code: string }> {
+  const receipts = bundle.payload?.metadata?.data_handling?.receipts ?? [];
+  return receipts
+    .map((receipt) => ({
+      action: receipt.payload?.action ?? '',
+      reason_code: receipt.payload?.reason_code ?? '',
+    }))
+    .filter((entry) => entry.action.length > 0 && entry.reason_code.length > 0);
 }
 
 describe('clawsig wrap quiet mode (SKL-003)', () => {
@@ -621,6 +704,293 @@ describe('proofed mode privacy egress controls (PRV-EGR-001/002)', () => {
         },
       ]);
     } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
+  it('redacts matched secrets before upstream egress and emits signed handling evidence', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-redact-'));
+    const mock = await startMockClawproxy();
+    const rawSecret = 'sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        `body:JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'secret ${rawSecret}'}]})` +
+        "});" +
+        "if(res.status!==200){const body=await res.text();console.error(body);process.exit(1);}"+
+        "process.exit(0);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests.length).toBeGreaterThan(0);
+      const forwardedBody = mock.requests[0]!.body;
+      expect(forwardedBody).not.toContain(rawSecret);
+      expect(forwardedBody).toContain('[REDACTED_SECRET]');
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: unknown;
+          };
+        };
+      };
+      const actions = extractDataHandlingActions(bundle);
+      expect(actions.some((entry) => entry.action === 'redact' && entry.reason_code === 'PRV_DLP_REDACTED')).toBe(true);
+    } finally {
+      await mock.stop();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('blocks customer-restricted payloads before upstream egress', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-block-'));
+    const mock = await startMockClawproxy();
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'customer_restricted export dump'}]})" +
+        "});" +
+        "const body=await res.json().catch(()=>({}));" +
+        "if(res.status===403&&body.reason_code==='PRV_DLP_BLOCKED'){process.exit(0);}"+
+        "console.error(JSON.stringify({status:res.status,body}));process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests).toHaveLength(0);
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: unknown;
+          };
+        };
+      };
+      const actions = extractDataHandlingActions(bundle);
+      expect(actions.some((entry) => entry.action === 'block' && entry.reason_code === 'PRV_DLP_BLOCKED')).toBe(true);
+    } finally {
+      await mock.stop();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('requires approval for credential matches and fails closed without approval token', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-approval-'));
+    const mock = await startMockClawproxy();
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'gpt-4o-mini',password:'dont-send-this'})" +
+        "});" +
+        "const body=await res.json().catch(()=>({}));" +
+        "if(res.status===403&&body.reason_code==='PRV_DLP_APPROVAL_REQUIRED'){process.exit(0);}"+
+        "console.error(JSON.stringify({status:res.status,body}));process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+          CLAWSIG_DLP_APPROVAL_TOKEN: 'expected-approval-token',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests).toHaveLength(0);
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: unknown;
+          };
+        };
+      };
+      const actions = extractDataHandlingActions(bundle);
+      expect(actions.some((entry) => entry.action === 'require_approval' && entry.reason_code === 'PRV_DLP_APPROVAL_REQUIRED')).toBe(true);
+    } finally {
+      await mock.stop();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('forwards approved credential payloads without leaking the approval header upstream', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-approved-'));
+    const mock = await startMockClawproxy();
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{" +
+        "'content-type':'application/json'," +
+        "'authorization':'Bearer sk-test'," +
+        "'x-clawsig-approval-token':'expected-approval-token'" +
+        "}," +
+        "body:JSON.stringify({model:'gpt-4o-mini',password:'approved-send'})" +
+        "});" +
+        "if(res.status===200){process.exit(0);}"+
+        "console.error(await res.text());process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+          CLAWSIG_DLP_APPROVAL_TOKEN: 'expected-approval-token',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests).toHaveLength(1);
+      expect(mock.requests[0]?.body).toContain('"password":"approved-send"');
+      expect(mock.requests[0]?.headers['x-clawsig-approval-token']).toBeUndefined();
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: unknown;
+          };
+        };
+      };
+      const actions = extractDataHandlingActions(bundle);
+      expect(actions.some((entry) => entry.action === 'allow' && entry.reason_code === 'PRV_DLP_APPROVAL_GRANTED')).toBe(true);
+    } finally {
+      await mock.stop();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed on encoded payloads the classifier cannot inspect before upstream egress', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-encoding-'));
+    const mock = await startMockClawproxy();
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const { gzipSync } = await import('node:zlib');" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const body=gzipSync(Buffer.from(JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'secret sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}]})));" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{" +
+        "'content-type':'application/json'," +
+        "'content-encoding':'gzip'," +
+        "'authorization':'Bearer sk-test'" +
+        "}," +
+        "body:body" +
+        "});" +
+        "const payload=await res.json().catch(()=>({}));" +
+        "if(res.status===403&&payload.reason_code==='PRV_DLP_CLASSIFIER_ERROR'){process.exit(0);}"+
+        "console.error(JSON.stringify({status:res.status,payload}));process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests).toHaveLength(0);
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: unknown;
+          };
+        };
+      };
+      const actions = extractDataHandlingActions(bundle);
+      expect(actions.some((entry) => entry.action === 'require_approval' && entry.reason_code === 'PRV_DLP_CLASSIFIER_ERROR')).toBe(true);
+    } finally {
+      await mock.stop();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('allows clean payloads in proofed mode and records allow action', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-allow-'));
+    const mock = await startMockClawproxy();
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'hello world'}]})" +
+        "});" +
+        "if(res.status===200){process.exit(0);}"+
+        "console.error(await res.text());process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests.length).toBeGreaterThan(0);
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: unknown;
+          };
+        };
+      };
+      const actions = extractDataHandlingActions(bundle);
+      expect(actions.some((entry) => entry.action === 'allow' && entry.reason_code === 'PRV_DLP_ALLOW')).toBe(true);
+    } finally {
+      await mock.stop();
       await rm(workdir, { recursive: true, force: true });
     }
   });
