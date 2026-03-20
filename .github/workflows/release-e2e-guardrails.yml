@@ -114,7 +114,7 @@ jobs:
       - name: Install clawsig-sdk deps
         run: |
           cd packages/clawsig-sdk
-          npm ci
+          npm install --ignore-scripts
 
       - name: Build clawsig-sdk
         run: |
