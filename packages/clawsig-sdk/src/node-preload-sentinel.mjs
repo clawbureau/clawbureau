@@ -62,6 +62,53 @@ function shouldLogFs(pathStr) {
   return true;
 }
 
+function normalizeAllowlistHost(raw) {
+  const trimmed = String(raw || '').trim().toLowerCase();
+  if (!trimmed) return null;
+
+  const wildcard = trimmed.startsWith('*.');
+  const candidate = wildcard ? trimmed.slice(2) : trimmed;
+  const host = candidate.replace(/^\[|\]$/g, '').split('/')[0]?.split(':')[0] ?? '';
+  if (!host) return null;
+  return wildcard ? `*.${host}` : host;
+}
+
+function normalizeRuntimeHost(hostname) {
+  return String(hostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+}
+
+function hostIsAllowlisted(hostname, allowlist) {
+  const host = normalizeRuntimeHost(hostname);
+  if (!host) return false;
+
+  for (const allowed of allowlist) {
+    if (allowed.startsWith('*.')) {
+      const suffix = allowed.slice(2);
+      if (host.endsWith(`.${suffix}`)) return true;
+      continue;
+    }
+    if (host === allowed) return true;
+  }
+  return false;
+}
+
+function makeEgressPolicyError(destination) {
+  const err = new Error(`Outbound destination is not allowlisted: ${destination}`);
+  err.name = 'EgressPolicyError';
+  err.code = 'PRV_EGRESS_DENIED';
+  err.destination = destination;
+  return err;
+}
+
+const enforceEgressAllowlist =
+  String(process.env.CLAWSIG_ENFORCE_EGRESS_ALLOWLIST || '').trim() === '1';
+const egressAllowlist = enforceEgressAllowlist
+  ? String(process.env.CLAWSIG_EGRESS_ALLOWLIST || '')
+      .split(',')
+      .map((entry) => normalizeAllowlistHost(entry))
+      .filter(Boolean)
+  : [];
+
 // ---------------------------------------------------------------------------
 // FD → path mapping (for read(fd) / write(fd) tracking)
 // ---------------------------------------------------------------------------
@@ -391,6 +438,41 @@ fs.close = function (fd, ...rest) {
 // ---------------------------------------------------------------------------
 const origConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function (...args) {
+  if (enforceEgressAllowlist) {
+    let host = 'localhost';
+    let port = null;
+    let isUnixSocket = false;
+
+    if (typeof args[0] === 'string' && args[0].includes('/')) {
+      isUnixSocket = true;
+    } else if (args[0] !== null && typeof args[0] === 'object') {
+      if (typeof args[0].path === 'string' && args[0].path.length > 0) {
+        isUnixSocket = true;
+      } else {
+        port = args[0].port ?? null;
+        host = args[0].host || 'localhost';
+      }
+    } else {
+      port = args[0] ?? null;
+      if (typeof args[1] === 'string') host = args[1];
+    }
+
+    const normalizedHost = normalizeRuntimeHost(host);
+    if (!isUnixSocket && port && !hostIsAllowlisted(normalizedHost, egressAllowlist)) {
+      const err = makeEgressPolicyError(normalizedHost || String(host));
+      emitLog({
+        syscall: 'connect_blocked',
+        addr: normalizedHost || String(host),
+        port: Number(port),
+        family: net.isIPv6(normalizedHost) ? 'AF_INET6' : 'AF_INET',
+        rc: -1,
+        error: err.code,
+      });
+      process.nextTick(() => this.destroy(err));
+      return this;
+    }
+  }
+
   if (!inHook) {
     let port, host = 'localhost';
     if (args[0] !== null && typeof args[0] === 'object') {

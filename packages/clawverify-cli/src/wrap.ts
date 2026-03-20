@@ -123,6 +123,58 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function parseBooleanEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'y';
+}
+
+function parseAbsoluteHttpUrl(value: string | undefined): URL | null {
+  if (!value || value.trim().length === 0) return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeEgressHost(raw: string): string | null {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return null;
+
+  try {
+    if (trimmed.includes('://')) {
+      const host = new URL(trimmed).hostname.toLowerCase();
+      return host.length > 0 ? host : null;
+    }
+    return trimmed.split('/')[0]?.split(':')[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function parseProofedEgressAllowlist(raw: string | undefined, requiredHost: string): string[] {
+  const hosts = new Set<string>();
+  if (!raw || raw.trim().length === 0) {
+    hosts.add(requiredHost.toLowerCase());
+    return [...hosts];
+  }
+
+  for (const entry of raw.split(',')) {
+    const normalized = normalizeEgressHost(entry);
+    if (normalized) hosts.add(normalized);
+  }
+  return [...hosts];
+}
+
+function buildProofedChildEgressAllowlist(): string[] {
+  return ['127.0.0.1', 'localhost', '::1'];
+}
+
 function findCliFlagValue(args: string[], flag: string): string | undefined {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -457,12 +509,44 @@ export async function wrap(
   // For real gateway receipts via clawproxy, callers must opt in and provide a
   // valid CST/scoped token via CLAWSIG_CLAWPROXY_TOKEN (or X_CST/X_SCOPED_TOKEN)
   // plus provider auth that clawproxy can relay upstream.
-  const usePassthrough = !process.env['CLAWSIG_USE_CLAWPROXY'];
+  const proofedMode =
+    parseBooleanEnv(process.env['CLAWSIG_PROOFED']) ||
+    parseBooleanEnv(process.env['CLAWSIG_PROOFED_MODE']);
+  const requestedPassthrough = !process.env['CLAWSIG_USE_CLAWPROXY'];
+  const usePassthrough = proofedMode ? false : requestedPassthrough;
   const configuredClawproxyUrl = process.env['CLAWSIG_CLAWPROXY_URL']?.trim();
+  const effectiveClawproxyUrl = configuredClawproxyUrl || 'https://clawproxy.com';
+  const parsedProofedClawproxyUrl = proofedMode ? parseAbsoluteHttpUrl(effectiveClawproxyUrl) : null;
   const configuredClawproxyToken =
     process.env['CLAWSIG_CLAWPROXY_TOKEN']?.trim() ||
     process.env['X_CST']?.trim() ||
     process.env['X_SCOPED_TOKEN']?.trim();
+  const clawproxyHost = proofedMode
+    ? parsedProofedClawproxyUrl?.hostname.toLowerCase() ?? null
+    : normalizeEgressHost(effectiveClawproxyUrl);
+
+  if (proofedMode && !parsedProofedClawproxyUrl) {
+    process.stderr.write(
+      '\x1b[31m[clawsig]\x1b[0m PRV_EGRESS_CONFIG_INVALID: CLAWSIG_CLAWPROXY_URL must be a valid absolute URL in proofed mode.\n',
+    );
+    return 2;
+  }
+
+  const proofedEgressAllowlist = proofedMode
+    ? parseProofedEgressAllowlist(process.env['CLAWSIG_PROOFED_EGRESS_ALLOWLIST'], clawproxyHost!)
+    : [];
+  const proofedChildEgressAllowlist = proofedMode
+    ? buildProofedChildEgressAllowlist()
+    : [];
+
+  if (proofedMode) {
+    diag('\x1b[36m[clawsig]\x1b[0m Proofed mode: enabled (proxy-only + deny-by-default egress)\n');
+    if (requestedPassthrough) {
+      diag('\x1b[33m[clawsig]\x1b[0m Proofed mode: disabling passthrough fallback and forcing clawproxy mediation\n');
+    }
+    diag(`\x1b[36m[clawsig]\x1b[0m Proofed proxy egress allowlist: ${proofedEgressAllowlist.join(', ')}\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Proofed child egress allowlist: ${proofedChildEgressAllowlist.join(', ')}\n`);
+  }
 
   const proxy = await startLocalProxy({
     agentDid,
@@ -470,8 +554,14 @@ export async function wrap(
     policy,
     cwd: process.cwd(),
     passthrough: usePassthrough,
-    ...(configuredClawproxyUrl ? { clawproxyUrl: configuredClawproxyUrl } : {}),
+    ...(configuredClawproxyUrl || proofedMode ? { clawproxyUrl: effectiveClawproxyUrl } : {}),
     ...(configuredClawproxyToken ? { proxyToken: configuredClawproxyToken } : {}),
+    ...(proofedMode
+      ? {
+          enforceEgressAllowlist: true,
+          egressAllowlist: proofedEgressAllowlist,
+        }
+      : {}),
     onViolation: (v) => {
       process.stderr.write(
         `\x1b[31m[clawsig:guillotine]\x1b[0m VIOLATION: ${v.reason}\n`,
@@ -482,8 +572,8 @@ export async function wrap(
   diag(`\x1b[36m[clawsig]\x1b[0m Causal Sieve: ACTIVE (tool observability enabled)\n`);
   if (usePassthrough) {
     diag(`\x1b[36m[clawsig]\x1b[0m Mode: passthrough (direct to upstream, Sieve-only)\n`);
-  } else if (configuredClawproxyUrl) {
-    diag(`\x1b[36m[clawsig]\x1b[0m Mode: clawproxy (${configuredClawproxyUrl})\n`);
+  } else if (configuredClawproxyUrl || proofedMode) {
+    diag(`\x1b[36m[clawsig]\x1b[0m Mode: clawproxy (${effectiveClawproxyUrl})\n`);
     if (!configuredClawproxyToken) {
       diag(`\x1b[33m[clawsig]\x1b[0m clawproxy token missing; signed gateway receipts may not be collected\n`);
     }
@@ -504,7 +594,7 @@ export async function wrap(
   // 5. Spawn child process with env overrides
   const commandName = basename(command).toLowerCase();
   const forceBaseUrlOverride = process.env['CLAWSIG_FORCE_BASE_URL_OVERRIDE'] === '1';
-  const disableBaseUrlOverride = commandName === 'codex' && !forceBaseUrlOverride;
+  const disableBaseUrlOverride = !proofedMode && commandName === 'codex' && !forceBaseUrlOverride;
   const piGoogleCompatModelId =
     !usePassthrough && configuredClawproxyToken
       ? getPiGoogleCompatModelId(commandName, args)
@@ -548,7 +638,16 @@ export async function wrap(
     // Layer 6: Syscall interposition via LD_PRELOAD / DYLD_INSERT_LIBRARIES
     // Hooks connect(), open(), openat(), execve(), posix_spawn(), sendto()
     ...(interposeLib ? interposeLib.env : {}),
+    ...(proofedMode ? {
+      CLAWSIG_ENFORCE_EGRESS_ALLOWLIST: '1',
+      CLAWSIG_EGRESS_ALLOWLIST: proofedChildEgressAllowlist.join(','),
+    } : {}),
   };
+
+  if (!proofedMode) {
+    delete childEnv['CLAWSIG_ENFORCE_EGRESS_ALLOWLIST'];
+    delete childEnv['CLAWSIG_EGRESS_ALLOWLIST'];
+  }
 
   if (usePiGoogleCompat && piGoogleCompatModelId) {
     const piAgentDir = join(tmpDir, 'pi-agent');
@@ -613,6 +712,10 @@ export async function wrap(
     diag(
       `\x1b[33m[clawsig]\x1b[0m pi google-provider compat: using temp PI_CODING_AGENT_DIR=${childEnv['PI_CODING_AGENT_DIR']} with provider clawsig-google-proxy for model ${piGoogleCompatModelId}\n`,
     );
+  }
+
+  if (proofedMode && commandName === 'codex' && !forceBaseUrlOverride) {
+    diag('\x1b[33m[clawsig]\x1b[0m Proofed mode: forcing provider base URL override for codex\n');
   }
 
   diag(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${childArgs.join(' ')}\n\n`);

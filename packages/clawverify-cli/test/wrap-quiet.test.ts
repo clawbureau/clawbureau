@@ -61,6 +61,59 @@ async function runWrap(
   };
 }
 
+async function runWrapRaw(
+  workdir: string,
+  opts: {
+    extraFlags?: string[];
+    childArgs?: string[];
+    extraEnv?: Record<string, string>;
+  } = {},
+): Promise<{
+  stderr: string;
+  stdout: string;
+  exitCode: number;
+  bundlePath: string;
+  summaryPath: string;
+}> {
+  const args = [
+    CLI_PATH,
+    'wrap',
+    '--no-publish',
+    ...(opts.extraFlags ?? []),
+    '--',
+    ...(opts.childArgs ?? [process.execPath, '-e', "console.log('hello from child')"]),
+  ];
+
+  try {
+    const { stdout, stderr } = await execFileAsync(process.execPath, args, {
+      cwd: workdir,
+      env: {
+        ...process.env,
+        CLAWSIG_DISABLE_INTERPOSE: '1',
+        ...(opts.extraEnv ?? {}),
+      },
+      timeout: 60_000,
+    });
+
+    return {
+      stderr,
+      stdout,
+      exitCode: 0,
+      bundlePath: join(workdir, '.clawsig', 'proof_bundle.json'),
+      summaryPath: join(workdir, '.clawsig', 'run_summary.json'),
+    };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; status?: number; code?: number };
+    return {
+      stderr: e.stderr ?? '',
+      stdout: e.stdout ?? '',
+      exitCode: e.status ?? e.code ?? 1,
+      bundlePath: join(workdir, '.clawsig', 'proof_bundle.json'),
+      summaryPath: join(workdir, '.clawsig', 'run_summary.json'),
+    };
+  }
+}
+
 describe('clawsig wrap quiet mode (SKL-003)', () => {
   // -----------------------------------------------------------------------
   // 1. Default output is clean summary (no sentinel diagnostics)
@@ -223,6 +276,110 @@ describe('clawsig wrap quiet mode (SKL-003)', () => {
 
       // Lightweight distillation target.
       expect(Buffer.byteLength(raw, 'utf-8')).toBeLessThan(500);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('proofed mode privacy egress controls (PRV-EGR-001/002)', () => {
+  it('proofed mode rejects non-absolute clawproxy URLs before spawning', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-config-'));
+
+    try {
+      const result = await runWrapRaw(workdir, {
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: 'clawproxy.com',
+        },
+      });
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('PRV_EGRESS_CONFIG_INVALID');
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('proofed mode blocks non-allowlisted outbound destinations with explicit reason code', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-egress-'));
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "if(!port){throw new Error('missing CLAWSIG_PROXY_PORT');}" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'ping'}]})" +
+        "});" +
+        "const body=await res.json().catch(()=>({}));" +
+        "if(res.status===403&&body.error==='PRV_EGRESS_DENIED'&&body.reason_code==='PRV_EGRESS_DENIED'){process.exit(0);}" +
+        "console.error(JSON.stringify({status:res.status,body}));" +
+        "process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: 'https://clawproxy.com',
+          CLAWSIG_PROOFED_EGRESS_ALLOWLIST: 'localhost,127.0.0.1',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('proofed mode blocks direct child egress outside the local proxy path', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-direct-'));
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "try{" +
+        "await fetch('https://api.openai.com/v1/models');" +
+        "console.error('expected PRV_EGRESS_DENIED');" +
+        "process.exit(1);" +
+        "}catch(err){" +
+        "if(err&&err.code==='PRV_EGRESS_DENIED'&&String(err.message||'').includes('api.openai.com')){process.exit(0);}" +
+        "console.error(err);" +
+        "process.exit(1);" +
+        "}" +
+        "})();";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('proofed mode forces clawproxy path (no passthrough fallback)', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-proxy-'));
+
+    try {
+      const result = await runWrapRaw(workdir, {
+        extraFlags: ['--verbose'],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('Proofed mode: enabled');
+      expect(result.stderr).toContain('Mode: clawproxy');
+      expect(result.stderr).not.toContain('Mode: passthrough');
     } finally {
       await rm(workdir, { recursive: true, force: true });
     }

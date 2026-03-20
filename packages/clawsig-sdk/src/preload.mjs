@@ -91,6 +91,73 @@ function redactHeaders(headers) {
   return redacted;
 }
 
+function normalizeAllowlistHost(raw) {
+  const trimmed = String(raw || '').trim().toLowerCase();
+  if (!trimmed) return null;
+
+  const wildcard = trimmed.startsWith('*.');
+  const candidate = wildcard ? trimmed.slice(2) : trimmed;
+
+  try {
+    if (candidate.includes('://')) {
+      const parsed = new URL(candidate);
+      const host = parsed.hostname.toLowerCase();
+      return host ? (wildcard ? `*.${host}` : host) : null;
+    }
+  } catch {
+    return null;
+  }
+
+  const host = candidate.replace(/^\[|\]$/g, '').split('/')[0]?.split(':')[0] ?? '';
+  if (!host) return null;
+  return wildcard ? `*.${host}` : host;
+}
+
+function normalizeRuntimeHost(hostname) {
+  return String(hostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+}
+
+function hostIsAllowlisted(hostname, allowlist) {
+  const host = normalizeRuntimeHost(hostname);
+  if (!host) return false;
+
+  for (const allowed of allowlist) {
+    if (allowed.startsWith('*.')) {
+      const suffix = allowed.slice(2);
+      if (host.endsWith(`.${suffix}`)) return true;
+      continue;
+    }
+    if (host === allowed) return true;
+  }
+  return false;
+}
+
+function makeEgressPolicyError(destination) {
+  const err = new Error(`Outbound destination is not allowlisted: ${destination}`);
+  err.name = 'EgressPolicyError';
+  err.code = 'PRV_EGRESS_DENIED';
+  err.destination = destination;
+  return err;
+}
+
+const enforceEgressAllowlist =
+  String(process.env.CLAWSIG_ENFORCE_EGRESS_ALLOWLIST || '').trim() === '1';
+const egressAllowlist = enforceEgressAllowlist
+  ? String(process.env.CLAWSIG_EGRESS_ALLOWLIST || '')
+      .split(',')
+      .map((entry) => normalizeAllowlistHost(entry))
+      .filter(Boolean)
+  : [];
+
+function assertEgressAllowedUrl(urlObj) {
+  if (!enforceEgressAllowlist) return;
+  if (!urlObj || (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:')) return;
+
+  const host = normalizeRuntimeHost(urlObj.hostname);
+  if (hostIsAllowlisted(host, egressAllowlist)) return;
+  throw makeEgressPolicyError(host || urlObj.toString());
+}
+
 // ---------------------------------------------------------------------------
 // SSE Tool Call State Machine
 // Handles OpenAI (index-based delta), Anthropic (content_block_delta),
@@ -290,6 +357,7 @@ if (typeof globalThis.fetch === 'function') {
 
     let urlObj;
     try { urlObj = new URL(urlStr); } catch { return origFetch.apply(this, arguments); }
+    assertEgressAllowedUrl(urlObj);
 
     if (!LLM_DOMAINS.has(urlObj.hostname)) {
       return origFetch.apply(this, arguments);
@@ -414,6 +482,7 @@ function patchHttp(mod, defaultProtocol) {
 
     let urlObj;
     try { urlObj = new URL(urlStr); } catch { return origRequest.apply(this, args); }
+    assertEgressAllowedUrl(urlObj);
     if (!LLM_DOMAINS.has(urlObj.hostname)) return origRequest.apply(this, args);
 
     const req = origRequest.apply(this, args);

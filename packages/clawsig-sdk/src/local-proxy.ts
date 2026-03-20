@@ -53,6 +53,13 @@ export interface ProxyOptions {
    * that clawproxy doesn't support.
    */
   passthrough?: boolean;
+  /**
+   * Enforce deny-by-default outbound egress host policy.
+   * When enabled, requests to destinations not in `egressAllowlist` are blocked.
+   */
+  enforceEgressAllowlist?: boolean;
+  /** Explicit outbound egress host allowlist (hostnames, optional `*.` wildcard). */
+  egressAllowlist?: string[];
 }
 
 /** A running local proxy instance. */
@@ -85,6 +92,82 @@ interface CollectedReceipt {
   provider: string;
   model: string;
   eventChainEntry: EventChainEntry;
+}
+
+interface EgressPolicy {
+  enforce: boolean;
+  allowlist: string[];
+}
+
+class EgressPolicyError extends Error {
+  readonly code = 'PRV_EGRESS_DENIED';
+  readonly destination: string;
+
+  constructor(destination: string) {
+    super(`Outbound destination is not allowlisted: ${destination}`);
+    this.name = 'EgressPolicyError';
+    this.destination = destination;
+  }
+}
+
+function normalizeEgressAllowlistEntry(raw: string): string | null {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return null;
+
+  const wildcard = trimmed.startsWith('*.');
+  const candidate = wildcard ? trimmed.slice(2) : trimmed;
+
+  let host = candidate;
+  try {
+    if (candidate.includes('://')) {
+      host = new URL(candidate).hostname.toLowerCase();
+    } else {
+      host = candidate.split('/')[0]?.split(':')[0] ?? '';
+    }
+  } catch {
+    return null;
+  }
+
+  if (!host) return null;
+  return wildcard ? `*.${host}` : host;
+}
+
+function normalizeEgressAllowlist(entries: string[] | undefined): string[] {
+  if (!entries || entries.length === 0) return [];
+  const out = new Set<string>();
+  for (const entry of entries) {
+    const normalized = normalizeEgressAllowlistEntry(entry);
+    if (normalized) out.add(normalized);
+  }
+  return [...out];
+}
+
+function hostIsAllowlisted(hostname: string, allowlist: string[]): boolean {
+  const host = hostname.toLowerCase();
+  for (const allowed of allowlist) {
+    if (allowed.startsWith('*.')) {
+      const suffix = allowed.slice(2);
+      if (host === suffix || host.endsWith(`.${suffix}`)) return true;
+      continue;
+    }
+    if (host === allowed) return true;
+  }
+  return false;
+}
+
+function enforceEgressPolicy(targetUrl: string, policy: EgressPolicy | undefined): void {
+  if (!policy?.enforce) return;
+
+  let host = '';
+  try {
+    host = new URL(targetUrl).hostname.toLowerCase();
+  } catch {
+    throw new EgressPolicyError(targetUrl);
+  }
+
+  if (!hostIsAllowlisted(host, policy.allowlist)) {
+    throw new EgressPolicyError(host);
+  }
 }
 
 function randomUUID(): string {
@@ -238,6 +321,7 @@ async function forwardToClawproxy(
   agentDid: string,
   idempotencyKey: string,
   eventHash: string,
+  egressPolicy: EgressPolicy | undefined,
 ): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean; stream?: ReadableStream<Uint8Array> | null }> {
   // clawproxy exposes a single canonical POST /v1/proxy/:provider endpoint.
   // Do not forward SDK-specific suffixes like /chat/completions or /messages,
@@ -246,6 +330,7 @@ async function forwardToClawproxy(
   const queryIndex = upstreamPathWithQuery.indexOf('?');
   const query = queryIndex === -1 ? '' : upstreamPathWithQuery.slice(queryIndex);
   const targetUrl = `${clawproxyUrl}/v1/proxy/${provider}${query}`;
+  enforceEgressPolicy(targetUrl, egressPolicy);
 
   let forwardedBodyBuffer = bodyBuffer;
   if (provider === 'google' && bodyBuffer.length > 0) {
@@ -333,9 +418,11 @@ async function forwardToUpstream(
   method: string,
   bodyBuffer: Buffer,
   incomingHeaders: Record<string, string | string[] | undefined>,
+  egressPolicy: EgressPolicy | undefined,
 ): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean; stream?: ReadableStream<Uint8Array> | null }> {
   const baseUrl = UPSTREAM_URLS[provider] ?? `https://api.${provider}.com`;
   const targetUrl = `${baseUrl}${upstreamPathWithQuery}`;
+  enforceEgressPolicy(targetUrl, egressPolicy);
 
   const headers = buildUpstreamRequestHeaders(incomingHeaders, bodyBuffer);
   const upperMethod = method.toUpperCase();
@@ -514,9 +601,15 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     cwd,
     onViolation,
     passthrough = false,
+    enforceEgressAllowlist = false,
+    egressAllowlist = [],
   } = options;
 
   const normalizedUrl = clawproxyUrl.replace(/\/+$/, '');
+  const normalizedEgressAllowlist = normalizeEgressAllowlist(egressAllowlist);
+  const egressPolicy: EgressPolicy | undefined = enforceEgressAllowlist
+    ? { enforce: true, allowlist: normalizedEgressAllowlist }
+    : undefined;
   const receipts: CollectedReceipt[] = [];
   let plannedPrevHash: string | null = null;
 
@@ -612,7 +705,14 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
 
       // Forward request: passthrough goes direct to provider, otherwise through clawproxy
       const upstream = passthrough
-        ? await forwardToUpstream(provider, upstreamPathWithQuery, method, bodyBuffer, reqHeaders)
+        ? await forwardToUpstream(
+            provider,
+            upstreamPathWithQuery,
+            method,
+            bodyBuffer,
+            reqHeaders,
+            egressPolicy,
+          )
         : await forwardToClawproxy(
             provider,
             upstreamPathWithQuery,
@@ -626,6 +726,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             agentDid.did,
             idempotencyKey,
             eventHash,
+            egressPolicy,
           );
 
       // Force explicit content-length to match exact decompressed payload size.
@@ -703,6 +804,17 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         }
       }
     } catch (err) {
+      if (err instanceof EgressPolicyError) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: err.code,
+          reason_code: err.code,
+          destination: err.destination,
+          message: err.message,
+        }));
+        return;
+      }
+
       const message = err instanceof Error ? err.message : 'Proxy forwarding failed';
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'PROXY_ERROR', message }));
