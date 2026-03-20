@@ -385,7 +385,11 @@ function validateEventChain(
   let chainRootHash: string | null = null;
 
   for (let i = 0; i < events.length; i++) {
-    const event = events[i] as Record<string, unknown>;
+    const eventValue = events[i];
+    if (!isObjectRecord(eventValue)) {
+      return { valid: false, error: `Event ${i}: must be an object` };
+    }
+    const event = eventValue;
 
     // Validate required fields with minLength constraints
     if (typeof event.event_id !== 'string' || event.event_id.length < 1) {
@@ -3414,7 +3418,24 @@ export async function verifyProofBundle(
 
   if (p.receipts) {
     for (let i = 0; i < p.receipts.length; i++) {
-      const md = p.receipts[i].payload.metadata;
+      const parsedReceipt = parseGatewayReceiptEntry(p.receipts[i]);
+      if (!parsedReceipt.ok) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `payload.receipts[${i}] is not a valid gateway receipt envelope`,
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message:
+              'payload.receipts must contain gateway_receipt envelopes with a payload object',
+            field: `payload.receipts[${i}]`,
+          },
+        };
+      }
+
+      const md = parsedReceipt.payload.metadata;
       if (md !== undefined && jsonByteSize(md) > MAX_METADATA_BYTES) {
         return {
           result: {
@@ -3436,7 +3457,25 @@ export async function verifyProofBundle(
   if (p.event_chain) {
     const seenEventIds = new Set<string>();
     for (let i = 0; i < p.event_chain.length; i++) {
-      const id = p.event_chain[i].event_id;
+      const entry = isObjectRecord(p.event_chain[i]) ? p.event_chain[i] : null;
+      const id =
+        entry && typeof entry.event_id === 'string' ? entry.event_id : null;
+      if (!id || id.length === 0) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'event_chain entry missing event_id',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message:
+              'event_id must be present for each payload.event_chain entry',
+            field: `payload.event_chain[${i}].event_id`,
+          },
+        };
+      }
+
       if (seenEventIds.has(id)) {
         return {
           result: {
@@ -3498,12 +3537,29 @@ export async function verifyProofBundle(
 
   if (p.receipts) {
     for (let i = 0; i < p.receipts.length; i++) {
-      const rid = p.receipts[i].payload.receipt_id;
+      const parsedReceipt = parseGatewayReceiptEntry(p.receipts[i]);
+      if (!parsedReceipt.ok) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `payload.receipts[${i}] is not a valid gateway receipt envelope`,
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message:
+              'payload.receipts must contain gateway_receipt envelopes with a payload object',
+            field: `payload.receipts[${i}]`,
+          },
+        };
+      }
+
+      const rid = parsedReceipt.payload.receipt_id;
       const field = `payload.receipts[${i}].payload.receipt_id`;
       const replay = registerReceiptReplayFingerprint({
         receiptId: rid,
         receiptType: 'gateway_receipt',
-        payload: p.receipts[i].payload,
+        payload: parsedReceipt.payload,
         field,
       });
 
@@ -3527,12 +3583,29 @@ export async function verifyProofBundle(
 
   if (p.web_receipts) {
     for (let i = 0; i < p.web_receipts.length; i++) {
-      const rid = p.web_receipts[i].payload.receipt_id;
+      const parsedReceipt = parseWebReceiptEntry(p.web_receipts[i]);
+      if (!parsedReceipt.ok) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `payload.web_receipts[${i}] is not a valid web receipt envelope`,
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message:
+              'payload.web_receipts must contain web_receipt envelopes with a payload object',
+            field: `payload.web_receipts[${i}]`,
+          },
+        };
+      }
+
+      const rid = parsedReceipt.payload.receipt_id;
       const field = `payload.web_receipts[${i}].payload.receipt_id`;
       const replay = registerReceiptReplayFingerprint({
         receiptId: rid,
         receiptType: 'web_receipt',
-        payload: p.web_receipts[i].payload,
+        payload: parsedReceipt.payload,
         field,
       });
 

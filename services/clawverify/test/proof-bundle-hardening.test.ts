@@ -46,6 +46,44 @@ function makeReceiptEnvelope(receiptId: string, overrides: Partial<any> = {}): a
 }
 
 describe('CVF-US-025: proof bundle size/uniqueness hardening', () => {
+  it('fails closed (no throw) when signed-envelope payload.receipts entries are malformed', async () => {
+    const envelope: any = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload: {
+        bundle_version: '1',
+        bundle_id: 'bundle_signed_envelope_malformed_receipt',
+        agent_did: 'did:key:abc123',
+        event_chain: [makeEvent({ event_id: 'evt_1', prev_hash_b64u: null })],
+        receipts: [
+          {
+            envelope_version: '1',
+            envelope_type: 'gateway_receipt',
+            // Missing payload object: this previously caused an unhandled throw
+            payload_hash_b64u: b64u(16),
+            hash_algorithm: 'SHA-256',
+            signature_b64u: b64u(86),
+            algorithm: 'Ed25519',
+            signer_did: 'did:key:receiptSigner',
+            issued_at: '2026-02-07T00:00:01Z',
+          },
+          makeReceiptEnvelope('rcpt_ok'),
+        ],
+      },
+      payload_hash_b64u: b64u(16),
+      hash_algorithm: 'SHA-256',
+      signature_b64u: b64u(86),
+      algorithm: 'Ed25519',
+      signer_did: 'did:key:abc123',
+      issued_at: '2026-02-07T00:00:02Z',
+    };
+
+    const out = await verifyProofBundle(envelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('MALFORMED_ENVELOPE');
+    expect(out.error?.field).toBe('payload.receipts[0]');
+  });
+
   it('rejects duplicate event_id in payload.event_chain', async () => {
     const envelope: any = {
       envelope_version: '1',
