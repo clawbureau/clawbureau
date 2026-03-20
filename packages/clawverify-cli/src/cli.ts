@@ -55,7 +55,7 @@ function usageText(): string {
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
     '  clawsig inspect --input <bundle.json> [--decrypt] [--json]',
-    '  clawsig prove --input <bundle.json> [--html <file.html>] [--run-summary <path>] [--decrypt] [--json]',
+    '  clawsig prove --input <bundle.json> [--html <file.html>] [--run-summary <path>] [--export-pack <dir>] [--decrypt] [--json]',
     '  clawsig identity show [--json]',
     '  clawsig identity link-github --github <username> [--json]',
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
@@ -107,6 +107,7 @@ function usageText(): string {
     '  clawsig inspect --input bundle.json',
     '  clawsig inspect --input bundle.json --decrypt --json',
     '  clawsig prove --input bundle.json --html proof-report.html',
+    '  clawsig prove --input bundle.json --export-pack ./privacy-pack',
     '  clawsig identity show --json',
     '  clawsig identity link-github --github octocat --json',
     '  clawsig sign-commit $(git rev-parse HEAD)',
@@ -153,7 +154,7 @@ type ParsedArgs =
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
   | { command: 'inspect'; inputPath: string; decrypt: boolean }
-  | { command: 'prove'; inputPath: string; htmlPath?: string; runSummaryPath?: string; decrypt: boolean }
+  | { command: 'prove'; inputPath: string; htmlPath?: string; runSummaryPath?: string; exportPackPath?: string; decrypt: boolean }
   | { command: 'identity-show' }
   | { command: 'identity-link-github'; githubUsername: string }
   | { command: 'identity-rotate'; targetDir?: string; global: boolean }
@@ -199,14 +200,15 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     const inputPath = readFlag(argv, '--input');
     if (!inputPath) {
       throw new CliUsageError(
-        'Usage: clawsig prove --input <bundle.json> [--html <file.html>] [--run-summary <path>] [--decrypt] [--json]\n\n' +
+        'Usage: clawsig prove --input <bundle.json> [--html <file.html>] [--run-summary <path>] [--export-pack <dir>] [--decrypt] [--json]\n\n' +
         'The --input flag is required.',
       );
     }
     const htmlPath = readFlag(argv, '--html');
     const runSummaryPath = readFlag(argv, '--run-summary');
+    const exportPackPath = readFlag(argv, '--export-pack');
     const decrypt = hasFlag(argv, '--decrypt');
-    return { command: 'prove', inputPath, htmlPath, runSummaryPath, decrypt };
+    return { command: 'prove', inputPath, htmlPath, runSummaryPath, exportPackPath, decrypt };
   }
 
   if (argv[0] === 'wrap') {
@@ -713,6 +715,7 @@ async function main() {
         inputPath: parsed.inputPath,
         htmlPath: parsed.htmlPath,
         runSummaryPath: parsed.runSummaryPath,
+        exportPackPath: parsed.exportPackPath,
         decrypt: parsed.decrypt,
         json: jsonMode,
       });
