@@ -30,3 +30,52 @@ Started: 2026-03-20T20:10:00Z
   - This lane is intentionally scoped to privacy assurance **claims we can honestly support**: fail-closed egress, processor policy, sensitivity handling, and reviewer-facing proof posture.
   - Remote attestation / measured runners remain explicitly out of scope for v1.
 ---
+
+## 2026-03-20T20:45:00Z - Wave 1 foundations shipped
+- What was implemented
+  - `PRV-RUN-001` + `PRV-RUN-002` via PR #475
+    - minimal proofed runtime profile
+    - runtime hygiene evidence + reviewer buckets
+  - `PRV-EGR-001` + `PRV-EGR-002` via PR #476
+    - fail-closed outbound allowlist
+    - proofed proxy-only model execution
+- Notes
+  - Wave 1 established the prevention/runtime foundation required for the later privacy receipts and UX lanes.
+---
+
+## 2026-03-20T21:45:00Z - Wave 2 privacy controls shipped
+- What was implemented
+  - `PRV-POL-001` via PR #477
+    - processor/model/region/retention enforcement
+    - processor policy evidence
+  - `PRV-DLP-001` + `PRV-DLP-002` via PR #478
+    - pre-egress sensitivity classification
+    - block/redact/approval engine + signed data-handling receipts
+  - `PRV-EGR-003` via PR #479
+    - signed egress policy receipts
+    - schema/runtime verifier hardening for receipt validation
+- Notes
+  - Wave 2 turned privacy controls into explicit signed evidence instead of raw telemetry-only interpretation.
+---
+
+## 2026-03-20T22:25:00Z - Wave 3 reviewer/audit UX shipped
+- What was implemented
+  - `PRV-UX-001` via PR #480
+    - privacy posture rendering in `clawsig prove` terminal + HTML + machine-readable output
+    - explicit what-is-proven / not-proven claim boundaries
+  - `PRV-AUD-001` via PR #481
+    - single-command privacy/compliance export pack
+    - bundled proof bundle + privacy evidence + report JSON/TXT + claims boundary + manifest
+- Notes
+  - Wave 3 productized the privacy assurance surface for reviewer sharing instead of engineer-only JSON inspection.
+---
+
+## 2026-03-20T22:30:00Z - Roadmap complete
+- Status
+  - All 10 roadmap stories shipped and merged.
+  - Canonical merged PRs: #475, #476, #477, #478, #479, #480, #481.
+- Outcome
+  - Clawsig Privacy Assurance v1 moved from roadmap seed to shipped control surface spanning prevention, signed privacy receipts, reviewer-facing privacy posture, and exportable audit packs.
+- Follow-up
+  - Remote attestation / measured runners remain a v2 hardening lane, consistent with the roadmap scope.
+---
