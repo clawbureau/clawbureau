@@ -220,6 +220,9 @@ describe('clawsig wrap quiet mode (SKL-003)', () => {
       expect(typeof summary['did']).toBe('string');
       expect(typeof summary['timestamp']).toBe('string');
       expect(typeof summary['duration_seconds']).toBe('number');
+      expect(summary['runtime_profile_id']).toBe('prv.run.v1.proofed-minimal');
+      expect(summary['runtime_profile_status']).toMatch(/^(active|fallback)$/);
+      expect(summary['runtime_hygiene_verdict']).toMatch(/^(good|caution|action)$/);
 
       // Lightweight distillation target.
       expect(Buffer.byteLength(raw, 'utf-8')).toBeLessThan(500);
