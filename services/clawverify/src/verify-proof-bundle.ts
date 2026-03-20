@@ -37,6 +37,7 @@ import type {
   CoverageAttestationPayload,
   ExecutionAttestationPayload,
   X402BindingReasonCode,
+  EgressPolicyReceiptPayload,
 } from './types';
 import {
   isAllowedVersion,
@@ -178,6 +179,13 @@ export interface ProofBundleVerifierOptions {
    * verification fails closed (result.status=INVALID).
    */
   urm?: unknown;
+
+  /**
+   * PRV-EGR-003: require signed egress policy receipt evidence.
+   * When true, missing or malformed payload.metadata.sentinels.egress_policy_receipt
+   * fails closed.
+   */
+  requireEgressPolicyReceipt?: boolean;
 }
 
 // CVF-US-025: size/count hardening
@@ -255,17 +263,6 @@ function validateEnvelopeStructure(
     'algorithm' in e &&
     'signer_did' in e &&
     'issued_at' in e
-  );
-}
-
-function isSignedEnvelopeCandidate(value: unknown): value is Record<string, unknown> {
-  if (!isObjectRecord(value)) return false;
-
-  return (
-    typeof value.envelope_version === 'string' &&
-    typeof value.envelope_type === 'string' &&
-    isObjectRecord(value.payload) &&
-    typeof value.signature_b64u === 'string'
   );
 }
 
@@ -1955,6 +1952,561 @@ function toNonNegativeInteger(value: unknown): number | null {
     return null;
   }
   return value;
+}
+
+function isCanonicalHostList(value: unknown): value is string[] {
+  if (!Array.isArray(value)) return false;
+  let previous: string | null = null;
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    if (typeof entry !== 'string') return false;
+    const normalized = entry.trim().toLowerCase();
+    if (normalized.length === 0 || normalized !== entry) return false;
+    if (seen.has(normalized)) return false;
+    if (previous !== null && normalized.localeCompare(previous) <= 0) return false;
+    seen.add(normalized);
+    previous = normalized;
+  }
+
+  return true;
+}
+
+function extractEgressPolicyReceiptEnvelope(
+  metadataRecord: Record<string, unknown> | null
+): unknown {
+  if (!metadataRecord) return undefined;
+  const sentinels = isObjectRecord(metadataRecord.sentinels)
+    ? metadataRecord.sentinels
+    : null;
+  if (!sentinels) return undefined;
+  return sentinels.egress_policy_receipt;
+}
+
+interface EgressPolicyReceiptVerificationOutcome {
+  valid: boolean;
+  signature_valid: boolean;
+  code?: VerificationError['code'];
+  message?: string;
+  field?: string;
+}
+
+function hasOnlyAllowedKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+async function verifyEgressPolicyReceiptEnvelope(args: {
+  envelope: unknown;
+  bundleAgentDid: string;
+  expectedRunId: string | null;
+  allowedEventHashes: Set<string> | null;
+}): Promise<EgressPolicyReceiptVerificationOutcome> {
+  const { envelope, bundleAgentDid, expectedRunId, allowedEventHashes } = args;
+
+  if (!isObjectRecord(envelope)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'payload.metadata.sentinels.egress_policy_receipt must be an object',
+      field: 'payload.metadata.sentinels.egress_policy_receipt',
+    };
+  }
+
+  if (
+    !hasOnlyAllowedKeys(envelope, [
+      'envelope_version',
+      'envelope_type',
+      'payload',
+      'payload_hash_b64u',
+      'hash_algorithm',
+      'signature_b64u',
+      'algorithm',
+      'signer_did',
+      'issued_at',
+    ])
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt envelope has unsupported fields',
+      field: 'payload.metadata.sentinels.egress_policy_receipt',
+    };
+  }
+
+  if (envelope.envelope_version !== '1') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt envelope_version must be "1"',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.envelope_version',
+    };
+  }
+
+  if (envelope.envelope_type !== 'egress_policy_receipt') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt envelope_type must be "egress_policy_receipt"',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.envelope_type',
+    };
+  }
+
+  if (envelope.hash_algorithm !== 'SHA-256') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'UNKNOWN_HASH_ALGORITHM',
+      message: 'egress policy receipt hash_algorithm must be SHA-256',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.hash_algorithm',
+    };
+  }
+
+  if (envelope.algorithm !== 'Ed25519') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'UNKNOWN_ALGORITHM',
+      message: 'egress policy receipt algorithm must be Ed25519',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.algorithm',
+    };
+  }
+
+  if (
+    typeof envelope.payload_hash_b64u !== 'string' ||
+    !isValidBase64Url(envelope.payload_hash_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload_hash_b64u must be valid base64url',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload_hash_b64u',
+    };
+  }
+
+  if (
+    typeof envelope.signature_b64u !== 'string' ||
+    !isValidBase64Url(envelope.signature_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt signature_b64u must be valid base64url',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.signature_b64u',
+    };
+  }
+
+  if (
+    typeof envelope.signer_did !== 'string' ||
+    !isValidDidFormat(envelope.signer_did)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'INVALID_DID_FORMAT',
+      message: 'egress policy receipt signer_did must be a valid DID',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.signer_did',
+    };
+  }
+
+  if (!isValidIsoDate(envelope.issued_at)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt issued_at must be ISO-8601',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.issued_at',
+    };
+  }
+
+  if (!isObjectRecord(envelope.payload)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload must be an object',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload',
+    };
+  }
+
+  const payload = envelope.payload as unknown as EgressPolicyReceiptPayload;
+
+  if (
+    !hasOnlyAllowedKeys(envelope.payload, [
+      'receipt_version',
+      'receipt_id',
+      'policy_version',
+      'policy_hash_b64u',
+      'proofed_mode',
+      'clawproxy_url',
+      'allowed_proxy_destinations',
+      'allowed_child_destinations',
+      'direct_provider_access_blocked',
+      'blocked_attempt_count',
+      'blocked_attempts_observed',
+      'hash_algorithm',
+      'agent_did',
+      'timestamp',
+      'binding',
+    ])
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload has unsupported fields',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload',
+    };
+  }
+
+  if (payload.receipt_version !== '1') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload.receipt_version must be "1"',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.receipt_version',
+    };
+  }
+
+  if (
+    typeof payload.receipt_id !== 'string' ||
+    payload.receipt_id.trim().length === 0
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload.receipt_id must be non-empty',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.receipt_id',
+    };
+  }
+
+  if (payload.policy_version !== '1') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload.policy_version must be "1"',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.policy_version',
+    };
+  }
+
+  if (
+    typeof payload.policy_hash_b64u !== 'string' ||
+    !isValidBase64Url(payload.policy_hash_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload.policy_hash_b64u must be base64url',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.policy_hash_b64u',
+    };
+  }
+
+  if (payload.proofed_mode !== true) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'egress policy receipt payload.proofed_mode must be true',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.proofed_mode',
+    };
+  }
+
+  if (typeof payload.clawproxy_url !== 'string' || payload.clawproxy_url.length === 0) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload.clawproxy_url must be non-empty',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.clawproxy_url',
+    };
+  }
+
+  try {
+    const parsedUrl = new URL(payload.clawproxy_url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return {
+        valid: false,
+        signature_valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'egress policy receipt payload.clawproxy_url must use http/https',
+        field: 'payload.metadata.sentinels.egress_policy_receipt.payload.clawproxy_url',
+      };
+    }
+  } catch {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload.clawproxy_url must be an absolute URL',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.clawproxy_url',
+    };
+  }
+
+  if (!isCanonicalHostList(payload.allowed_proxy_destinations)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'egress policy receipt payload.allowed_proxy_destinations must be lowercase sorted unique host list',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.allowed_proxy_destinations',
+    };
+  }
+
+  if (!isCanonicalHostList(payload.allowed_child_destinations)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'egress policy receipt payload.allowed_child_destinations must be lowercase sorted unique host list',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.allowed_child_destinations',
+    };
+  }
+
+  if (payload.direct_provider_access_blocked !== true) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'egress policy receipt payload.direct_provider_access_blocked must be true',
+      field:
+        'payload.metadata.sentinels.egress_policy_receipt.payload.direct_provider_access_blocked',
+    };
+  }
+
+  if (!Number.isInteger(payload.blocked_attempt_count) || payload.blocked_attempt_count < 0) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'egress policy receipt payload.blocked_attempt_count must be a non-negative integer',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.blocked_attempt_count',
+    };
+  }
+
+  if (typeof payload.blocked_attempts_observed !== 'boolean') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'egress policy receipt payload.blocked_attempts_observed must be boolean',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.blocked_attempts_observed',
+    };
+  }
+
+  if (payload.blocked_attempts_observed !== (payload.blocked_attempt_count > 0)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'egress policy receipt blocked_attempts_observed must match blocked_attempt_count > 0',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.blocked_attempts_observed',
+    };
+  }
+
+  if (payload.hash_algorithm !== 'SHA-256') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'UNKNOWN_HASH_ALGORITHM',
+      message: 'egress policy receipt payload.hash_algorithm must be SHA-256',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.hash_algorithm',
+    };
+  }
+
+  if (typeof payload.agent_did !== 'string' || !isValidDidFormat(payload.agent_did)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'INVALID_DID_FORMAT',
+      message: 'egress policy receipt payload.agent_did must be a valid DID',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.agent_did',
+    };
+  }
+
+  if (payload.agent_did !== bundleAgentDid || envelope.signer_did !== bundleAgentDid) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'egress policy receipt signer/payload agent_did must match proof bundle agent_did',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.signer_did',
+    };
+  }
+
+  if (!isValidIsoDate(payload.timestamp)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt payload.timestamp must be ISO-8601',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.timestamp',
+    };
+  }
+
+  if (!isObjectRecord(payload.binding)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'egress policy receipt payload.binding.run_id is required',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.binding.run_id',
+    };
+  }
+
+  const bindingRecord = payload.binding;
+
+  if (!hasOnlyAllowedKeys(bindingRecord, ['run_id', 'event_hash_b64u'])) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'egress policy receipt binding has unsupported fields',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.binding',
+    };
+  }
+
+  if (
+    typeof bindingRecord.run_id !== 'string' ||
+    bindingRecord.run_id.trim().length === 0
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'egress policy receipt payload.binding.run_id is required',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.binding.run_id',
+    };
+  }
+
+  if (expectedRunId && bindingRecord.run_id !== expectedRunId) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'egress policy receipt binding.run_id does not match proof bundle run_id',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.binding.run_id',
+    };
+  }
+
+  if (
+    typeof bindingRecord.event_hash_b64u !== 'string' ||
+    !isValidBase64Url(bindingRecord.event_hash_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'egress policy receipt payload.binding.event_hash_b64u is required',
+      field:
+        'payload.metadata.sentinels.egress_policy_receipt.payload.binding.event_hash_b64u',
+    };
+  }
+
+  if (!allowedEventHashes) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'egress policy receipt requires a valid payload.event_chain for binding verification',
+      field:
+        'payload.metadata.sentinels.egress_policy_receipt.payload.binding.event_hash_b64u',
+    };
+  }
+
+  if (!allowedEventHashes.has(bindingRecord.event_hash_b64u)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'egress policy receipt binding.event_hash_b64u must reference an event in payload.event_chain',
+      field:
+        'payload.metadata.sentinels.egress_policy_receipt.payload.binding.event_hash_b64u',
+    };
+  }
+
+  const canonicalPolicy = {
+    policy_version: payload.policy_version,
+    proofed_mode: payload.proofed_mode,
+    clawproxy_url: payload.clawproxy_url,
+    allowed_proxy_destinations: payload.allowed_proxy_destinations,
+    allowed_child_destinations: payload.allowed_child_destinations,
+    direct_provider_access_blocked: payload.direct_provider_access_blocked,
+  };
+  const computedPolicyHash = await computeHash(canonicalPolicy, 'SHA-256');
+  if (computedPolicyHash !== payload.policy_hash_b64u) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'HASH_MISMATCH',
+      message: 'egress policy receipt policy_hash_b64u mismatch',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.policy_hash_b64u',
+    };
+  }
+
+  const computedPayloadHash = await computeHash(payload, 'SHA-256');
+  if (computedPayloadHash !== envelope.payload_hash_b64u) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'HASH_MISMATCH',
+      message: 'egress policy receipt payload_hash_b64u mismatch',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload_hash_b64u',
+    };
+  }
+
+  const publicKeyBytes = extractPublicKeyFromDidKey(envelope.signer_did);
+  if (!publicKeyBytes) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'INVALID_DID_FORMAT',
+      message: 'Unable to extract Ed25519 public key from egress policy signer DID',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.signer_did',
+    };
+  }
+
+  const signatureBytes = base64UrlDecode(envelope.signature_b64u);
+  const sigMessageBytes = new TextEncoder().encode(envelope.payload_hash_b64u);
+  const signatureValid = await verifySignature(
+    envelope.algorithm,
+    publicKeyBytes,
+    signatureBytes,
+    sigMessageBytes
+  );
+
+  if (!signatureValid) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'SIGNATURE_INVALID',
+      message: 'egress policy receipt signature verification failed',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.signature_b64u',
+    };
+  }
+
+  return { valid: true, signature_valid: true };
 }
 
 function parseClddMetricsClaim(
@@ -4435,29 +4987,23 @@ export async function verifyProofBundle(
   // 9.75 Strict JSON schema validation (Ajv) for envelope + payload
   // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
   //
-  // E2E-004: For signed-envelope inputs, bypass this service-layer Ajv gate and let
-  // downstream verifier logic handle envelope detection/extraction and verification.
-  // This keeps compatibility with signed-envelope bundles while preserving existing
-  // runtime structural and cryptographic checks.
-  if (!isSignedEnvelopeCandidate(envelope)) {
-    const schemaResult = validateProofBundleEnvelopeV1(envelope);
-    if (!schemaResult.valid) {
-      const causalSchemaCode = classifyCausalSchemaValidationCode(schemaResult.field);
-      const schemaErrorCode = causalSchemaCode ?? 'SCHEMA_VALIDATION_FAILED';
+  const schemaResult = validateProofBundleEnvelopeV1(envelope);
+  if (!schemaResult.valid) {
+    const causalSchemaCode = classifyCausalSchemaValidationCode(schemaResult.field);
+    const schemaErrorCode = causalSchemaCode ?? 'SCHEMA_VALIDATION_FAILED';
 
-      return {
-        result: {
-          status: 'INVALID',
-          reason: schemaResult.message,
-          verified_at: now,
-        },
-        error: {
-          code: schemaErrorCode,
-          message: schemaResult.message,
-          field: schemaResult.field,
-        },
-      };
-    }
+    return {
+      result: {
+        status: 'INVALID',
+        reason: schemaResult.message,
+        verified_at: now,
+      },
+      error: {
+        code: schemaErrorCode,
+        message: schemaResult.message,
+        field: schemaResult.field,
+      },
+    };
   }
 
   // 10. Validate proof bundle payload structure against PoH schema
@@ -5612,6 +6158,78 @@ export async function verifyProofBundle(
         field: dataHandlingEvidence.field,
       },
     };
+  }
+
+  const requireEgressPolicyReceipt = options.requireEgressPolicyReceipt === true;
+  const egressPolicyReceiptEnvelope = extractEgressPolicyReceiptEnvelope(metadataRecord);
+  const hasEgressPolicyReceipt = egressPolicyReceiptEnvelope !== undefined;
+  componentResults.egress_policy_receipt_present = hasEgressPolicyReceipt;
+
+  if (!hasEgressPolicyReceipt) {
+    componentResults.egress_policy_receipt_signature_verified = false;
+    componentResults.egress_policy_receipt_valid = false;
+
+    if (requireEgressPolicyReceipt) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'Missing required payload.metadata.sentinels.egress_policy_receipt evidence',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+          component_results: componentResults,
+        },
+        error: {
+          code: 'MISSING_REQUIRED_FIELD',
+          message:
+            'payload.metadata.sentinels.egress_policy_receipt is required by verifier policy',
+          field: 'payload.metadata.sentinels.egress_policy_receipt',
+        },
+      };
+    }
+  } else {
+    const egressPolicyReceiptVerification = await verifyEgressPolicyReceiptEnvelope({
+      envelope: egressPolicyReceiptEnvelope,
+      bundleAgentDid: payload.agent_did,
+      expectedRunId:
+        payload.event_chain && payload.event_chain.length > 0
+          ? payload.event_chain[0].run_id
+          : null,
+      allowedEventHashes:
+        payload.event_chain && payload.event_chain.length > 0
+          ? new Set(payload.event_chain.map((event) => event.event_hash_b64u))
+          : null,
+    });
+
+    componentResults.egress_policy_receipt_signature_verified =
+      egressPolicyReceiptVerification.signature_valid;
+    componentResults.egress_policy_receipt_valid =
+      egressPolicyReceiptVerification.valid;
+
+    if (!egressPolicyReceiptVerification.valid) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            egressPolicyReceiptVerification.message ??
+            'Invalid egress policy receipt evidence',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+          component_results: componentResults,
+        },
+        error: {
+          code: egressPolicyReceiptVerification.code ?? 'EVIDENCE_MISMATCH',
+          message:
+            egressPolicyReceiptVerification.message ??
+            'Invalid egress policy receipt evidence',
+          field:
+            egressPolicyReceiptVerification.field ??
+            'payload.metadata.sentinels.egress_policy_receipt',
+        },
+      };
+    }
   }
 
   const clddMetricsClaim = parseClddMetricsClaim(metadataRecord);

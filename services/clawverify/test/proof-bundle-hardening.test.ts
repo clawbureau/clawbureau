@@ -80,8 +80,8 @@ describe('CVF-US-025: proof bundle size/uniqueness hardening', () => {
 
     const out = await verifyProofBundle(envelope);
     expect(out.result.status).toBe('INVALID');
-    expect(out.error?.code).toBe('MALFORMED_ENVELOPE');
-    expect(out.error?.field).toBe('payload.receipts[0]');
+    expect(out.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
+    expect(out.error?.field).toBe('payload.receipts[0].payload');
   });
 
   it('rejects duplicate event_id in payload.event_chain', async () => {

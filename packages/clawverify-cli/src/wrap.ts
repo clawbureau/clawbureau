@@ -43,6 +43,7 @@ import type {
   ExecutionReceiptPayload,
   NetworkReceiptPayload,
   GatewayReceiptPayload,
+  EgressPolicyReceiptPayload,
   LocalPolicy,
   CommandAnalysis,
   FsEvent,
@@ -297,11 +298,13 @@ function getPiGoogleCompatModelId(commandName: string, args: string[]): string |
   return typeof model === 'string' && model.trim().length > 0 ? model.trim() : undefined;
 }
 
-function wrapAsGatewayReceiptEnvelope(receipt: Record<string, unknown>): Record<string, unknown> {
-  if (isObjectRecord(receipt) && receipt.envelope_type === 'gateway_receipt') {
-    return receipt; // already wrapped
+function toSignedGatewayReceiptEnvelope(
+  receipt: Record<string, unknown>,
+): SignedEnvelope<GatewayReceiptPayload> | null {
+  if (isSignedGatewayReceiptEnvelope(receipt)) {
+    return receipt;
   }
-  return { envelope_type: 'gateway_receipt', payload: receipt };
+  return null;
 }
 
 function isGatewayReceiptEnvelope(
@@ -435,6 +438,15 @@ async function resealProofBundleEnvelope(
   const signature = await signer.sign(new TextEncoder().encode(payloadHash));
   bundle.payload_hash_b64u = payloadHash;
   bundle.signature_b64u = signature;
+}
+
+function normalizeCanonicalHostList(entries: readonly string[]): string[] {
+  const unique = new Set<string>();
+  for (const entry of entries) {
+    const normalized = normalizeEgressHost(entry);
+    if (normalized) unique.add(normalized);
+  }
+  return [...unique].sort((a, b) => a.localeCompare(b));
 }
 
 async function captureRuntimeBaselineSnapshot(): Promise<RuntimeBaselineSnapshot> {
@@ -1178,6 +1190,9 @@ export async function wrap(
         ? computeClddMetrics.call(interposeOracle, netEvents)
         : fallbackClddMetrics,
   };
+  const blockedEgressAttemptCount = interposeEvents.filter(
+    (event) => event.syscall === 'connect_blocked'
+  ).length;
 
   // Merge interpose network receipts into network receipts
   const allNetworkReceipts = [...networkReceipts, ...interposeReceipts.network];
@@ -1274,7 +1289,10 @@ export async function wrap(
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = (bundle.payload.receipts ?? []) as any[];
-    bundle.payload.receipts = [...existing, wrapAsGatewayReceiptEnvelope(genealogyReceipt)] as typeof bundle.payload.receipts;
+    const signedGenealogyReceipt = toSignedGatewayReceiptEnvelope(genealogyReceipt);
+    if (signedGenealogyReceipt) {
+      bundle.payload.receipts = [...existing, signedGenealogyReceipt] as typeof bundle.payload.receipts;
+    }
   }
 
   // Inject Security Audit Receipts (env credential hashes + DLP leak alerts)
@@ -1312,7 +1330,12 @@ export async function wrap(
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = (bundle.payload.receipts ?? []) as any[];
-    bundle.payload.receipts = [...existing, ...securityReceipts.map(wrapAsGatewayReceiptEnvelope)] as typeof bundle.payload.receipts;
+    const signedSecurityReceipts = securityReceipts
+      .map(toSignedGatewayReceiptEnvelope)
+      .filter((receipt): receipt is SignedEnvelope<GatewayReceiptPayload> => receipt !== null);
+    if (signedSecurityReceipts.length > 0) {
+      bundle.payload.receipts = [...existing, ...signedSecurityReceipts] as typeof bundle.payload.receipts;
+    }
   }
 
   // Inject preload + SNI + interpose FSM receipts into the bundle.
@@ -1331,8 +1354,11 @@ export async function wrap(
       ...interposeReceipts.toolCalls,
       ...interposeReceipts.anomalies,
     ];
-    if (additions.length > 0) {
-      bundle.payload.receipts = [...existing, ...additions.map(wrapAsGatewayReceiptEnvelope)] as typeof bundle.payload.receipts;
+    const signedAdditions = additions
+      .map(toSignedGatewayReceiptEnvelope)
+      .filter((receipt): receipt is SignedEnvelope<GatewayReceiptPayload> => receipt !== null);
+    if (signedAdditions.length > 0) {
+      bundle.payload.receipts = [...existing, ...signedAdditions] as typeof bundle.payload.receipts;
     }
   }
 
@@ -1356,11 +1382,6 @@ export async function wrap(
     interpose_state: interposeSummary,
   } as Record<string, unknown>;
 
-  bundle.payload.metadata = {
-    ...bundle.payload.metadata,
-    sentinels: sentinelsMetadata as NonNullable<NonNullable<ProofBundlePayload['metadata']>['sentinels']>,
-  };
-
   await ensureMinimalHarnessEvidence({
     bundle,
     signer: {
@@ -1371,6 +1392,80 @@ export async function wrap(
     commandName,
     exitCode,
   });
+
+  let egressPolicyReceiptEnvelope: SignedEnvelope<EgressPolicyReceiptPayload> | undefined;
+  if (proofedMode && parsedProofedClawproxyUrl) {
+    const allowedProxyDestinations = normalizeCanonicalHostList(proofedEgressAllowlist);
+    const allowedChildDestinations = normalizeCanonicalHostList(proofedChildEgressAllowlist);
+    const policyDescriptor = {
+      policy_version: '1' as const,
+      proofed_mode: true,
+      clawproxy_url: parsedProofedClawproxyUrl.toString(),
+      allowed_proxy_destinations: allowedProxyDestinations,
+      allowed_child_destinations: allowedChildDestinations,
+      direct_provider_access_blocked: true,
+    };
+    const policyHashB64u = await hashJsonB64u(policyDescriptor);
+    const eventHashB64u =
+      bundle.payload.event_chain && bundle.payload.event_chain.length > 0
+        ? bundle.payload.event_chain[0]?.event_hash_b64u
+        : undefined;
+
+    if (typeof eventHashB64u !== 'string' || eventHashB64u.length === 0) {
+      process.stderr.write(
+        '\x1b[31m[clawsig]\x1b[0m PRV_EGRESS_BINDING_MISSING: proofed mode requires an event-chain binding for the signed egress policy receipt.\n',
+      );
+      return 1;
+    }
+
+    const policyReceiptPayload: EgressPolicyReceiptPayload = {
+      receipt_version: '1',
+      receipt_id: `epr_${crypto.randomUUID()}`,
+      policy_version: '1',
+      policy_hash_b64u: policyHashB64u,
+      proofed_mode: true,
+      clawproxy_url: parsedProofedClawproxyUrl.toString(),
+      allowed_proxy_destinations: allowedProxyDestinations,
+      allowed_child_destinations: allowedChildDestinations,
+      direct_provider_access_blocked: true,
+      blocked_attempt_count: blockedEgressAttemptCount,
+      blocked_attempts_observed: blockedEgressAttemptCount > 0,
+      hash_algorithm: 'SHA-256',
+      agent_did: agentDid.did,
+      timestamp: new Date().toISOString(),
+      binding: {
+        run_id: runId,
+        event_hash_b64u: eventHashB64u,
+      },
+    };
+
+    const payloadHashB64u = await hashJsonB64u(policyReceiptPayload);
+    const signatureB64u = await agentDid.sign(
+      new TextEncoder().encode(payloadHashB64u)
+    );
+
+    egressPolicyReceiptEnvelope = {
+      envelope_version: '1',
+      envelope_type: 'egress_policy_receipt',
+      payload: policyReceiptPayload,
+      payload_hash_b64u: payloadHashB64u,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signatureB64u,
+      algorithm: 'Ed25519',
+      signer_did: agentDid.did,
+      issued_at: policyReceiptPayload.timestamp,
+    };
+  }
+
+  bundle.payload.metadata = {
+    ...bundle.payload.metadata,
+    sentinels: {
+      ...(sentinelsMetadata as NonNullable<NonNullable<ProofBundlePayload['metadata']>['sentinels']>),
+      ...(egressPolicyReceiptEnvelope
+        ? { egress_policy_receipt: egressPolicyReceiptEnvelope }
+        : {}),
+    },
+  };
 
   // EPV-002: Apply visibility mode transformation (non-public modes only).
   // Must happen after all payload mutations and before the final seal.

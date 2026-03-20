@@ -90,6 +90,7 @@ export type {
   URMDocument,
   EventChainEntry,
   GatewayReceiptPayload,
+  EgressPolicyReceiptPayload,
   ToolReceiptPayload,
   SideEffectReceiptPayload,
   ExecutionReceiptPayload,
