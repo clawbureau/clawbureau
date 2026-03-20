@@ -1,0 +1,32 @@
+## Codebase Patterns
+- Provenance is not enough for privacy claims; privacy assurance needs prevention + receipts + reviewer-facing explanation.
+- Prefer fail-closed enforcement over best-effort observation.
+- Keep privacy receipts explicit and signed instead of asking reviewers to infer posture from raw telemetry.
+- Make the proof report state both what **is** proven and what is **not** proven.
+
+# Ralph Progress Log
+Started: 2026-03-20T20:10:00Z
+---
+
+## 2026-03-20T20:10:00Z - Roadmap seeded (planning)
+- What was implemented
+  - Added the new roadmap folder:
+    - `docs/roadmaps/clawsig-privacy-v1/`
+  - Seeded canonical roadmap files:
+    - `docs/roadmaps/clawsig-privacy-v1/README.md`
+    - `docs/roadmaps/clawsig-privacy-v1/prd.json`
+    - `docs/roadmaps/clawsig-privacy-v1/progress.txt`
+  - Added Beads roadmap breakdown under `monorepo-prv`:
+    - `monorepo-prv` epic
+    - `monorepo-prv.1`..`monorepo-prv.10`
+  - Updated the roadmaps index so privacy assurance is the next active execution lane.
+- Files changed
+  - docs/roadmaps/README.md
+  - docs/roadmaps/clawsig-privacy-v1/README.md
+  - docs/roadmaps/clawsig-privacy-v1/prd.json
+  - docs/roadmaps/clawsig-privacy-v1/progress.txt
+  - .beads/issues.jsonl
+- Notes
+  - This lane is intentionally scoped to privacy assurance **claims we can honestly support**: fail-closed egress, processor policy, sensitivity handling, and reviewer-facing proof posture.
+  - Remote attestation / measured runners remain explicitly out of scope for v1.
+---

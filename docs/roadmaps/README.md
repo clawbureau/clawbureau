@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-18
+> **Last reviewed:** 2026-03-20
 > **Source of truth:** `docs/roadmaps/*/prd.json` + `docs/roadmaps/*/progress.txt`
 >
 > **Scope:**
@@ -13,6 +13,11 @@
 Roadmaps are the **execution layer** of planning: concrete stories + progress logs that can be run via `scripts/ralph/ralph.sh`.
 
 ## In progress / partially shipped
+
+- **Clawsig Privacy Assurance v1** (fail-closed egress, sensitivity handling, processor policy, privacy proof UX)
+  - Folder: `docs/roadmaps/clawsig-privacy-v1/`
+  - Status: roadmap created, 10 planned stories, 0 shipped
+  - Beads: `monorepo-prv`, `monorepo-prv.1`..`monorepo-prv.10`
 
 - **Clawcompiler bootstrap** (deterministic compiled-evidence schemas + conformance scaffolding)
   - Folder: `docs/roadmaps/clawcompiler/`
