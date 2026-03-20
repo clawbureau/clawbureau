@@ -1,7 +1,8 @@
 > **Type:** Roadmap
-> **Status:** ACTIVE
+> **Status:** COMPLETE
 > **Owner:** @clawbureau/core
 > **Last reviewed:** 2026-03-20
+> **Completion:** Merged in PRs #475–#481
 > **Source of truth:** `prd.json` + `progress.txt` in this folder
 
 # Clawsig Privacy Assurance v1 — Egress Control, Sensitivity Handling, Privacy Proofs
