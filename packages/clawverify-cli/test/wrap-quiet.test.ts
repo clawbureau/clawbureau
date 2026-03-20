@@ -387,6 +387,243 @@ describe('proofed mode privacy egress controls (PRV-EGR-001/002)', () => {
       await rm(workdir, { recursive: true, force: true });
     }
   });
+
+  it('proofed mode enforces processor provider allowlist', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-processor-provider-'));
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'claude-3-5-sonnet'})" +
+        "});" +
+        "const body=await res.json().catch(()=>({}));" +
+        "if(res.status===403&&body.reason_code==='PRV_PROCESSOR_PROVIDER_DENIED'){process.exit(0);}" +
+        "console.error(JSON.stringify({status:res.status,body}));" +
+        "process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: 'http://127.0.0.1:9',
+          CLAWSIG_PROCESSOR_ALLOWED_PROVIDERS: 'anthropic',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('proofed mode enforces processor model allowlist', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-processor-model-'));
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'gpt-4o-mini'})" +
+        "});" +
+        "const body=await res.json().catch(()=>({}));" +
+        "if(res.status===403&&body.reason_code==='PRV_PROCESSOR_MODEL_DENIED'){process.exit(0);}" +
+        "console.error(JSON.stringify({status:res.status,body}));" +
+        "process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: 'http://127.0.0.1:9',
+          CLAWSIG_PROCESSOR_ALLOWED_PROVIDERS: 'openai',
+          CLAWSIG_PROCESSOR_ALLOWED_MODELS: 'gpt-5-mini',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('proofed mode enforces processor region and retention constraints', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-processor-region-retention-'));
+
+    try {
+      const regionScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test','x-clawsig-region':'us','x-clawsig-retention-profile':'no_store'}," +
+        "body:JSON.stringify({model:'gpt-5-mini'})" +
+        "});" +
+        "const body=await res.json().catch(()=>({}));" +
+        "if(res.status===403&&body.reason_code==='PRV_PROCESSOR_REGION_DENIED'){process.exit(0);}" +
+        "console.error(JSON.stringify({status:res.status,body}));" +
+        "process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const regionResult = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', regionScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: 'http://127.0.0.1:9',
+          CLAWSIG_PROCESSOR_ALLOWED_PROVIDERS: 'openai',
+          CLAWSIG_PROCESSOR_ALLOWED_MODELS: 'gpt-5-mini',
+          CLAWSIG_PROCESSOR_ALLOWED_REGIONS: 'eu',
+          CLAWSIG_PROCESSOR_ALLOWED_RETENTION_PROFILES: 'no_store',
+        },
+      });
+      expect(regionResult.exitCode).toBe(0);
+
+      const retentionScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test','x-clawsig-region':'eu','x-clawsig-retention-profile':'provider_default'}," +
+        "body:JSON.stringify({model:'gpt-5-mini'})" +
+        "});" +
+        "const body=await res.json().catch(()=>({}));" +
+        "if(res.status===403&&body.reason_code==='PRV_PROCESSOR_RETENTION_DENIED'){process.exit(0);}" +
+        "console.error(JSON.stringify({status:res.status,body}));" +
+        "process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const retentionResult = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', retentionScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: 'http://127.0.0.1:9',
+          CLAWSIG_PROCESSOR_ALLOWED_PROVIDERS: 'openai',
+          CLAWSIG_PROCESSOR_ALLOWED_MODELS: 'gpt-5-mini',
+          CLAWSIG_PROCESSOR_ALLOWED_REGIONS: 'eu',
+          CLAWSIG_PROCESSOR_ALLOWED_RETENTION_PROFILES: 'no_store',
+        },
+      });
+      expect(retentionResult.exitCode).toBe(0);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('proofed mode emits signed processor-policy evidence in the proof bundle metadata', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-processor-evidence-'));
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test','x-clawsig-region':'eu','x-clawsig-retention-profile':'no_store'}," +
+        "body:JSON.stringify({model:'gpt-5-mini'})" +
+        "});" +
+        "if(res.status===502){process.exit(0);}" +
+        "const body=await res.json().catch(()=>({}));" +
+        "console.error(JSON.stringify({status:res.status,body}));" +
+        "process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: 'http://127.0.0.1:9',
+          CLAWSIG_PROCESSOR_POLICY_PROFILE: 'prv.pol.test-profile',
+          CLAWSIG_PROCESSOR_ALLOWED_PROVIDERS: 'openai',
+          CLAWSIG_PROCESSOR_ALLOWED_MODELS: 'gpt-5-mini',
+          CLAWSIG_PROCESSOR_ALLOWED_REGIONS: 'eu',
+          CLAWSIG_PROCESSOR_ALLOWED_RETENTION_PROFILES: 'no_store',
+        },
+      });
+      expect(result.exitCode).toBe(0);
+
+      const raw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(raw) as {
+        payload: {
+          event_chain?: Array<{
+            run_id: string;
+            event_hash_b64u: string;
+          }>;
+          metadata?: {
+            processor_policy?: {
+              receipt_version: string;
+              receipt_type: string;
+              profile_id: string;
+              policy_hash_b64u: string;
+              binding?: {
+                run_id?: string;
+                event_chain_root_hash_b64u?: string;
+              };
+              constraints?: {
+                allowed_providers?: string[];
+                allowed_models?: string[];
+                allowed_regions?: string[];
+                allowed_retention_profiles?: string[];
+                default_region?: string;
+                default_retention_profile?: string;
+              };
+              counters?: {
+                allowed_routes?: number;
+                denied_routes?: number;
+              };
+              used_processors?: Array<{
+                provider: string;
+                model: string;
+                region: string;
+                retention_profile: string;
+                count: number;
+              }>;
+            };
+          };
+        };
+      };
+
+      const evidence = bundle.payload.metadata?.processor_policy;
+      expect(evidence?.receipt_version).toBe('1');
+      expect(evidence?.receipt_type).toBe('processor_policy');
+      expect(evidence?.profile_id).toBe('prv.pol.test-profile');
+      expect(evidence?.policy_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(evidence?.binding?.run_id).toMatch(/^run_/);
+      expect(evidence?.binding?.event_chain_root_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(bundle.payload.event_chain?.[0]?.run_id).toBe(evidence?.binding?.run_id);
+      expect(bundle.payload.event_chain?.[0]?.event_hash_b64u).toBe(
+        evidence?.binding?.event_chain_root_hash_b64u,
+      );
+      expect(evidence?.constraints).toEqual({
+        allowed_providers: ['openai'],
+        allowed_models: ['gpt-5-mini'],
+        allowed_regions: ['eu'],
+        allowed_retention_profiles: ['no_store'],
+        default_region: 'unspecified',
+        default_retention_profile: 'unspecified',
+      });
+      expect(evidence?.counters?.allowed_routes).toBe(1);
+      expect(evidence?.counters?.denied_routes).toBe(0);
+      expect(evidence?.used_processors).toEqual([
+        {
+          provider: 'openai',
+          model: 'gpt-5-mini',
+          region: 'eu',
+          retention_profile: 'no_store',
+          count: 1,
+        },
+      ]);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

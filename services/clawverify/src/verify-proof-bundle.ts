@@ -50,6 +50,7 @@ import {
 import {
   computeHash,
   base64UrlDecode,
+  base64UrlEncode,
   extractPublicKeyFromDidKey,
   verifySignature,
 } from './crypto';
@@ -1203,6 +1204,58 @@ interface ClddMetrics {
   escapes_suspected: boolean;
 }
 
+interface ProcessorPolicyEvidenceRoute {
+  provider: string;
+  model: string;
+  region: string;
+  retention_profile: string;
+  count: number;
+}
+
+interface ProcessorPolicyEvidenceAttemptRoute {
+  provider: string;
+  model: string;
+  region: string;
+  retention_profile: string;
+}
+
+interface ProcessorPolicyEvidenceBlockedAttempt {
+  route: ProcessorPolicyEvidenceAttemptRoute;
+  reason_code: string;
+  timestamp: string;
+}
+
+interface ProcessorPolicyEvidenceConstraints {
+  allowed_providers: string[];
+  allowed_models: string[];
+  allowed_regions: string[];
+  allowed_retention_profiles: string[];
+  default_region: string;
+  default_retention_profile: string;
+}
+
+interface ProcessorPolicyEvidenceBinding {
+  run_id: string;
+  event_chain_root_hash_b64u?: string;
+}
+
+interface ProcessorPolicyEvidence {
+  receipt_version: '1';
+  receipt_type: 'processor_policy';
+  policy_version: string;
+  profile_id: string;
+  policy_hash_b64u: string;
+  enforce: boolean;
+  binding: ProcessorPolicyEvidenceBinding;
+  constraints: ProcessorPolicyEvidenceConstraints;
+  counters: {
+    allowed_routes: number;
+    denied_routes: number;
+  };
+  used_processors: ProcessorPolicyEvidenceRoute[];
+  blocked_attempts: ProcessorPolicyEvidenceBlockedAttempt[];
+}
+
 interface ClddDiscrepancySummary {
   claimed: ClddMetrics | null;
   attested: ClddMetrics | null;
@@ -1351,6 +1404,519 @@ function parseClddMetricsClaim(
       escapes_suspected: clddRaw.escapes_suspected,
     },
   };
+}
+
+function parseProcessorPolicyEvidence(
+  metadataRecord: Record<string, unknown> | null
+):
+  | { ok: true; evidence: ProcessorPolicyEvidence | null }
+  | {
+      ok: false;
+      message: string;
+      field: string;
+    } {
+  if (!metadataRecord) return { ok: true, evidence: null };
+
+  const raw = metadataRecord.processor_policy;
+  if (raw === undefined) return { ok: true, evidence: null };
+  if (!isObjectRecord(raw)) {
+    return {
+      ok: false,
+      message: 'payload.metadata.processor_policy must be an object when present',
+      field: 'payload.metadata.processor_policy',
+    };
+  }
+
+  if (raw.receipt_version !== '1') {
+    return {
+      ok: false,
+      message: 'payload.metadata.processor_policy.receipt_version must be "1"',
+      field: 'payload.metadata.processor_policy.receipt_version',
+    };
+  }
+
+  if (raw.receipt_type !== 'processor_policy') {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.receipt_type must be "processor_policy"',
+      field: 'payload.metadata.processor_policy.receipt_type',
+    };
+  }
+
+  if (typeof raw.policy_version !== 'string' || raw.policy_version.trim().length === 0) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.policy_version must be a non-empty string',
+      field: 'payload.metadata.processor_policy.policy_version',
+    };
+  }
+
+  if (typeof raw.profile_id !== 'string' || raw.profile_id.trim().length === 0) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.profile_id must be a non-empty string',
+      field: 'payload.metadata.processor_policy.profile_id',
+    };
+  }
+
+  if (
+    typeof raw.policy_hash_b64u !== 'string' ||
+    raw.policy_hash_b64u.length < 8 ||
+    !isValidBase64Url(raw.policy_hash_b64u)
+  ) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.policy_hash_b64u must be a base64url string (minLength 8)',
+      field: 'payload.metadata.processor_policy.policy_hash_b64u',
+    };
+  }
+
+  if (typeof raw.enforce !== 'boolean') {
+    return {
+      ok: false,
+      message: 'payload.metadata.processor_policy.enforce must be a boolean',
+      field: 'payload.metadata.processor_policy.enforce',
+    };
+  }
+
+  const binding = isObjectRecord(raw.binding) ? raw.binding : null;
+  if (!binding) {
+    return {
+      ok: false,
+      message: 'payload.metadata.processor_policy.binding must be an object',
+      field: 'payload.metadata.processor_policy.binding',
+    };
+  }
+
+  const bindingRunId =
+    typeof binding.run_id === 'string' && binding.run_id.trim().length > 0
+      ? binding.run_id
+      : null;
+  if (!bindingRunId) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.binding.run_id must be a non-empty string',
+      field: 'payload.metadata.processor_policy.binding.run_id',
+    };
+  }
+
+  const bindingChainRoot =
+    binding.event_chain_root_hash_b64u === undefined
+      ? undefined
+      : typeof binding.event_chain_root_hash_b64u === 'string' &&
+          binding.event_chain_root_hash_b64u.length >= 8 &&
+          isValidBase64Url(binding.event_chain_root_hash_b64u)
+        ? binding.event_chain_root_hash_b64u
+        : null;
+  if (bindingChainRoot === null) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.binding.event_chain_root_hash_b64u must be a base64url string (minLength 8) when present',
+      field: 'payload.metadata.processor_policy.binding.event_chain_root_hash_b64u',
+    };
+  }
+
+  const constraints = isObjectRecord(raw.constraints) ? raw.constraints : null;
+  if (!constraints) {
+    return {
+      ok: false,
+      message: 'payload.metadata.processor_policy.constraints must be an object',
+      field: 'payload.metadata.processor_policy.constraints',
+    };
+  }
+
+  const parseConstraintList = (
+    value: unknown,
+    field: string
+  ): { ok: true; values: string[] } | { ok: false; message: string; field: string } => {
+    if (!Array.isArray(value)) {
+      return {
+        ok: false,
+        message: `${field} must be an array`,
+        field,
+      };
+    }
+
+    const values: string[] = [];
+    for (let i = 0; i < value.length; i++) {
+      const entry = value[i];
+      if (typeof entry !== 'string' || entry.trim().length === 0) {
+        return {
+          ok: false,
+          message: `${field}[${i}] must be a non-empty string`,
+          field: `${field}[${i}]`,
+        };
+      }
+      values.push(entry);
+    }
+
+    if (values.length === 0) {
+      return {
+        ok: false,
+        message: `${field} must contain at least one entry`,
+        field,
+      };
+    }
+
+    return { ok: true, values };
+  };
+
+  const allowedProviders = parseConstraintList(
+    constraints.allowed_providers,
+    'payload.metadata.processor_policy.constraints.allowed_providers'
+  );
+  if (!allowedProviders.ok) {
+    return allowedProviders;
+  }
+
+  const allowedModels = parseConstraintList(
+    constraints.allowed_models,
+    'payload.metadata.processor_policy.constraints.allowed_models'
+  );
+  if (!allowedModels.ok) {
+    return allowedModels;
+  }
+
+  const allowedRegions = parseConstraintList(
+    constraints.allowed_regions,
+    'payload.metadata.processor_policy.constraints.allowed_regions'
+  );
+  if (!allowedRegions.ok) {
+    return allowedRegions;
+  }
+
+  const allowedRetentionProfiles = parseConstraintList(
+    constraints.allowed_retention_profiles,
+    'payload.metadata.processor_policy.constraints.allowed_retention_profiles'
+  );
+  if (!allowedRetentionProfiles.ok) {
+    return allowedRetentionProfiles;
+  }
+
+  const defaultRegion =
+    typeof constraints.default_region === 'string' &&
+    constraints.default_region.trim().length > 0
+      ? constraints.default_region
+      : null;
+  if (!defaultRegion) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.constraints.default_region must be a non-empty string',
+      field: 'payload.metadata.processor_policy.constraints.default_region',
+    };
+  }
+
+  const defaultRetentionProfile =
+    typeof constraints.default_retention_profile === 'string' &&
+    constraints.default_retention_profile.trim().length > 0
+      ? constraints.default_retention_profile
+      : null;
+  if (!defaultRetentionProfile) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.constraints.default_retention_profile must be a non-empty string',
+      field:
+        'payload.metadata.processor_policy.constraints.default_retention_profile',
+    };
+  }
+
+  const counters = isObjectRecord(raw.counters) ? raw.counters : null;
+  if (!counters) {
+    return {
+      ok: false,
+      message: 'payload.metadata.processor_policy.counters must be an object',
+      field: 'payload.metadata.processor_policy.counters',
+    };
+  }
+
+  const allowedRoutes = toNonNegativeInteger(counters.allowed_routes);
+  if (allowedRoutes === null) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.counters.allowed_routes must be a non-negative integer',
+      field: 'payload.metadata.processor_policy.counters.allowed_routes',
+    };
+  }
+
+  const deniedRoutes = toNonNegativeInteger(counters.denied_routes);
+  if (deniedRoutes === null) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.counters.denied_routes must be a non-negative integer',
+      field: 'payload.metadata.processor_policy.counters.denied_routes',
+    };
+  }
+
+  const usedProcessorsRaw = raw.used_processors;
+  if (!Array.isArray(usedProcessorsRaw)) {
+    return {
+      ok: false,
+      message: 'payload.metadata.processor_policy.used_processors must be an array',
+      field: 'payload.metadata.processor_policy.used_processors',
+    };
+  }
+
+  const usedProcessors: ProcessorPolicyEvidenceRoute[] = [];
+  for (let i = 0; i < usedProcessorsRaw.length; i++) {
+    const route = usedProcessorsRaw[i];
+    if (!isObjectRecord(route)) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.used_processors entries must be objects',
+        field: `payload.metadata.processor_policy.used_processors[${i}]`,
+      };
+    }
+
+    const provider =
+      typeof route.provider === 'string' && route.provider.trim().length > 0
+        ? route.provider
+        : null;
+    const model =
+      typeof route.model === 'string' && route.model.trim().length > 0
+        ? route.model
+        : null;
+    const region =
+      typeof route.region === 'string' && route.region.trim().length > 0
+        ? route.region
+        : null;
+    const retentionProfile =
+      typeof route.retention_profile === 'string' &&
+      route.retention_profile.trim().length > 0
+        ? route.retention_profile
+        : null;
+    const count = toNonNegativeInteger(route.count);
+
+    if (!provider) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.used_processors[*].provider must be a non-empty string',
+        field: `payload.metadata.processor_policy.used_processors[${i}].provider`,
+      };
+    }
+    if (!model) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.used_processors[*].model must be a non-empty string',
+        field: `payload.metadata.processor_policy.used_processors[${i}].model`,
+      };
+    }
+    if (!region) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.used_processors[*].region must be a non-empty string',
+        field: `payload.metadata.processor_policy.used_processors[${i}].region`,
+      };
+    }
+    if (!retentionProfile) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.used_processors[*].retention_profile must be a non-empty string',
+        field: `payload.metadata.processor_policy.used_processors[${i}].retention_profile`,
+      };
+    }
+    if (count === null) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.used_processors[*].count must be a non-negative integer',
+        field: `payload.metadata.processor_policy.used_processors[${i}].count`,
+      };
+    }
+
+    usedProcessors.push({
+      provider,
+      model,
+      region,
+      retention_profile: retentionProfile,
+      count,
+    });
+  }
+
+  const blockedAttemptsRaw =
+    raw.blocked_attempts === undefined ? [] : raw.blocked_attempts;
+  if (!Array.isArray(blockedAttemptsRaw)) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.processor_policy.blocked_attempts must be an array when present',
+      field: 'payload.metadata.processor_policy.blocked_attempts',
+    };
+  }
+
+  const blockedAttempts: ProcessorPolicyEvidenceBlockedAttempt[] = [];
+  for (let i = 0; i < blockedAttemptsRaw.length; i++) {
+    const attempt = blockedAttemptsRaw[i];
+    if (!isObjectRecord(attempt)) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.blocked_attempts entries must be objects',
+        field: `payload.metadata.processor_policy.blocked_attempts[${i}]`,
+      };
+    }
+
+    const route = isObjectRecord(attempt.route) ? attempt.route : null;
+    if (!route) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.blocked_attempts[*].route must be an object',
+        field: `payload.metadata.processor_policy.blocked_attempts[${i}].route`,
+      };
+    }
+
+    const provider =
+      typeof route.provider === 'string' && route.provider.trim().length > 0
+        ? route.provider
+        : null;
+    const model =
+      typeof route.model === 'string' && route.model.trim().length > 0
+        ? route.model
+        : null;
+    const region =
+      typeof route.region === 'string' && route.region.trim().length > 0
+        ? route.region
+        : null;
+    const retentionProfile =
+      typeof route.retention_profile === 'string' &&
+      route.retention_profile.trim().length > 0
+        ? route.retention_profile
+        : null;
+
+    if (!provider) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.blocked_attempts[*].route.provider must be a non-empty string',
+        field: `payload.metadata.processor_policy.blocked_attempts[${i}].route.provider`,
+      };
+    }
+    if (!model) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.blocked_attempts[*].route.model must be a non-empty string',
+        field: `payload.metadata.processor_policy.blocked_attempts[${i}].route.model`,
+      };
+    }
+    if (!region) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.blocked_attempts[*].route.region must be a non-empty string',
+        field: `payload.metadata.processor_policy.blocked_attempts[${i}].route.region`,
+      };
+    }
+    if (!retentionProfile) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.blocked_attempts[*].route.retention_profile must be a non-empty string',
+        field: `payload.metadata.processor_policy.blocked_attempts[${i}].route.retention_profile`,
+      };
+    }
+
+    if (
+      typeof attempt.reason_code !== 'string' ||
+      attempt.reason_code.trim().length === 0
+    ) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.blocked_attempts[*].reason_code must be a non-empty string',
+        field: `payload.metadata.processor_policy.blocked_attempts[${i}].reason_code`,
+      };
+    }
+
+    if (
+      typeof attempt.timestamp !== 'string' ||
+      !isValidIsoDate(attempt.timestamp)
+    ) {
+      return {
+        ok: false,
+        message:
+          'payload.metadata.processor_policy.blocked_attempts[*].timestamp must be an ISO-8601 string',
+        field: `payload.metadata.processor_policy.blocked_attempts[${i}].timestamp`,
+      };
+    }
+
+    blockedAttempts.push({
+      route: {
+        provider,
+        model,
+        region,
+        retention_profile: retentionProfile,
+      },
+      reason_code: attempt.reason_code,
+      timestamp: attempt.timestamp,
+    });
+  }
+
+  return {
+    ok: true,
+    evidence: {
+      receipt_version: '1',
+      receipt_type: 'processor_policy',
+      policy_version: raw.policy_version,
+      profile_id: raw.profile_id,
+      policy_hash_b64u: raw.policy_hash_b64u,
+      enforce: raw.enforce,
+      binding: {
+        run_id: bindingRunId,
+        ...(bindingChainRoot ? { event_chain_root_hash_b64u: bindingChainRoot } : {}),
+      },
+      constraints: {
+        allowed_providers: allowedProviders.values,
+        allowed_models: allowedModels.values,
+        allowed_regions: allowedRegions.values,
+        allowed_retention_profiles: allowedRetentionProfiles.values,
+        default_region: defaultRegion,
+        default_retention_profile: defaultRetentionProfile,
+      },
+      counters: {
+        allowed_routes: allowedRoutes,
+        denied_routes: deniedRoutes,
+      },
+      used_processors: usedProcessors,
+      blocked_attempts: blockedAttempts,
+    },
+  };
+}
+
+async function computeProcessorPolicyHashB64u(
+  evidence: ProcessorPolicyEvidence
+): Promise<string> {
+  const canonical = jcsCanonicalize({
+    policy_version: evidence.policy_version,
+    profile_id: evidence.profile_id,
+    enforce: evidence.enforce,
+    allowed_providers: evidence.constraints.allowed_providers,
+    allowed_models: evidence.constraints.allowed_models,
+    allowed_regions: evidence.constraints.allowed_regions,
+    allowed_retention_profiles: evidence.constraints.allowed_retention_profiles,
+    default_region: evidence.constraints.default_region,
+    default_retention_profile: evidence.constraints.default_retention_profile,
+  });
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(canonical)
+  );
+  return base64UrlEncode(new Uint8Array(digest));
 }
 
 function aggregateCoverageClddMetrics(
@@ -4404,6 +4970,172 @@ export async function verifyProofBundle(
         field: clddMetricsClaim.field,
       },
     };
+  }
+
+  const processorPolicyEvidence = parseProcessorPolicyEvidence(metadataRecord);
+  if (!processorPolicyEvidence.ok) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: processorPolicyEvidence.message,
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: processorPolicyEvidence.message,
+        field: processorPolicyEvidence.field,
+      },
+    };
+  }
+
+  if (processorPolicyEvidence.evidence) {
+    const computedProcessorPolicyHash = await computeProcessorPolicyHashB64u(
+      processorPolicyEvidence.evidence
+    );
+    if (
+      computedProcessorPolicyHash !==
+      processorPolicyEvidence.evidence.policy_hash_b64u
+    ) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'payload.metadata.processor_policy.policy_hash_b64u does not match the canonical processor policy constraints',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: 'HASH_MISMATCH',
+          message:
+            'payload.metadata.processor_policy.policy_hash_b64u must match the canonical SHA-256 hash of the declared processor policy constraints',
+          field: 'payload.metadata.processor_policy.policy_hash_b64u',
+        },
+      };
+    }
+
+    const usedProcessorCount = processorPolicyEvidence.evidence.used_processors.reduce(
+      (sum, route) => sum + route.count,
+      0
+    );
+    if (
+      usedProcessorCount !==
+      processorPolicyEvidence.evidence.counters.allowed_routes
+    ) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'payload.metadata.processor_policy.counters.allowed_routes must equal the sum of used_processors[*].count',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message:
+            'payload.metadata.processor_policy.counters.allowed_routes must equal the sum of payload.metadata.processor_policy.used_processors[*].count',
+          field: 'payload.metadata.processor_policy.counters.allowed_routes',
+        },
+      };
+    }
+
+    if (
+      processorPolicyEvidence.evidence.blocked_attempts.length !==
+      processorPolicyEvidence.evidence.counters.denied_routes
+    ) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'payload.metadata.processor_policy.counters.denied_routes must equal payload.metadata.processor_policy.blocked_attempts.length',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message:
+            'payload.metadata.processor_policy.counters.denied_routes must equal payload.metadata.processor_policy.blocked_attempts.length',
+          field: 'payload.metadata.processor_policy.counters.denied_routes',
+        },
+      };
+    }
+
+    const expectedProcessorRunId =
+      payload.event_chain && payload.event_chain.length > 0
+        ? payload.event_chain[0].run_id
+        : null;
+    if (
+      expectedProcessorRunId &&
+      processorPolicyEvidence.evidence.binding.run_id !== expectedProcessorRunId
+    ) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'payload.metadata.processor_policy.binding.run_id does not match the proof bundle run_id',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message:
+            'payload.metadata.processor_policy.binding.run_id must match payload.event_chain[0].run_id',
+          field: 'payload.metadata.processor_policy.binding.run_id',
+        },
+      };
+    }
+
+    const expectedProcessorChainRoot =
+      typeof componentResults.chain_root_hash === 'string' &&
+      componentResults.chain_root_hash.length > 0
+        ? componentResults.chain_root_hash
+        : null;
+    if (
+      expectedProcessorChainRoot &&
+      processorPolicyEvidence.evidence.binding.event_chain_root_hash_b64u !==
+        expectedProcessorChainRoot
+    ) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'payload.metadata.processor_policy.binding.event_chain_root_hash_b64u does not match the proof bundle event chain root hash',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message:
+            'payload.metadata.processor_policy.binding.event_chain_root_hash_b64u must match the proof bundle event chain root hash',
+          field:
+            'payload.metadata.processor_policy.binding.event_chain_root_hash_b64u',
+        },
+      };
+    }
+
+    const processorComponent = componentResults as unknown as Record<string, unknown>;
+    processorComponent['processor_policy_evidence_present'] = true;
+    processorComponent['processor_policy_evidence_valid'] = true;
+    processorComponent['processor_policy_binding_run_id'] =
+      processorPolicyEvidence.evidence.binding.run_id;
+    processorComponent['processor_policy_binding_chain_root_hash_b64u'] =
+      processorPolicyEvidence.evidence.binding.event_chain_root_hash_b64u;
+    processorComponent['processor_policy_profile_id'] =
+      processorPolicyEvidence.evidence.profile_id;
+    processorComponent['processor_policy_hash_b64u'] =
+      computedProcessorPolicyHash;
+    processorComponent['processor_policy_allowed_routes'] =
+      processorPolicyEvidence.evidence.counters.allowed_routes;
+    processorComponent['processor_policy_denied_routes'] =
+      processorPolicyEvidence.evidence.counters.denied_routes;
+    processorComponent['processor_policy_used_processors_count'] =
+      processorPolicyEvidence.evidence.used_processors.length;
   }
 
   const metadataBountyNonce =

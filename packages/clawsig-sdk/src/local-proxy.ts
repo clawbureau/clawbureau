@@ -99,6 +99,51 @@ interface EgressPolicy {
   allowlist: string[];
 }
 
+interface ProcessorPolicy {
+  enforce: boolean;
+  policy_version: '1';
+  profile_id: string;
+  allowed_providers: string[];
+  allowed_models: string[];
+  allowed_regions: string[];
+  allowed_retention_profiles: string[];
+  default_region: string;
+  default_retention_profile: string;
+}
+
+interface ProcessorPolicyConstraints {
+  allowed_providers: string[];
+  allowed_models: string[];
+  allowed_regions: string[];
+  allowed_retention_profiles: string[];
+  default_region: string;
+  default_retention_profile: string;
+}
+
+interface ProcessorRouteClaims {
+  provider: string;
+  model: string;
+  region: string;
+  retention_profile: string;
+}
+
+interface ProcessorPolicyDecision {
+  allowed: boolean;
+  route: ProcessorRouteClaims;
+  reason_code?: string;
+}
+
+interface ProcessorPolicyState {
+  allowed_count: number;
+  denied_count: number;
+  used_processors: Map<string, { route: ProcessorRouteClaims; count: number }>;
+  blocked_attempts: Array<{
+    route: ProcessorRouteClaims;
+    reason_code: string;
+    timestamp: string;
+  }>;
+}
+
 class EgressPolicyError extends Error {
   readonly code = 'PRV_EGRESS_DENIED';
   readonly destination: string;
@@ -107,6 +152,342 @@ class EgressPolicyError extends Error {
     super(`Outbound destination is not allowlisted: ${destination}`);
     this.name = 'EgressPolicyError';
     this.destination = destination;
+  }
+}
+
+class ProcessorPolicyError extends Error {
+  readonly code = 'PRV_PROCESSOR_POLICY_DENIED';
+  readonly reasonCode: string;
+  readonly route: ProcessorRouteClaims;
+
+  constructor(reasonCode: string, route: ProcessorRouteClaims) {
+    super(`Processor policy denied route (${reasonCode})`);
+    this.name = 'ProcessorPolicyError';
+    this.reasonCode = reasonCode;
+    this.route = route;
+  }
+}
+
+function parseBooleanEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'y';
+}
+
+function normalizePolicyToken(raw: string): string | null {
+  const trimmed = raw.trim().toLowerCase();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parsePolicyTokenList(raw: string | undefined): string[] {
+  if (!raw || raw.trim().length === 0) return [];
+  const out = new Set<string>();
+  for (const token of raw.split(',')) {
+    const normalized = normalizePolicyToken(token);
+    if (normalized) out.add(normalized);
+  }
+  return [...out];
+}
+
+function normalizePolicyModel(model: string): string {
+  return model.trim().toLowerCase();
+}
+
+function matchesWildcardPattern(value: string, pattern: string): boolean {
+  if (pattern === '*') return true;
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${escaped}$`).test(value);
+}
+
+function valueMatchesAllowlist(value: string, allowlist: string[]): boolean {
+  if (allowlist.length === 0) return false;
+  const normalized = value.trim().toLowerCase();
+  for (const entry of allowlist) {
+    if (entry === '*') return true;
+    if (matchesWildcardPattern(normalized, entry)) return true;
+  }
+  return false;
+}
+
+function canonicalizeJson(value: unknown): string {
+  if (value === null) return 'null';
+
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalizeJson(entry)).join(',')}]`;
+  }
+
+  switch (typeof value) {
+    case 'string':
+      return JSON.stringify(value);
+    case 'number':
+      if (!Number.isFinite(value)) {
+        throw new Error('Cannot canonicalize non-finite number');
+      }
+      return JSON.stringify(value);
+    case 'boolean':
+      return value ? 'true' : 'false';
+    case 'object': {
+      const record = value as Record<string, unknown>;
+      const keys = Object.keys(record).sort((a, b) => a.localeCompare(b));
+      return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalizeJson(record[key])}`).join(',')}}`;
+    }
+    default:
+      throw new Error(`Cannot canonicalize JSON value of type ${typeof value}`);
+  }
+}
+
+function buildProcessorPolicyConstraints(policy: ProcessorPolicy): ProcessorPolicyConstraints {
+  return {
+    allowed_providers: [...policy.allowed_providers],
+    allowed_models: [...policy.allowed_models],
+    allowed_regions: [...policy.allowed_regions],
+    allowed_retention_profiles: [...policy.allowed_retention_profiles],
+    default_region: policy.default_region,
+    default_retention_profile: policy.default_retention_profile,
+  };
+}
+
+async function hashProcessorPolicyCanonicalB64u(policy: ProcessorPolicy): Promise<string> {
+  const canonical = canonicalizeJson({
+    policy_version: policy.policy_version,
+    profile_id: policy.profile_id,
+    enforce: policy.enforce,
+    ...buildProcessorPolicyConstraints(policy),
+  });
+  return sha256B64u(new TextEncoder().encode(canonical));
+}
+
+function readHeaderValue(
+  headers: Record<string, string | string[] | undefined>,
+  names: string[],
+): string | undefined {
+  for (const name of names) {
+    const direct = headers[name];
+    if (typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
+    if (Array.isArray(direct) && direct.length > 0 && direct[0]?.trim()) return direct[0].trim();
+
+    const lower = headers[name.toLowerCase()];
+    if (typeof lower === 'string' && lower.trim().length > 0) return lower.trim();
+    if (Array.isArray(lower) && lower.length > 0 && lower[0]?.trim()) return lower[0].trim();
+  }
+  return undefined;
+}
+
+function parseJsonBodyRecord(bodyBuffer: Buffer): Record<string, unknown> | null {
+  if (bodyBuffer.length === 0) return null;
+  try {
+    const parsed = JSON.parse(bodyBuffer.toString('utf-8'));
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStringField(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveProcessorModel(
+  provider: string,
+  body: Record<string, unknown> | null,
+): string | null {
+  const direct = body ? readStringField(body.model) : undefined;
+  if (direct) return normalizePolicyModel(direct);
+
+  if (provider === 'google' && body) {
+    const nestedModel = readStringField(body['model_name']);
+    if (nestedModel) return normalizePolicyModel(nestedModel);
+  }
+
+  return null;
+}
+
+function resolveProcessorRegion(
+  body: Record<string, unknown> | null,
+  headers: Record<string, string | string[] | undefined>,
+  fallbackRegion: string,
+): string {
+  const fromHeader = readHeaderValue(headers, ['x-clawsig-region']);
+  if (fromHeader) return normalizePolicyModel(fromHeader);
+
+  const direct = body ? readStringField(body.region) : undefined;
+  if (direct) return normalizePolicyModel(direct);
+
+  const metadata = body && typeof body.metadata === 'object' && body.metadata !== null && !Array.isArray(body.metadata)
+    ? (body.metadata as Record<string, unknown>)
+    : null;
+  const nested = metadata ? readStringField(metadata.region) : undefined;
+  if (nested) return normalizePolicyModel(nested);
+
+  return fallbackRegion;
+}
+
+function resolveRetentionProfile(
+  body: Record<string, unknown> | null,
+  headers: Record<string, string | string[] | undefined>,
+  fallbackRetentionProfile: string,
+): string {
+  const fromHeader = readHeaderValue(headers, ['x-clawsig-retention-profile']);
+  if (fromHeader) return normalizePolicyModel(fromHeader);
+
+  const fromSnake = body ? readStringField(body.retention_profile) : undefined;
+  if (fromSnake) return normalizePolicyModel(fromSnake);
+
+  const fromCamel = body ? readStringField(body.retentionProfile) : undefined;
+  if (fromCamel) return normalizePolicyModel(fromCamel);
+
+  const fromPromptCache = body ? readStringField(body.prompt_cache_retention) : undefined;
+  if (fromPromptCache) return normalizePolicyModel(fromPromptCache);
+
+  if (body && typeof body.store === 'boolean') {
+    return body.store ? 'provider_default' : 'no_store';
+  }
+
+  return fallbackRetentionProfile;
+}
+
+function buildProcessorRouteClaims(args: {
+  provider: string;
+  bodyBuffer: Buffer;
+  headers: Record<string, string | string[] | undefined>;
+  policy: ProcessorPolicy;
+}): ProcessorRouteClaims | null {
+  const provider = normalizePolicyModel(args.provider);
+  const body = parseJsonBodyRecord(args.bodyBuffer);
+  const model = resolveProcessorModel(provider, body);
+  if (!model) return null;
+
+  return {
+    provider,
+    model,
+    region: resolveProcessorRegion(body, args.headers, args.policy.default_region),
+    retention_profile: resolveRetentionProfile(
+      body,
+      args.headers,
+      args.policy.default_retention_profile,
+    ),
+  };
+}
+
+function resolveProcessorPolicy(proofedMode: boolean): ProcessorPolicy {
+  const enforceRequested = parseBooleanEnv(process.env['CLAWSIG_PROCESSOR_POLICY_ENFORCE']);
+  const enforce = proofedMode && (enforceRequested || process.env['CLAWSIG_PROCESSOR_POLICY_ENFORCE'] === undefined);
+
+  const allowedProviders = parsePolicyTokenList(process.env['CLAWSIG_PROCESSOR_ALLOWED_PROVIDERS']);
+  const allowedModels = parsePolicyTokenList(process.env['CLAWSIG_PROCESSOR_ALLOWED_MODELS']);
+  const allowedRegions = parsePolicyTokenList(process.env['CLAWSIG_PROCESSOR_ALLOWED_REGIONS']);
+  const allowedRetentionProfiles = parsePolicyTokenList(
+    process.env['CLAWSIG_PROCESSOR_ALLOWED_RETENTION_PROFILES'],
+  );
+
+  const defaultRegionRaw =
+    process.env['CLAWSIG_PROCESSOR_DEFAULT_REGION']?.trim() ||
+    process.env['CLAWSIG_PROCESSOR_REGION']?.trim();
+  const defaultRetentionRaw =
+    process.env['CLAWSIG_PROCESSOR_DEFAULT_RETENTION_PROFILE']?.trim() ||
+    process.env['CLAWSIG_PROCESSOR_RETENTION_PROFILE']?.trim();
+
+  const defaultRegion = normalizePolicyModel(defaultRegionRaw ?? 'unspecified');
+  const defaultRetentionProfile = normalizePolicyModel(defaultRetentionRaw ?? 'unspecified');
+
+  return {
+    enforce,
+    policy_version: '1',
+    profile_id:
+      process.env['CLAWSIG_PROCESSOR_POLICY_PROFILE']?.trim() ||
+      process.env['CLAWSIG_PROCESSOR_POLICY_PROFILE_ID']?.trim() ||
+      'prv.pol.v1.default',
+    allowed_providers:
+      allowedProviders.length > 0 ? allowedProviders : ['openai', 'anthropic', 'google'],
+    allowed_models: allowedModels.length > 0 ? allowedModels : ['*'],
+    allowed_regions: allowedRegions.length > 0 ? allowedRegions : [defaultRegion],
+    allowed_retention_profiles:
+      allowedRetentionProfiles.length > 0 ? allowedRetentionProfiles : [defaultRetentionProfile],
+    default_region: defaultRegion,
+    default_retention_profile: defaultRetentionProfile,
+  };
+}
+
+function evaluateProcessorPolicy(
+  policy: ProcessorPolicy,
+  route: ProcessorRouteClaims | null,
+): ProcessorPolicyDecision {
+  if (!policy.enforce) {
+    return {
+      allowed: true,
+      route: route ?? {
+        provider: 'unknown',
+        model: 'unknown',
+        region: policy.default_region,
+        retention_profile: policy.default_retention_profile,
+      },
+    };
+  }
+
+  if (!route) {
+    return {
+      allowed: false,
+      route: {
+        provider: 'unknown',
+        model: 'unknown',
+        region: policy.default_region,
+        retention_profile: policy.default_retention_profile,
+      },
+      reason_code: 'PRV_PROCESSOR_MODEL_MISSING',
+    };
+  }
+
+  if (!valueMatchesAllowlist(route.provider, policy.allowed_providers)) {
+    return { allowed: false, route, reason_code: 'PRV_PROCESSOR_PROVIDER_DENIED' };
+  }
+
+  if (!valueMatchesAllowlist(route.model, policy.allowed_models)) {
+    return { allowed: false, route, reason_code: 'PRV_PROCESSOR_MODEL_DENIED' };
+  }
+
+  if (!valueMatchesAllowlist(route.region, policy.allowed_regions)) {
+    return { allowed: false, route, reason_code: 'PRV_PROCESSOR_REGION_DENIED' };
+  }
+
+  if (!valueMatchesAllowlist(route.retention_profile, policy.allowed_retention_profiles)) {
+    return { allowed: false, route, reason_code: 'PRV_PROCESSOR_RETENTION_DENIED' };
+  }
+
+  return { allowed: true, route };
+}
+
+function recordProcessorPolicyDecision(
+  state: ProcessorPolicyState,
+  decision: ProcessorPolicyDecision,
+  timestamp: string,
+): void {
+  const route = decision.route;
+  if (decision.allowed) {
+    state.allowed_count += 1;
+    const key = `${route.provider}|${route.model}|${route.region}|${route.retention_profile}`;
+    const existing = state.used_processors.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      state.used_processors.set(key, { route, count: 1 });
+    }
+    return;
+  }
+
+  state.denied_count += 1;
+  if (decision.reason_code) {
+    state.blocked_attempts.push({
+      route,
+      reason_code: decision.reason_code,
+      timestamp,
+    });
+    if (state.blocked_attempts.length > 25) {
+      state.blocked_attempts.splice(0, state.blocked_attempts.length - 25);
+    }
   }
 }
 
@@ -610,6 +991,15 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
   const egressPolicy: EgressPolicy | undefined = enforceEgressAllowlist
     ? { enforce: true, allowlist: normalizedEgressAllowlist }
     : undefined;
+  const proofedMode = parseBooleanEnv(process.env['CLAWSIG_PROOFED']);
+  const processorPolicy = resolveProcessorPolicy(proofedMode);
+  const processorPolicyState: ProcessorPolicyState = {
+    allowed_count: 0,
+    denied_count: 0,
+    used_processors: new Map(),
+    blocked_attempts: [],
+  };
+  const eventChainEntries: EventChainEntry[] = [];
   const receipts: CollectedReceipt[] = [];
   let plannedPrevHash: string | null = null;
 
@@ -685,6 +1075,22 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         event_hash_b64u: eventHash,
       };
       plannedPrevHash = eventHash;
+      eventChainEntries.push(eventChainEntry);
+
+      const processorRoute = buildProcessorRouteClaims({
+        provider,
+        bodyBuffer,
+        headers: req.headers as Record<string, string | string[] | undefined>,
+        policy: processorPolicy,
+      });
+      const processorDecision = evaluateProcessorPolicy(processorPolicy, processorRoute);
+      recordProcessorPolicyDecision(processorPolicyState, processorDecision, eventTimestamp);
+      if (!processorDecision.allowed) {
+        throw new ProcessorPolicyError(
+          processorDecision.reason_code ?? 'PRV_PROCESSOR_POLICY_DENIED',
+          processorDecision.route,
+        );
+      }
 
       // Extract provider key from the incoming request, fall back to constructor option
       const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
@@ -815,6 +1221,17 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         return;
       }
 
+      if (err instanceof ProcessorPolicyError) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: err.code,
+          reason_code: err.reasonCode,
+          route: err.route,
+          message: err.message,
+        }));
+        return;
+      }
+
       const message = err instanceof Error ? err.message : 'Proxy forwarding failed';
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'PROXY_ERROR', message }));
@@ -865,7 +1282,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     // Build the event chain from the precomputed request headers used for
     // receipt binding. The event_hash_b64u must match the exact X-Event-Hash
     // sent to clawproxy, otherwise downstream binding verification will fail.
-    const eventChain: EventChainEntry[] = receipts.map((r) => r.eventChainEntry);
+    const eventChain: EventChainEntry[] = [...eventChainEntries];
 
     const envelopes = receipts.map((r) => r.envelope);
 
@@ -884,6 +1301,52 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         },
         // RED TEAM FIX #7: Per-run ephemeral salt for privacy.
         run_salt_b64u: runSaltB64u,
+      },
+    };
+
+    if (eventChain.length > 0) {
+      payload.event_chain = eventChain;
+    }
+
+    const processorPolicyHash = await hashProcessorPolicyCanonicalB64u(processorPolicy);
+    const processorPolicyConstraints = buildProcessorPolicyConstraints(processorPolicy);
+    const eventChainRootHash = eventChain.length > 0 ? eventChain[0].event_hash_b64u : undefined;
+
+    const usedProcessors = [...processorPolicyState.used_processors.values()]
+      .sort((a, b) => {
+        const aKey = `${a.route.provider}|${a.route.model}|${a.route.region}|${a.route.retention_profile}`;
+        const bKey = `${b.route.provider}|${b.route.model}|${b.route.region}|${b.route.retention_profile}`;
+        return aKey.localeCompare(bKey);
+      })
+      .map((entry) => ({
+        ...entry.route,
+        count: entry.count,
+      }));
+
+    payload.metadata = {
+      ...payload.metadata,
+      processor_policy: {
+        receipt_version: '1',
+        receipt_type: 'processor_policy',
+        policy_version: processorPolicy.policy_version,
+        profile_id: processorPolicy.profile_id,
+        policy_hash_b64u: processorPolicyHash,
+        enforce: processorPolicy.enforce,
+        binding: {
+          run_id: runId,
+          ...(eventChainRootHash ? { event_chain_root_hash_b64u: eventChainRootHash } : {}),
+        },
+        constraints: processorPolicyConstraints,
+        counters: {
+          allowed_routes: processorPolicyState.allowed_count,
+          denied_routes: processorPolicyState.denied_count,
+        },
+        used_processors: usedProcessors,
+        blocked_attempts: processorPolicyState.blocked_attempts.map((attempt) => ({
+          route: { ...attempt.route },
+          reason_code: attempt.reason_code,
+          timestamp: attempt.timestamp,
+        })),
       },
     };
 
