@@ -89,6 +89,24 @@ describe('buildProofReport', () => {
     expect(report.gateway.model).toBe('gemini-2.5-flash');
     expect(report.network.classification_counts.expected).toBe(2);
     expect(report.network.top_processes[0]).toEqual({ process_name: 'node', count: 2 });
+    expect(report.review_buckets.map((bucket) => bucket.label)).toEqual([
+      'Gateway proof',
+      'Execution hygiene',
+      'Background noise / ignorable infra',
+      'Reviewer action needed',
+    ]);
+    expect(report.review_buckets[0]).toMatchObject({
+      key: 'gateway_proof',
+      tone: 'good',
+    });
+    expect(report.review_buckets[1]).toMatchObject({
+      key: 'execution_hygiene',
+      tone: 'action',
+    });
+    expect(report.review_buckets[2].summary).toContain('Google Chrome Helper');
+    expect(report.review_buckets[3].items).toContain(
+      'Resolve or explain the CLDD escape-suspected signal before using this as buyer-facing proof.',
+    );
     expect(report.warnings).toContain('2 suspicious network events were recorded.');
     expect(report.warnings).toContain('4 unmediated connections were observed by CLDD.');
     expect(report.warnings).toContain('1 unmonitored spawns were detected.');
@@ -117,6 +135,8 @@ describe('renderProofReportHtml', () => {
     expect(html).toContain('bundle_test_report');
     expect(html).toContain('gemini-2.5-flash');
     expect(html).toContain('did:web:clawproxy.com');
+    expect(html).toContain('Background noise / ignorable infra');
+    expect(html).toContain('Reviewer action needed');
     expect(html).toContain('needs &lt;review&gt; &amp; confirmation');
     expect(html).toContain('clawverify verify proof-bundle --input /tmp/proof_bundle.json');
   });

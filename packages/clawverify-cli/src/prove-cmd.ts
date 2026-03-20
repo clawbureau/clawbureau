@@ -23,6 +23,16 @@ export interface ProofGatewaySummary {
   timestamp: string | null;
 }
 
+export type ProofReviewBucketTone = 'good' | 'caution' | 'info' | 'action';
+
+export interface ProofReviewBucket {
+  key: 'gateway_proof' | 'execution_hygiene' | 'background_noise' | 'reviewer_action_needed';
+  label: string;
+  tone: ProofReviewBucketTone;
+  summary: string;
+  items: string[];
+}
+
 export interface ProofReport {
   input_path: string;
   run_summary_path: string | null;
@@ -60,12 +70,18 @@ export interface ProofReport {
     classification_counts: Record<string, number>;
     top_processes: Array<{ process_name: string; count: number }>;
   };
+  review_buckets: ProofReviewBucket[];
   warnings: string[];
   next_steps: string[];
   verify_command: string;
   html_path?: string;
   decrypted_payload_keys?: string[];
 }
+
+type ProofReportBase = Omit<
+  ProofReport,
+  'input_path' | 'run_summary_path' | 'generated_at' | 'review_buckets' | 'warnings' | 'next_steps' | 'verify_command' | 'html_path'
+>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -81,6 +97,19 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return count === 1 ? singular : plural;
+}
+
+function formatTopProcesses(processes: Array<{ process_name: string; count: number }>): string {
+  if (processes.length === 0) return 'no dominant processes recorded';
+  if (processes.length === 1) return `${processes[0]!.process_name} (${processes[0]!.count})`;
+  if (processes.length === 2) {
+    return `${processes[0]!.process_name} (${processes[0]!.count}) and ${processes[1]!.process_name} (${processes[1]!.count})`;
+  }
+  return `${processes[0]!.process_name} (${processes[0]!.count}), ${processes[1]!.process_name} (${processes[1]!.count}), and ${processes.length - 2} more`;
 }
 
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
@@ -178,7 +207,119 @@ function summarizeSentinels(payload: Record<string, unknown>): ProofReport['sent
   };
 }
 
-function deriveWarnings(report: Omit<ProofReport, 'warnings' | 'next_steps' | 'verify_command' | 'generated_at' | 'input_path' | 'run_summary_path' | 'html_path'>): string[] {
+function deriveReviewBuckets(report: ProofReportBase): ProofReviewBucket[] {
+  const gatewayItems = report.gateway.signed_count > 0
+    ? [
+        `Signed gateway receipt count: ${report.gateway.signed_count}.`,
+        report.gateway.signer_dids[0] ? `Gateway signer DID: ${report.gateway.signer_dids[0]}.` : null,
+        report.gateway.gateway_id ? `Gateway identity: ${report.gateway.gateway_id}.` : null,
+        report.gateway.provider && report.gateway.model
+          ? `Provider/model: ${report.gateway.provider} / ${report.gateway.model}.`
+          : null,
+      ].filter(Boolean) as string[]
+    : ['No signed gateway receipt is present in the bundle yet.'];
+
+  const gatewayBucket: ProofReviewBucket = {
+    key: 'gateway_proof',
+    label: 'Gateway proof',
+    tone: report.gateway.signed_count > 0 ? 'good' : 'action',
+    summary:
+      report.gateway.signed_count > 0
+        ? `${report.gateway.signed_count} signed gateway ${pluralize(report.gateway.signed_count, 'receipt')} ${report.gateway.provider && report.gateway.model ? `${report.gateway.signed_count === 1 ? 'covers' : 'cover'} ${report.gateway.provider} / ${report.gateway.model}` : 'present'}${report.gateway.gateway_id ? ` via ${report.gateway.gateway_id}` : ''}.`
+        : 'Gateway-tier proof is not complete yet because no signed gateway receipt was found.',
+    items: gatewayItems,
+  };
+
+  const executionItems: string[] = [];
+  if (report.sentinels.interpose_active) {
+    executionItems.push('Interpose monitoring was active during the run.');
+  } else {
+    executionItems.push('Interpose monitoring was not active for this run.');
+  }
+  if (report.sentinels.unmediated_connections > 0) {
+    executionItems.push(`CLDD observed ${report.sentinels.unmediated_connections} unmediated ${pluralize(report.sentinels.unmediated_connections, 'connection')}.`);
+  }
+  if (report.sentinels.unmonitored_spawns > 0) {
+    executionItems.push(`CLDD observed ${report.sentinels.unmonitored_spawns} unmonitored ${pluralize(report.sentinels.unmonitored_spawns, 'spawn')}.`);
+  }
+  if (report.sentinels.escapes_suspected) {
+    executionItems.push('CLDD flagged the run as escape-suspected.');
+  }
+  if (executionItems.length === 1 && report.sentinels.interpose_active) {
+    executionItems.push('No unmonitored spawns or escape flags were recorded.');
+  }
+
+  const executionTone: ProofReviewBucketTone = report.sentinels.escapes_suspected || report.sentinels.unmonitored_spawns > 0
+    ? 'action'
+    : report.sentinels.unmediated_connections > 0 || !report.sentinels.interpose_active
+      ? 'caution'
+      : 'good';
+
+  const executionBucket: ProofReviewBucket = {
+    key: 'execution_hygiene',
+    label: 'Execution hygiene',
+    tone: executionTone,
+    summary:
+      executionTone === 'good'
+        ? 'Execution telemetry looks clean for reviewer-facing proof presentation.'
+        : executionTone === 'caution'
+          ? 'Execution telemetry captured the run, but there are environment-level signals worth noting.'
+          : 'Execution telemetry recorded signals that should be explained before treating the run as clean external evidence.',
+    items: executionItems,
+  };
+
+  const infraCount = report.network.classification_counts.infrastructure ?? 0;
+  const expectedCount = report.network.classification_counts.expected ?? 0;
+  const otherBackgroundCount = Object.entries(report.network.classification_counts)
+    .filter(([key]) => key !== 'suspicious')
+    .reduce((sum, [, count]) => sum + count, 0);
+  const backgroundBucket: ProofReviewBucket = {
+    key: 'background_noise',
+    label: 'Background noise / ignorable infra',
+    tone: otherBackgroundCount > 0 ? 'info' : 'good',
+    summary:
+      otherBackgroundCount > 0
+        ? `${otherBackgroundCount} network ${pluralize(otherBackgroundCount, 'receipt')} look like environment/background traffic, led by ${formatTopProcesses(report.network.top_processes)}.`
+        : 'No notable background or infrastructure traffic was recorded.',
+    items: [
+      infraCount > 0 ? `${infraCount} ${pluralize(infraCount, 'receipt')} were classified as infrastructure traffic.` : null,
+      expectedCount > 0 ? `${expectedCount} ${pluralize(expectedCount, 'receipt')} were classified as expected traffic.` : null,
+      report.network.top_processes.length > 0 ? `Top observed processes: ${formatTopProcesses(report.network.top_processes)}.` : null,
+    ].filter(Boolean) as string[],
+  };
+
+  const reviewerActionItems: string[] = [];
+  if (report.gateway.signed_count === 0) {
+    reviewerActionItems.push('Do not present this run as gateway-tier proof until a signed gateway receipt is present.');
+  }
+  if (report.sentinels.net_suspicious > 0) {
+    reviewerActionItems.push(`Review ${report.sentinels.net_suspicious} suspicious network ${pluralize(report.sentinels.net_suspicious, 'receipt')} in the raw bundle before external sharing.`);
+  }
+  if (report.sentinels.unmediated_connections > 0) {
+    reviewerActionItems.push('Decide whether the CLDD unmediated-connection signal is expected for this runtime or should be suppressed/tuned for cleaner reports.');
+  }
+  if (report.sentinels.unmonitored_spawns > 0) {
+    reviewerActionItems.push(`Confirm ${report.sentinels.unmonitored_spawns} unmonitored ${pluralize(report.sentinels.unmonitored_spawns, 'spawn')} are expected for this environment.`);
+  }
+  if (report.sentinels.escapes_suspected) {
+    reviewerActionItems.push('Resolve or explain the CLDD escape-suspected signal before using this as buyer-facing proof.');
+  }
+
+  const reviewerActionBucket: ProofReviewBucket = {
+    key: 'reviewer_action_needed',
+    label: 'Reviewer action needed',
+    tone: reviewerActionItems.length > 0 ? 'action' : 'good',
+    summary:
+      reviewerActionItems.length > 0
+        ? `${reviewerActionItems.length} reviewer ${pluralize(reviewerActionItems.length, 'follow-up')} remain before this report reads as clean external evidence.`
+        : 'No extra reviewer follow-up is needed beyond standard verifier checks.',
+    items: reviewerActionItems.length > 0 ? reviewerActionItems : ['No extra reviewer action is required.'],
+  };
+
+  return [gatewayBucket, executionBucket, backgroundBucket, reviewerActionBucket];
+}
+
+function deriveWarnings(report: ProofReportBase): string[] {
   const warnings: string[] = [];
 
   if (report.gateway.signed_count === 0) {
@@ -209,7 +350,7 @@ function deriveNextSteps(report: Pick<ProofReport, 'gateway' | 'warnings' | 'ver
   }
   steps.push(`Canonical offline verifier command: ${report.verify_command}`);
   if (report.warnings.length > 0) {
-    steps.push('Review warning cards before treating the run as clean reviewer-facing evidence.');
+    steps.push('Review the bucketed warning/action cards before treating the run as clean reviewer-facing evidence.');
   }
   return steps;
 }
@@ -227,7 +368,7 @@ export function buildProofReport(args: {
   const sentinels = summarizeSentinels(payload);
   const network = summarizeNetwork(payload);
 
-  const base = {
+  const base: ProofReportBase = {
     public_layer: publicLayer,
     harness: {
       status: asString(runSummary?.status),
@@ -251,6 +392,7 @@ export function buildProofReport(args: {
     decrypted_payload_keys: decryptedPayload ? Object.keys(decryptedPayload) : undefined,
   };
 
+  const reviewBuckets = deriveReviewBuckets(base);
   const warnings = deriveWarnings(base);
   const verifyCommand = `clawverify verify proof-bundle --input ${inputPath}`;
 
@@ -259,6 +401,7 @@ export function buildProofReport(args: {
     run_summary_path: runSummary ? inferRunSummaryPath(inputPath) : null,
     generated_at: new Date().toISOString(),
     ...base,
+    review_buckets: reviewBuckets,
     warnings,
     next_steps: deriveNextSteps({ gateway, warnings, verify_command: verifyCommand }),
     verify_command: verifyCommand,
@@ -285,8 +428,34 @@ function renderKeyValueRows(rows: Array<[string, string | number | null | undefi
     .join('');
 }
 
+function toneToPillClass(tone: ProofReviewBucketTone): string {
+  switch (tone) {
+    case 'good':
+      return 'ok';
+    case 'caution':
+      return 'warn';
+    case 'action':
+      return 'danger';
+    default:
+      return 'info';
+  }
+}
+
+function renderReviewBucket(bucket: ProofReviewBucket): string {
+  return `<article class="card">
+    <div class="bucket-header">
+      <h2>${escapeHtml(bucket.label)}</h2>
+      <span class="pill ${toneToPillClass(bucket.tone)}">${escapeHtml(bucket.tone.toUpperCase())}</span>
+    </div>
+    <p class="bucket-summary">${escapeHtml(bucket.summary)}</p>
+    <ul>${renderList(bucket.items)}</ul>
+  </article>`;
+}
+
 export function renderProofReportHtml(report: ProofReport): string {
-  const warningsClass = report.warnings.length > 0 ? 'warn' : 'ok';
+  const reviewerActionBucket = report.review_buckets.find((bucket) => bucket.key === 'reviewer_action_needed');
+  const warningsClass = (reviewerActionBucket?.tone === 'action' || report.warnings.length > 0) ? 'warn' : 'ok';
+  const reviewerActionCount = reviewerActionBucket?.items.length ?? 0;
   const rawJson = escapeHtml(JSON.stringify(report, null, 2));
 
   return `<!doctype html>
@@ -341,6 +510,9 @@ export function renderProofReportHtml(report: ProofReport): string {
     .pill.ok { background: rgba(118, 228, 195, 0.12); border-color: rgba(118, 228, 195, 0.35); }
     .pill.warn { background: rgba(246, 193, 119, 0.14); border-color: rgba(246, 193, 119, 0.35); }
     .pill.danger { background: rgba(243, 139, 168, 0.14); border-color: rgba(243, 139, 168, 0.35); }
+    .pill.info { background: rgba(147, 197, 253, 0.12); border-color: rgba(147, 197, 253, 0.35); }
+    .bucket-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .bucket-summary { margin-top: 10px; color: var(--text); }
     ul { margin: 10px 0 0 18px; color: var(--muted); }
     li + li { margin-top: 8px; }
     code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -363,9 +535,13 @@ export function renderProofReportHtml(report: ProofReport): string {
       <div>
         <span class="pill ok">Harness status: ${escapeHtml(report.harness.status ?? 'unknown')}</span>
         <span class="pill ok">Claimed tier: ${escapeHtml(report.harness.tier ?? 'unknown')}</span>
-        <span class="pill ${warningsClass}">Warnings: ${report.warnings.length}</span>
+        <span class="pill ${warningsClass}">Reviewer actions: ${reviewerActionCount}</span>
         <span class="pill ok">Signed gateway receipts: ${report.gateway.signed_count}</span>
       </div>
+    </section>
+
+    <section class="grid" style="margin-bottom:16px;">
+      ${report.review_buckets.map(renderReviewBucket).join('')}
     </section>
 
     <section class="grid">
@@ -422,7 +598,7 @@ export function renderProofReportHtml(report: ProofReport): string {
       </article>
 
       <article class="card">
-        <h2>Warnings</h2>
+        <h2>Raw warning strings (debug)</h2>
         <ul>${renderList(report.warnings)}</ul>
       </article>
 
@@ -466,9 +642,12 @@ function printHumanReadable(report: ProofReport): void {
   process.stdout.write(`Gateway signer   : ${report.gateway.signer_dids[0] ?? '—'}\n`);
   process.stdout.write(`Provider/model   : ${(report.gateway.provider ?? '—')} / ${(report.gateway.model ?? '—')}\n`);
   process.stdout.write(`Evidence counts  : event_chain=${report.evidence.event_chain_count}, receipts=${report.evidence.receipt_count}, network=${report.evidence.network_receipt_count}, execution=${report.evidence.execution_receipt_count}\n`);
-  process.stdout.write(`Warnings         : ${report.warnings.length}\n`);
-  for (const warning of report.warnings) {
-    process.stdout.write(`  - ${warning}\n`);
+  process.stdout.write('\nReview buckets:\n');
+  for (const bucket of report.review_buckets) {
+    process.stdout.write(`  ${bucket.label.padEnd(31)} [${bucket.tone.toUpperCase()}] ${bucket.summary}\n`);
+    for (const item of bucket.items) {
+      process.stdout.write(`    - ${item}\n`);
+    }
   }
   process.stdout.write('\nNext steps:\n');
   for (const step of report.next_steps) {
