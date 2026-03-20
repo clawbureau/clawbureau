@@ -1,0 +1,19 @@
+## Codebase Patterns
+- Build trust with signed policy + runner + reviewer artifacts, not ambient configuration or screenshots.
+- Prefer fail-closed verification and marketplace gating over advisory-only reporting.
+- Keep reviewer outputs honest about what is and is not proven.
+- Expand assurance without regressing canonical proof-production reliability.
+
+# Ralph Progress Log
+Started: 2026-03-20T22:40:00Z
+---
+
+## 2026-03-20T22:40:00Z - Roadmap seeded (planning)
+- What was implemented
+  - Added roadmap folder `docs/roadmaps/clawsig-framework-vnext/` with README/prd/progress files.
+  - Added Beads breakdown under `monorepo-af2` with 24 child tasks spanning reliability, signed policy, attestation, marketplace enforcement, reviewer UX, DLP, cross-runtime parity, and transparency/revocation.
+  - Updated the roadmaps index to mark this as the next active framework-improvement roadmap after Privacy Assurance v1.
+- Notes
+  - Initial execution should stay dependency-aware: fix reliability and establish signed policy/measurement foundations before broad marketplace or transparency productization.
+  - Remote attestation is treated here as delivered framework work, not hand-wavy future positioning.
+---
