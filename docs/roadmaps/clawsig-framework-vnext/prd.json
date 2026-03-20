@@ -1,0 +1,328 @@
+{
+  "name": "clawsig-framework-vnext",
+  "project": "clawbureau",
+  "description": "Broaden Clawsig into a policy-bound, attested, marketplace-enforced assurance framework after Privacy Assurance v1.",
+  "branchName": "main",
+  "userStories": [
+    {
+      "id": "AF2-REL-001",
+      "title": "Repair clawverify-cli submit/test debt",
+      "description": "Fix the existing work-submit parser/transform debt so the canonical clawverify-cli test suite is structurally runnable again.",
+      "acceptanceCriteria": [
+        "packages/clawverify-cli/test/work-submit.test.ts parses and runs in CI",
+        "No duplicate declarations / truncated file syntax remains",
+        "Regression coverage preserves current submit-path behavior",
+        "Release/test guardrails fail closed when the suite regresses again"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-REL-002",
+      "title": "Deterministic SIGTERM proof finalization",
+      "description": "Make wrap shutdown/finalization deterministic so proof bundles are still emitted when the parent or child exits under SIGTERM scenarios.",
+      "acceptanceCriteria": [
+        "wrap-sigterm tests are green",
+        "Proof bundle emission survives child-normal-exit and parent-SIGTERM paths",
+        "Run summary / bundle writing is atomic enough to avoid partial artifacts",
+        "No regression in normal wrap success/failure reporting"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-REL-003",
+      "title": "Canonical receipt-only proof bundles",
+      "description": "Remove unsigned synthetic/fallback receipt leakage from canonical proof-bundle paths so offline verification only sees verifier-supported evidence shapes.",
+      "acceptanceCriteria": [
+        "Canonical proof bundles do not mix unsigned synthetic observations into payload.receipts",
+        "Fallback/internal observations live in explicit non-canonical metadata channels or are omitted",
+        "Offline verify/prove/export paths agree on what counts as canonical evidence",
+        "Regression tests cover the previously confusing fallback/genealogy cases"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-REL-004",
+      "title": "Release guardrail for green proof-production paths",
+      "description": "Close the loop on framework reliability with CI/release guardrails that require canonical proof-production paths to stay green before release.",
+      "acceptanceCriteria": [
+        "Guardrail workflow fails when submit/wrap/prove critical paths regress",
+        "Guardrail covers at least work-submit, wrap-sigterm, and proof-bundle compatibility",
+        "Failure output points directly to broken proof-production surfaces"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-POL-001",
+      "title": "Signed policy bundle schema + envelope",
+      "description": "Define canonical signed policy bundles so assurance policy stops living as ambient runtime config and becomes a first-class verifiable artifact.",
+      "acceptanceCriteria": [
+        "Canonical policy bundle payload + envelope schemas exist",
+        "Policy bundle carries policy hash, scope, issuer, issued_at, and additive policy fields",
+        "Verifier/CLI can parse and validate signed policy bundles"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-POL-002",
+      "title": "Hierarchical policy resolution",
+      "description": "Resolve assurance policy deterministically across org/project/task/exception scopes and bind the effective policy into proofed runs.",
+      "acceptanceCriteria": [
+        "Effective policy resolution order is deterministic and documented",
+        "Project/task exceptions are explicit and auditable",
+        "Proofed runs materialize a single effective policy snapshot/hash",
+        "Regression tests cover conflict/override behavior fail-closed"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-POL-003",
+      "title": "Signed approval receipts",
+      "description": "Replace ad hoc approval tokens with signed approval receipts so exception paths are auditable and verifier-usable.",
+      "acceptanceCriteria": [
+        "Approval is represented as a signed receipt, not a raw shared-secret token",
+        "Receipts bind approver identity, scope, policy hash, expiry, and decision",
+        "Require-approval flows fail closed without a valid signed approval receipt"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-POL-004",
+      "title": "Policy-hash-bound verification",
+      "description": "Bind proof receipts and verifier outcomes to the canonical effective policy hash so claims are about a signed policy, not ambient env state.",
+      "acceptanceCriteria": [
+        "Verifier checks effective policy hash where policy-bound receipts require it",
+        "prove/export surfaces the active policy hash/profile coherently",
+        "Policy mismatches fail closed with deterministic reason codes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-ATT-001",
+      "title": "Runner measurement manifest",
+      "description": "Establish a measurable runner identity surface (binary/runtime manifest, loaded policy/runtime fingerprint) that later attestations can sign.",
+      "acceptanceCriteria": [
+        "Runner measurement manifest captures binary/runtime/material inputs deterministically",
+        "Manifest is stable enough to hash/sign",
+        "Manifest generation works in proofed runs without breaking existing receipts"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-ATT-002",
+      "title": "Signed runner attestation receipt",
+      "description": "Emit a signed attestation receipt that binds runner measurement, effective policy hash, and key binary/runtime hashes to the run.",
+      "acceptanceCriteria": [
+        "Attestation receipt binds measurement manifest + effective policy hash",
+        "Verifier validates signature and binding fail-closed",
+        "Receipt schema and tests cover malformed/forged attestation paths"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-ATT-003",
+      "title": "Attested trust-tier uplift",
+      "description": "Teach the verifier and framework surfaces to distinguish attested runs from merely observed runs, with explicit trust-tier uplift rules.",
+      "acceptanceCriteria": [
+        "Verifier outputs an attested assurance tier when attestation is valid",
+        "Invalid/missing attestation does not accidentally uplift trust",
+        "Reason codes explain why an attested tier was or was not granted"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-ATT-004",
+      "title": "Attestation posture in prove/export",
+      "description": "Surface attestation state coherently in prove/export/reporting so reviewers can see whether the runner itself was measured and policy-bound.",
+      "acceptanceCriteria": [
+        "prove/export report attested vs non-attested posture clearly",
+        "What-is-proven / not-proven boundaries mention runner attestation honestly",
+        "HTML/export pack include attestation posture when present"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-MKT-001",
+      "title": "Bounty-level assurance requirements",
+      "description": "Let marketplaces/bounties require specific assurance/privacy posture levels, processors, and approval policies before work is accepted.",
+      "acceptanceCriteria": [
+        "Bounty/task contract can declare required assurance policy/tier",
+        "Requirements are machine-readable and shown to workers before submission",
+        "Unsupported requirement sets fail closed rather than silently downgrade"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-MKT-002",
+      "title": "Submission gating on required evidence",
+      "description": "Reject or quarantine submissions that do not satisfy bounty-required evidence/tiers instead of relying on manual reviewer memory.",
+      "acceptanceCriteria": [
+        "Submission path enforces required assurance/privacy evidence",
+        "Auto-rejection/quarantine reason codes are deterministic",
+        "Reviewer UI can see exactly which required evidence was missing/invalid"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-MKT-003",
+      "title": "Payout and review policy by assurance tier",
+      "description": "Use assurance tiers and approval evidence to drive review routing, payout readiness, and escalation rules.",
+      "acceptanceCriteria": [
+        "Marketplace can route/pause payouts based on assurance tier and approval evidence",
+        "Reviewer workflows expose why a payout is gated",
+        "Regression tests cover both satisfied and blocked payout paths"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-REV-001",
+      "title": "Hosted reviewer/export-pack viewer",
+      "description": "Turn export packs into a portable hosted reviewer surface so buyers/auditors can inspect runs without raw repo/file spelunking.",
+      "acceptanceCriteria": [
+        "Export pack can be rendered in a portable hosted/local viewer",
+        "Viewer aligns with prove/export language and privacy posture sections",
+        "Viewer supports direct artifact navigation without leaking creator-machine paths"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-REV-002",
+      "title": "Side-by-side run comparison",
+      "description": "Allow reviewers to compare two runs and focus on privacy/assurance differences rather than manually diffing JSON.",
+      "acceptanceCriteria": [
+        "Comparison view highlights evidence/tier/policy/processor/privacy deltas",
+        "Blocked attempts, approvals, and redactions are diffed coherently",
+        "Comparison artifacts can be exported/shared"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-REV-003",
+      "title": "Reviewer signoff receipt + dispute-note binding",
+      "description": "Bind reviewer signoff and dispute notes into signed receipts so review outcomes themselves become auditable artifacts.",
+      "acceptanceCriteria": [
+        "Reviewer signoff receipt captures reviewer identity, decision, timestamp, and bound run/export pack",
+        "Dispute notes/evidence references are tied to that signoff",
+        "Verifier/viewer can surface signoff/dispute state"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-DLP-001",
+      "title": "Richer sensitivity taxonomy + custom rules",
+      "description": "Expand sensitivity handling beyond the minimal v1 classes with org-defined patterns and a more usable class taxonomy.",
+      "acceptanceCriteria": [
+        "Policy supports richer built-in classes and custom rule definitions",
+        "Rule/class IDs remain deterministic and signed-receipt compatible",
+        "False-positive/false-negative paths are tested explicitly"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-DLP-002",
+      "title": "Structured redaction + simulation mode",
+      "description": "Support structured redaction and a simulation/preview mode so teams can tune policy without flying blind.",
+      "acceptanceCriteria": [
+        "Structured fields can be redacted deterministically",
+        "Simulation mode reports what would have been blocked/redacted without allowing silent bypass in proofed mode",
+        "Receipts distinguish simulated vs enforced actions clearly"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-XRT-001",
+      "title": "Python proofed adapter parity",
+      "description": "Bring the proofed policy/receipt/attestation surface to Python agent runs so the framework is not Node-only.",
+      "acceptanceCriteria": [
+        "Python proofed adapter routes through the same assurance policy model",
+        "Core receipts/evidence surfaces remain verifier-compatible",
+        "At least one end-to-end Python proofed path is tested"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-XRT-002",
+      "title": "Browser/automation proofed adapter parity",
+      "description": "Extend assurance controls to browser/automation runners so reviewer trust does not depend on a single runtime family.",
+      "acceptanceCriteria": [
+        "Browser automation runner can emit compatible assurance/privacy evidence",
+        "Policy and attestation surfaces remain coherent across runtimes",
+        "At least one browser-run proof path is tested end-to-end"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-TRN-001",
+      "title": "Transparency log for assurance receipts",
+      "description": "Add transparency-log style anchoring for policy, attestation, and reviewer receipts so retroactive tampering is harder to hide.",
+      "acceptanceCriteria": [
+        "Selected assurance receipts can be anchored in a transparency log",
+        "Verifier can check inclusion/consistency evidence when present",
+        "Log integration remains optional/additive for non-logged runs"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "AF2-TRN-002",
+      "title": "Revocation for runner/policy/reviewer keys",
+      "description": "Provide revocation semantics for compromised or retired runner, policy-issuer, and reviewer keys so old trust roots can be withdrawn cleanly.",
+      "acceptanceCriteria": [
+        "Revocation artifacts exist for runner/policy/reviewer identities",
+        "Verifier rejects revoked trust roots deterministically",
+        "Review/export surfaces explain revocation-driven failures"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-03-20T22:40:00Z",
+    "status": "24 planned stories across reliability, policy, attestation, marketplace, review UX, DLP, runtime parity, and transparency."
+  }
+}
