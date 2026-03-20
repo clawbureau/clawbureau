@@ -33,6 +33,24 @@ export interface ProofReviewBucket {
   items: string[];
 }
 
+export interface ProofRuntimeProfile {
+  profile_id: string | null;
+  profile_version: string | null;
+  mode: string | null;
+  status: string | null;
+  fallback_reasons: string[];
+  baseline_process_count: number | null;
+  baseline_process_hash_b64u: string | null;
+}
+
+export interface ProofRuntimeHygiene {
+  verdict: 'good' | 'caution' | 'action' | null;
+  reviewer_action_required: boolean;
+  background_signals: string[];
+  caution_signals: string[];
+  action_required_signals: string[];
+}
+
 export interface ProofReport {
   input_path: string;
   run_summary_path: string | null;
@@ -65,6 +83,8 @@ export interface ProofReport {
     unmediated_connections: number;
     unmonitored_spawns: number;
     escapes_suspected: boolean;
+    runtime_profile: ProofRuntimeProfile;
+    runtime_hygiene: ProofRuntimeHygiene;
   };
   network: {
     classification_counts: Record<string, number>;
@@ -99,9 +119,24 @@ function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => asString(entry))
+    .filter((entry): entry is string => entry !== null);
+}
+
 function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return count === 1 ? singular : plural;
 }
+
+const BACKGROUND_NETWORK_CLASSIFICATIONS = new Set([
+  'infrastructure',
+  'expected',
+  'system_noise',
+  'local',
+  'fd_inheritance',
+]);
 
 function formatTopProcesses(processes: Array<{ process_name: string; count: number }>): string {
   if (processes.length === 0) return 'no dominant processes recorded';
@@ -193,6 +228,15 @@ function summarizeSentinels(payload: Record<string, unknown>): ProofReport['sent
   const sentinels = metadata && isRecord(metadata.sentinels) ? metadata.sentinels : null;
   const interposeState = sentinels && isRecord(sentinels.interpose_state) ? sentinels.interpose_state : null;
   const cldd = interposeState && isRecord(interposeState.cldd) ? interposeState.cldd : null;
+  const runtimeProfile = sentinels && isRecord(sentinels.runtime_profile) ? sentinels.runtime_profile : null;
+  const runtimeHygiene = sentinels && isRecord(sentinels.runtime_hygiene) ? sentinels.runtime_hygiene : null;
+  const profileActivation = runtimeProfile && isRecord(runtimeProfile.activation) ? runtimeProfile.activation : null;
+  const profileBaseline = runtimeProfile && isRecord(runtimeProfile.baseline) ? runtimeProfile.baseline : null;
+  const hygieneBuckets = runtimeHygiene && isRecord(runtimeHygiene.buckets) ? runtimeHygiene.buckets : null;
+  const hygieneVerdict = asString(runtimeHygiene?.verdict);
+  const resolvedVerdict = hygieneVerdict === 'good' || hygieneVerdict === 'caution' || hygieneVerdict === 'action'
+    ? hygieneVerdict
+    : null;
 
   return {
     shell_events: asNumber(sentinels?.shell_events) ?? 0,
@@ -204,10 +248,29 @@ function summarizeSentinels(payload: Record<string, unknown>): ProofReport['sent
     unmediated_connections: asNumber(cldd?.unmediated_connections) ?? 0,
     unmonitored_spawns: asNumber(cldd?.unmonitored_spawns) ?? 0,
     escapes_suspected: Boolean(cldd?.escapes_suspected),
+    runtime_profile: {
+      profile_id: asString(runtimeProfile?.profile_id),
+      profile_version: asString(runtimeProfile?.profile_version),
+      mode: asString(runtimeProfile?.mode),
+      status: asString(profileActivation?.status),
+      fallback_reasons: asStringArray(profileActivation?.reasons),
+      baseline_process_count: asNumber(profileBaseline?.process_count),
+      baseline_process_hash_b64u: asString(profileBaseline?.process_hash_b64u),
+    },
+    runtime_hygiene: {
+      verdict: resolvedVerdict,
+      reviewer_action_required: Boolean(runtimeHygiene?.reviewer_action_required),
+      background_signals: asStringArray(hygieneBuckets?.background_noise),
+      caution_signals: asStringArray(hygieneBuckets?.caution),
+      action_required_signals: asStringArray(hygieneBuckets?.action_required),
+    },
   };
 }
 
 function deriveReviewBuckets(report: ProofReportBase): ProofReviewBucket[] {
+  const backgroundSignals = report.sentinels.runtime_hygiene.background_signals.filter(
+    (signal) => signal !== 'No baseline/background network noise receipts were classified.',
+  );
   const gatewayItems = report.gateway.signed_count > 0
     ? [
         `Signed gateway receipt count: ${report.gateway.signed_count}.`,
@@ -231,29 +294,38 @@ function deriveReviewBuckets(report: ProofReportBase): ProofReviewBucket[] {
   };
 
   const executionItems: string[] = [];
+  const runtimeProfileLabel = report.sentinels.runtime_profile.profile_id
+    ? `${report.sentinels.runtime_profile.profile_id}${report.sentinels.runtime_profile.status ? ` (${report.sentinels.runtime_profile.status})` : ''}`
+    : null;
+  if (runtimeProfileLabel) {
+    executionItems.push(`Runtime profile: ${runtimeProfileLabel}.`);
+  }
+  if (report.sentinels.runtime_hygiene.verdict) {
+    executionItems.push(`Runtime hygiene verdict: ${report.sentinels.runtime_hygiene.verdict.toUpperCase()}.`);
+  }
   if (report.sentinels.interpose_active) {
     executionItems.push('Interpose monitoring was active during the run.');
   } else {
     executionItems.push('Interpose monitoring was not active for this run.');
   }
-  if (report.sentinels.unmediated_connections > 0) {
-    executionItems.push(`CLDD observed ${report.sentinels.unmediated_connections} unmediated ${pluralize(report.sentinels.unmediated_connections, 'connection')}.`);
-  }
-  if (report.sentinels.unmonitored_spawns > 0) {
-    executionItems.push(`CLDD observed ${report.sentinels.unmonitored_spawns} unmonitored ${pluralize(report.sentinels.unmonitored_spawns, 'spawn')}.`);
-  }
-  if (report.sentinels.escapes_suspected) {
-    executionItems.push('CLDD flagged the run as escape-suspected.');
-  }
-  if (executionItems.length === 1 && report.sentinels.interpose_active) {
+  executionItems.push(...report.sentinels.runtime_hygiene.caution_signals);
+  executionItems.push(...report.sentinels.runtime_hygiene.action_required_signals);
+  if (
+    report.sentinels.interpose_active &&
+    report.sentinels.runtime_hygiene.caution_signals.length === 0 &&
+    report.sentinels.runtime_hygiene.action_required_signals.length === 0
+  ) {
     executionItems.push('No unmonitored spawns or escape flags were recorded.');
   }
 
-  const executionTone: ProofReviewBucketTone = report.sentinels.escapes_suspected || report.sentinels.unmonitored_spawns > 0
-    ? 'action'
-    : report.sentinels.unmediated_connections > 0 || !report.sentinels.interpose_active
-      ? 'caution'
-      : 'good';
+  const executionTone: ProofReviewBucketTone = (() => {
+    if (report.sentinels.runtime_hygiene.verdict === 'action') return 'action';
+    if (report.sentinels.runtime_hygiene.verdict === 'caution') return 'caution';
+    if (report.sentinels.runtime_hygiene.verdict === 'good') return 'good';
+    if (report.sentinels.escapes_suspected || report.sentinels.unmonitored_spawns > 0) return 'action';
+    if (report.sentinels.unmediated_connections > 0 || !report.sentinels.interpose_active) return 'caution';
+    return 'good';
+  })();
 
   const executionBucket: ProofReviewBucket = {
     key: 'execution_hygiene',
@@ -270,21 +342,32 @@ function deriveReviewBuckets(report: ProofReportBase): ProofReviewBucket[] {
 
   const infraCount = report.network.classification_counts.infrastructure ?? 0;
   const expectedCount = report.network.classification_counts.expected ?? 0;
-  const otherBackgroundCount = Object.entries(report.network.classification_counts)
-    .filter(([key]) => key !== 'suspicious')
+  const systemNoiseCount = report.network.classification_counts.system_noise ?? 0;
+  const localCount = report.network.classification_counts.local ?? 0;
+  const fdInheritanceCount = report.network.classification_counts.fd_inheritance ?? 0;
+  const backgroundCount = Object.entries(report.network.classification_counts)
+    .filter(([key]) => BACKGROUND_NETWORK_CLASSIFICATIONS.has(key))
     .reduce((sum, [, count]) => sum + count, 0);
   const backgroundBucket: ProofReviewBucket = {
     key: 'background_noise',
     label: 'Background noise / ignorable infra',
-    tone: otherBackgroundCount > 0 ? 'info' : 'good',
+    tone: backgroundSignals.length > 0 || backgroundCount > 0 ? 'info' : 'good',
     summary:
-      otherBackgroundCount > 0
-        ? `${otherBackgroundCount} network ${pluralize(otherBackgroundCount, 'receipt')} look like environment/background traffic, led by ${formatTopProcesses(report.network.top_processes)}.`
+      backgroundSignals.length > 0
+        ? backgroundSignals[0]!
+        : backgroundCount > 0
+        ? `${backgroundCount} network ${pluralize(backgroundCount, 'receipt')} look like environment/background traffic, led by ${formatTopProcesses(report.network.top_processes)}.`
         : 'No notable background or infrastructure traffic was recorded.',
     items: [
+      ...backgroundSignals,
       infraCount > 0 ? `${infraCount} ${pluralize(infraCount, 'receipt')} were classified as infrastructure traffic.` : null,
       expectedCount > 0 ? `${expectedCount} ${pluralize(expectedCount, 'receipt')} were classified as expected traffic.` : null,
-      report.network.top_processes.length > 0 ? `Top observed processes: ${formatTopProcesses(report.network.top_processes)}.` : null,
+      systemNoiseCount > 0 ? `${systemNoiseCount} ${pluralize(systemNoiseCount, 'receipt')} were classified as system noise.` : null,
+      localCount > 0 ? `${localCount} ${pluralize(localCount, 'receipt')} were classified as local traffic.` : null,
+      fdInheritanceCount > 0 ? `${fdInheritanceCount} ${pluralize(fdInheritanceCount, 'receipt')} were classified as FD inheritance noise.` : null,
+      backgroundCount > 0 && report.network.top_processes.length > 0
+        ? `Top observed processes: ${formatTopProcesses(report.network.top_processes)}.`
+        : null,
     ].filter(Boolean) as string[],
   };
 
@@ -336,6 +419,16 @@ function deriveWarnings(report: ProofReportBase): string[] {
   }
   if (report.sentinels.escapes_suspected) {
     warnings.push('CLDD marked the run as escape-suspected.');
+  }
+  if (report.sentinels.runtime_profile.status === 'fallback') {
+    warnings.push(
+      `Runtime profile fallback is active (${report.sentinels.runtime_profile.fallback_reasons.join(', ') || 'unspecified reason'}).`,
+    );
+  }
+  if (report.sentinels.runtime_hygiene.verdict === 'action') {
+    warnings.push('Runtime hygiene verdict is ACTION; reviewer follow-up is required.');
+  } else if (report.sentinels.runtime_hygiene.verdict === 'caution') {
+    warnings.push('Runtime hygiene verdict is CAUTION; confirm the noted runtime signals are expected.');
   }
 
   return warnings;
@@ -594,6 +687,12 @@ export function renderProofReportHtml(report: ProofReport): string {
           ['Unmediated connections', report.sentinels.unmediated_connections],
           ['Unmonitored spawns', report.sentinels.unmonitored_spawns],
           ['Escapes suspected', report.sentinels.escapes_suspected ? 'yes' : 'no'],
+          ['Runtime profile', report.sentinels.runtime_profile.profile_id],
+          ['Profile status', report.sentinels.runtime_profile.status],
+          ['Baseline process count', report.sentinels.runtime_profile.baseline_process_count],
+          ['Baseline hash', report.sentinels.runtime_profile.baseline_process_hash_b64u],
+          ['Hygiene verdict', report.sentinels.runtime_hygiene.verdict],
+          ['Action required', report.sentinels.runtime_hygiene.reviewer_action_required ? 'yes' : 'no'],
         ])}
       </article>
 
@@ -641,6 +740,8 @@ function printHumanReadable(report: ProofReport): void {
   process.stdout.write(`Gateway proof    : ${report.gateway.signed_count > 0 ? 'SIGNED' : 'MISSING'}\n`);
   process.stdout.write(`Gateway signer   : ${report.gateway.signer_dids[0] ?? '—'}\n`);
   process.stdout.write(`Provider/model   : ${(report.gateway.provider ?? '—')} / ${(report.gateway.model ?? '—')}\n`);
+  process.stdout.write(`Runtime profile  : ${report.sentinels.runtime_profile.profile_id ?? '—'} (${report.sentinels.runtime_profile.status ?? 'unknown'})\n`);
+  process.stdout.write(`Hygiene verdict  : ${report.sentinels.runtime_hygiene.verdict ?? 'unknown'}\n`);
   process.stdout.write(`Evidence counts  : event_chain=${report.evidence.event_chain_count}, receipts=${report.evidence.receipt_count}, network=${report.evidence.network_receipt_count}, execution=${report.evidence.execution_receipt_count}\n`);
   process.stdout.write('\nReview buckets:\n');
   for (const bucket of report.review_buckets) {

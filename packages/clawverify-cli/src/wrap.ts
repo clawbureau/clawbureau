@@ -95,6 +95,80 @@ interface RunSummaryJson {
   did: string;
   timestamp: string;
   duration_seconds: number;
+  runtime_profile_id: string;
+  runtime_profile_status: RuntimeProfileStatus;
+  runtime_hygiene_verdict: RuntimeHygieneVerdict;
+}
+
+type RuntimeProfileStatus = 'active' | 'fallback';
+type RuntimeHygieneVerdict = 'good' | 'caution' | 'action';
+
+interface RuntimeBaselineSnapshot {
+  captured: boolean;
+  captured_at: string;
+  source: 'ps';
+  process_count: number;
+  process_hash_b64u: string | null;
+  command_sample: string[];
+  error_reason?: string;
+}
+
+interface ProofedRuntimeProfile {
+  profile_id: string;
+  profile_version: '1';
+  mode: 'privacy_assurance';
+  activation: {
+    status: RuntimeProfileStatus;
+    reasons: string[];
+  };
+  baseline: RuntimeBaselineSnapshot;
+}
+
+interface RuntimeHygieneNoiseBudget {
+  unmediated_connections: {
+    caution_at: number;
+    action_at: number;
+  };
+  net_suspicious: {
+    caution_at: number;
+    action_at: number;
+  };
+  unmonitored_spawns: {
+    action_at: number;
+  };
+  escapes_suspected: {
+    action_when_true: boolean;
+  };
+}
+
+interface RuntimeClddMetrics {
+  unmediated_connections: number;
+  unmonitored_spawns: number;
+  escapes_suspected: boolean;
+}
+
+interface RuntimeHygieneEvidence {
+  receipt_version: '1';
+  profile_id: string;
+  profile_status: RuntimeProfileStatus;
+  interpose_active: boolean;
+  verdict: RuntimeHygieneVerdict;
+  reviewer_action_required: boolean;
+  noise_budget: RuntimeHygieneNoiseBudget;
+  counts: {
+    unmediated_connections: number;
+    unmonitored_spawns: number;
+    escapes_suspected: boolean;
+    net_suspicious: number;
+    background_network_receipts: number;
+    filtered_noise_execution: number;
+    filtered_noise_network: number;
+  };
+  buckets: {
+    background_noise: string[];
+    caution: string[];
+    action_required: string[];
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +179,20 @@ const VAAS_URL = 'https://api.clawverify.com/v1/verify';
 const CLAWSIG_DIR = '.clawsig';
 const BUNDLE_FILE = 'proof_bundle.json';
 const RUN_SUMMARY_FILE = 'run_summary.json';
+const PROOFED_RUNTIME_PROFILE_ID = 'prv.run.v1.proofed-minimal';
+const RUNTIME_HYGIENE_BACKGROUND_CLASSES = [
+  'infrastructure',
+  'expected',
+  'system_noise',
+  'local',
+  'fd_inheritance',
+] as const;
+const RUNTIME_HYGIENE_NOISE_BUDGET: RuntimeHygieneNoiseBudget = {
+  unmediated_connections: { caution_at: 1, action_at: 3 },
+  net_suspicious: { caution_at: 1, action_at: 3 },
+  unmonitored_spawns: { action_at: 1 },
+  escapes_suspected: { action_when_true: true },
+};
 
 function toBase64Url(bytes: Uint8Array): string {
   return Buffer.from(bytes)
@@ -295,6 +383,230 @@ async function resealProofBundleEnvelope(
   const signature = await signer.sign(new TextEncoder().encode(payloadHash));
   bundle.payload_hash_b64u = payloadHash;
   bundle.signature_b64u = signature;
+}
+
+async function captureRuntimeBaselineSnapshot(): Promise<RuntimeBaselineSnapshot> {
+  const capturedAt = new Date().toISOString();
+  if (isWindows) {
+    return {
+      captured: false,
+      captured_at: capturedAt,
+      source: 'ps',
+      process_count: 0,
+      process_hash_b64u: null,
+      command_sample: [],
+      error_reason: 'baseline_capture_not_supported_on_windows',
+    };
+  }
+
+  try {
+    const { stdout } = await execFileAsync('ps', ['-Ao', 'comm='], {
+      timeout: 4_000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    const commands = stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (commands.length === 0) {
+      return {
+        captured: false,
+        captured_at: capturedAt,
+        source: 'ps',
+        process_count: 0,
+        process_hash_b64u: null,
+        command_sample: [],
+        error_reason: 'baseline_capture_returned_no_processes',
+      };
+    }
+
+    const counts = new Map<string, number>();
+    for (const command of commands) {
+      counts.set(command, (counts.get(command) ?? 0) + 1);
+    }
+
+    const normalizedLines = [...counts.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([command, count]) => `${command}\t${count}`);
+    const processHash = await sha256TextB64u(normalizedLines.join('\n'));
+    const commandSample = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 8)
+      .map(([command, count]) => `${command}:${count}`);
+
+    return {
+      captured: true,
+      captured_at: capturedAt,
+      source: 'ps',
+      process_count: commands.length,
+      process_hash_b64u: processHash,
+      command_sample: commandSample,
+    };
+  } catch (err) {
+    return {
+      captured: false,
+      captured_at: capturedAt,
+      source: 'ps',
+      process_count: 0,
+      process_hash_b64u: null,
+      command_sample: [],
+      error_reason: `baseline_capture_failed:${err instanceof Error ? err.message : 'unknown'}`,
+    };
+  }
+}
+
+function buildProofedRuntimeProfile(args: {
+  baseline: RuntimeBaselineSnapshot;
+  hasShellSentinel: boolean;
+  interposeActive: boolean;
+}): ProofedRuntimeProfile {
+  const activationReasons: string[] = [];
+  if (!args.baseline.captured) {
+    activationReasons.push(args.baseline.error_reason ?? 'baseline_capture_unavailable');
+  }
+  if (!args.hasShellSentinel && !isWindows) {
+    activationReasons.push('sentinel_shell_unavailable');
+  }
+  if (!args.interposeActive) {
+    activationReasons.push(
+      isWindows
+        ? 'interpose_not_supported_on_windows'
+        : 'interpose_not_active',
+    );
+  }
+
+  return {
+    profile_id: PROOFED_RUNTIME_PROFILE_ID,
+    profile_version: '1',
+    mode: 'privacy_assurance',
+    activation: {
+      status: activationReasons.length > 0 ? 'fallback' : 'active',
+      reasons: activationReasons,
+    },
+    baseline: args.baseline,
+  };
+}
+
+function summarizeNetworkClassifications(
+  receipts: NetworkReceiptPayload[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const receipt of receipts) {
+    const key = receipt.classification?.trim() || 'unknown';
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function buildRuntimeHygieneEvidence(args: {
+  profile: ProofedRuntimeProfile;
+  cldd: RuntimeClddMetrics;
+  interposeActive: boolean;
+  netSuspicious: number;
+  classificationCounts: Record<string, number>;
+  filteredOutExecution: number;
+  filteredOutNetwork: number;
+}): RuntimeHygieneEvidence {
+  const backgroundNoise: string[] = [];
+  const caution: string[] = [];
+  const actionRequired: string[] = [];
+
+  const backgroundNetworkReceipts = RUNTIME_HYGIENE_BACKGROUND_CLASSES.reduce(
+    (sum, key) => sum + (args.classificationCounts[key] ?? 0),
+    0,
+  );
+
+  if (backgroundNetworkReceipts > 0) {
+    backgroundNoise.push(
+      `${backgroundNetworkReceipts} network receipts matched baseline/background classifications.`,
+    );
+  }
+
+  if (args.filteredOutExecution > 0 || args.filteredOutNetwork > 0) {
+    backgroundNoise.push(
+      `Filtered runtime noise receipts: execution=${args.filteredOutExecution}, network=${args.filteredOutNetwork}.`,
+    );
+  }
+
+  if (args.profile.activation.status === 'fallback') {
+    caution.push(
+      `Runtime profile is in fallback mode (${args.profile.activation.reasons.join(', ')}).`,
+    );
+  }
+
+  if (!args.interposeActive) {
+    caution.push('Interpose monitoring was not active; CLDD confidence is reduced.');
+  }
+
+  const unmediated = args.cldd.unmediated_connections;
+  if (
+    unmediated >= RUNTIME_HYGIENE_NOISE_BUDGET.unmediated_connections.caution_at &&
+    unmediated < RUNTIME_HYGIENE_NOISE_BUDGET.unmediated_connections.action_at
+  ) {
+    caution.push(
+      `CLDD unmediated connections (${unmediated}) are above the caution threshold (${RUNTIME_HYGIENE_NOISE_BUDGET.unmediated_connections.caution_at}).`,
+    );
+  }
+
+  if (
+    args.netSuspicious >= RUNTIME_HYGIENE_NOISE_BUDGET.net_suspicious.caution_at &&
+    args.netSuspicious < RUNTIME_HYGIENE_NOISE_BUDGET.net_suspicious.action_at
+  ) {
+    caution.push(
+      `Suspicious network receipts (${args.netSuspicious}) are above the caution threshold (${RUNTIME_HYGIENE_NOISE_BUDGET.net_suspicious.caution_at}).`,
+    );
+  }
+
+  if (unmediated >= RUNTIME_HYGIENE_NOISE_BUDGET.unmediated_connections.action_at) {
+    actionRequired.push(
+      `CLDD unmediated connections (${unmediated}) exceeded the action threshold (${RUNTIME_HYGIENE_NOISE_BUDGET.unmediated_connections.action_at}).`,
+    );
+  }
+
+  if (args.netSuspicious >= RUNTIME_HYGIENE_NOISE_BUDGET.net_suspicious.action_at) {
+    actionRequired.push(
+      `Suspicious network receipts (${args.netSuspicious}) exceeded the action threshold (${RUNTIME_HYGIENE_NOISE_BUDGET.net_suspicious.action_at}).`,
+    );
+  }
+
+  if (args.cldd.unmonitored_spawns >= RUNTIME_HYGIENE_NOISE_BUDGET.unmonitored_spawns.action_at) {
+    actionRequired.push(
+      `CLDD detected ${args.cldd.unmonitored_spawns} unmonitored ${args.cldd.unmonitored_spawns === 1 ? 'spawn' : 'spawns'} (action threshold ${RUNTIME_HYGIENE_NOISE_BUDGET.unmonitored_spawns.action_at}).`,
+    );
+  }
+
+  if (RUNTIME_HYGIENE_NOISE_BUDGET.escapes_suspected.action_when_true && args.cldd.escapes_suspected) {
+    actionRequired.push('CLDD marked this run as escape-suspected.');
+  }
+
+  let verdict: RuntimeHygieneVerdict = 'good';
+  if (actionRequired.length > 0) verdict = 'action';
+  else if (caution.length > 0) verdict = 'caution';
+
+  return {
+    receipt_version: '1',
+    profile_id: args.profile.profile_id,
+    profile_status: args.profile.activation.status,
+    interpose_active: args.interposeActive,
+    verdict,
+    reviewer_action_required: actionRequired.length > 0,
+    noise_budget: RUNTIME_HYGIENE_NOISE_BUDGET,
+    counts: {
+      unmediated_connections: args.cldd.unmediated_connections,
+      unmonitored_spawns: args.cldd.unmonitored_spawns,
+      escapes_suspected: args.cldd.escapes_suspected,
+      net_suspicious: args.netSuspicious,
+      background_network_receipts: backgroundNetworkReceipts,
+      filtered_noise_execution: args.filteredOutExecution,
+      filtered_noise_network: args.filteredOutNetwork,
+    },
+    buckets: {
+      background_noise: backgroundNoise,
+      caution,
+      action_required: actionRequired,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +812,17 @@ export async function wrap(
       : (isWindows ? 'Windows gracefully bypassed' : 'no C compiler or cached lib');
     diag(`\x1b[33m[clawsig]\x1b[0m Interpose Sentinel: disabled (${reason})\n`);
   }
+
+  const runtimeBaseline = await captureRuntimeBaselineSnapshot();
+  const runtimeProfile = buildProofedRuntimeProfile({
+    baseline: runtimeBaseline,
+    hasShellSentinel: !!sentinelShellPath,
+    interposeActive: !!interposeLib,
+  });
+  diag(
+    `\x1b[36m[clawsig]\x1b[0m Runtime profile: ${runtimeProfile.profile_id} ` +
+      `(${runtimeProfile.activation.status}) baseline_processes=${runtimeProfile.baseline.process_count}\n`,
+  );
 
   // 5. Spawn child process with env overrides
   const commandName = basename(command).toLowerCase();
@@ -809,6 +1132,20 @@ export async function wrap(
     diag(`\x1b[36m[clawsig]\x1b[0m Noise filtered: ${filteredOutExecution} execution, ${filteredOutNetwork} network receipts removed\n`);
   }
 
+  const runtimeHygiene = buildRuntimeHygieneEvidence({
+    profile: runtimeProfile,
+    cldd: interposeSummary.cldd as RuntimeClddMetrics,
+    interposeActive: !!interposeLib,
+    netSuspicious: netSentinel.suspiciousCount,
+    classificationCounts: summarizeNetworkClassifications(filteredNetworkReceipts),
+    filteredOutExecution,
+    filteredOutNetwork,
+  });
+  diag(
+    `\x1b[36m[clawsig]\x1b[0m Runtime hygiene verdict: ${runtimeHygiene.verdict}` +
+      ` (reviewer_action_required=${runtimeHygiene.reviewer_action_required ? 'yes' : 'no'})\n`,
+  );
+
   // Inject filtered sentinel receipts into the bundle
   if (filteredExecutionReceipts.length > 0) {
     bundle.payload.execution_receipts = filteredExecutionReceipts;
@@ -911,6 +1248,8 @@ export async function wrap(
     preload_llm_events: preloadGatewayReceipts.length,
     tls_sni_events: sniEvents.length,
     tls_sni_receipts: sniGatewayReceipts.length,
+    runtime_profile: runtimeProfile,
+    runtime_hygiene: runtimeHygiene,
     interpose_state: interposeSummary,
   } as Record<string, unknown>;
 
@@ -1000,6 +1339,9 @@ export async function wrap(
     did: agentDid.did,
     timestamp: new Date().toISOString(),
     duration_seconds: Math.max(0, Math.round((Date.now() - wrapStartedAtMs) / 1000)),
+    runtime_profile_id: runtimeProfile.profile_id,
+    runtime_profile_status: runtimeProfile.activation.status,
+    runtime_hygiene_verdict: runtimeHygiene.verdict,
   };
   await writeRunSummaryToDisk(runSummary, verbose);
 
