@@ -18,6 +18,7 @@ import { hintForReasonCode, explainReasonCode, explainReasonCodeJson } from './h
 import { runInit } from './init.js';
 import { runMigratePolicy } from './migrate-policy.js';
 import { wrap } from './wrap.js';
+import { runProveReport } from './prove-cmd.js';
 import { runWorkInit } from './work-cmd.js';
 import { runWorkList } from './work-list.js';
 import { runWorkClaim } from './work-claim.js';
@@ -54,6 +55,7 @@ function usageText(): string {
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
     '  clawsig inspect --input <bundle.json> [--decrypt] [--json]',
+    '  clawsig prove --input <bundle.json> [--html <file.html>] [--run-summary <path>] [--decrypt] [--json]',
     '  clawsig identity show [--json]',
     '  clawsig identity link-github --github <username> [--json]',
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
@@ -104,6 +106,7 @@ function usageText(): string {
     '  clawsig work status sub_1234abcd --watch --interval 5',
     '  clawsig inspect --input bundle.json',
     '  clawsig inspect --input bundle.json --decrypt --json',
+    '  clawsig prove --input bundle.json --html proof-report.html',
     '  clawsig identity show --json',
     '  clawsig identity link-github --github octocat --json',
     '  clawsig sign-commit $(git rev-parse HEAD)',
@@ -150,6 +153,7 @@ type ParsedArgs =
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
   | { command: 'inspect'; inputPath: string; decrypt: boolean }
+  | { command: 'prove'; inputPath: string; htmlPath?: string; runSummaryPath?: string; decrypt: boolean }
   | { command: 'identity-show' }
   | { command: 'identity-link-github'; githubUsername: string }
   | { command: 'identity-rotate'; targetDir?: string; global: boolean }
@@ -189,6 +193,20 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     }
     const decrypt = hasFlag(argv, '--decrypt');
     return { command: 'inspect', inputPath, decrypt };
+  }
+
+  if (argv[0] === 'prove') {
+    const inputPath = readFlag(argv, '--input');
+    if (!inputPath) {
+      throw new CliUsageError(
+        'Usage: clawsig prove --input <bundle.json> [--html <file.html>] [--run-summary <path>] [--decrypt] [--json]\n\n' +
+        'The --input flag is required.',
+      );
+    }
+    const htmlPath = readFlag(argv, '--html');
+    const runSummaryPath = readFlag(argv, '--run-summary');
+    const decrypt = hasFlag(argv, '--decrypt');
+    return { command: 'prove', inputPath, htmlPath, runSummaryPath, decrypt };
   }
 
   if (argv[0] === 'wrap') {
@@ -673,6 +691,28 @@ async function main() {
     try {
       await runInspect({
         inputPath: parsed.inputPath,
+        decrypt: parsed.decrypt,
+        json: jsonMode,
+      });
+    } catch (err) {
+      process.exitCode = 1;
+      const message = err instanceof Error ? err.message : String(err);
+      const code = err instanceof InspectError ? err.code : 'INTERNAL_ERROR';
+      if (jsonMode) {
+        printJsonError({ code, message });
+      } else {
+        process.stderr.write(`Error: ${message}\n`);
+      }
+    }
+    return;
+  }
+
+  if (parsed.command === 'prove') {
+    try {
+      await runProveReport({
+        inputPath: parsed.inputPath,
+        htmlPath: parsed.htmlPath,
+        runSummaryPath: parsed.runSummaryPath,
         decrypt: parsed.decrypt,
         json: jsonMode,
       });

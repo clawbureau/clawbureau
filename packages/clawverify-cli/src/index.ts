@@ -12,6 +12,7 @@ export {
   GithubBindingError,
 } from './identity-github.js';
 export { wrap } from './wrap.js';
+export { runProveReport, buildProofReport, renderProofReportHtml } from './prove-cmd.js';
 export { addFleetAgent, listFleetAgents, revokeFleetAgent, FleetError, loadIdentityForWrap } from './fleet.js';
 export type { InitOptions, InitResult } from './init.js';
 export type { ClawsigIdentity } from './identity.js';
