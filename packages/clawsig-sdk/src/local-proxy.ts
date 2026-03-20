@@ -247,7 +247,33 @@ async function forwardToClawproxy(
   const query = queryIndex === -1 ? '' : upstreamPathWithQuery.slice(queryIndex);
   const targetUrl = `${clawproxyUrl}/v1/proxy/${provider}${query}`;
 
-  const headers = buildUpstreamRequestHeaders(incomingHeaders, bodyBuffer);
+  let forwardedBodyBuffer = bodyBuffer;
+  if (provider === 'google' && bodyBuffer.length > 0) {
+    try {
+      const parsed = JSON.parse(bodyBuffer.toString('utf-8')) as Record<string, unknown>;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        delete parsed['store'];
+        delete parsed['prompt_cache_key'];
+        delete parsed['prompt_cache_retention'];
+        delete parsed['service_tier'];
+        delete parsed['reasoning'];
+        delete parsed['include'];
+        forwardedBodyBuffer = Buffer.from(JSON.stringify(parsed), 'utf-8');
+      }
+    } catch {
+      // Non-JSON payloads are forwarded unchanged.
+    }
+  }
+
+  const headers = buildUpstreamRequestHeaders(incomingHeaders, forwardedBodyBuffer);
+  delete headers['authorization'];
+  delete headers['Authorization'];
+  delete headers['x-goog-api-key'];
+  delete headers['X-Goog-Api-Key'];
+  delete headers['api-key'];
+  delete headers['Api-Key'];
+  delete headers['x-api-key'];
+  delete headers['X-Api-Key'];
   headers['X-Run-Id'] = runId;
   headers['X-Event-Hash'] = eventHash;
   headers['X-Idempotency-Key'] = idempotencyKey;
@@ -261,12 +287,12 @@ async function forwardToClawproxy(
   }
 
   const upperMethod = method.toUpperCase();
-  const hasBody = upperMethod !== 'GET' && upperMethod !== 'HEAD' && bodyBuffer.length > 0;
+  const hasBody = upperMethod !== 'GET' && upperMethod !== 'HEAD' && forwardedBodyBuffer.length > 0;
 
   const res = await fetch(targetUrl, {
     method: upperMethod,
     headers,
-    ...(hasBody ? { body: new Uint8Array(bodyBuffer) } : {}),
+    ...(hasBody ? { body: new Uint8Array(forwardedBodyBuffer) } : {}),
   });
 
   const contentType = res.headers.get('content-type') ?? '';
@@ -378,11 +404,40 @@ function extractReceiptFromStream(body: Buffer): {
   const text = body.toString('utf-8');
   const lines = text.split('\n');
 
+  const parseCommentEnvelope = (value: string): SignedEnvelope<GatewayReceiptPayload> | undefined => {
+    try {
+      const normalized = value.trim().replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+      const decoded = Buffer.from(padded, 'base64').toString('utf-8');
+      const parsed = JSON.parse(decoded) as SignedEnvelope<GatewayReceiptPayload>;
+      if (parsed?.envelope_type === 'gateway_receipt') return parsed;
+    } catch {
+      // ignore malformed trailer comments
+    }
+    return undefined;
+  };
+
   // Look for receipt event in SSE stream
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (!line) continue;
+
+    if (line.startsWith(':clawproxy_receipt_envelope_b64u=')) {
+      const envelope = parseCommentEnvelope(
+        line.slice(':clawproxy_receipt_envelope_b64u='.length),
+      );
+      if (envelope) {
+        return {
+          envelope,
+          provider: envelope.payload?.provider ?? 'unknown',
+          model: envelope.payload?.model ?? 'unknown',
+        };
+      }
+      continue;
+    }
+
     // Look for data lines that might contain receipt
-    if (line?.startsWith('data: ')) {
+    if (line.startsWith('data: ')) {
       const data = line.slice(6).trim();
       if (data === '[DONE]') continue;
       try {

@@ -123,6 +123,39 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function findCliFlagValue(args: string[], flag: string): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg) continue;
+    if (arg === flag) return args[i + 1];
+    if (arg.startsWith(`${flag}=`)) return arg.slice(flag.length + 1);
+  }
+  return undefined;
+}
+
+function rewriteCliFlagValue(args: string[], flag: string, value: string): string[] {
+  const next = [...args];
+  for (let i = 0; i < next.length; i++) {
+    const arg = next[i];
+    if (!arg) continue;
+    if (arg === flag) {
+      if (i + 1 < next.length) next[i + 1] = value;
+      return next;
+    }
+    if (arg.startsWith(`${flag}=`)) {
+      next[i] = `${flag}=${value}`;
+      return next;
+    }
+  }
+  return [...next, flag, value];
+}
+
+function getPiGoogleCompatModelId(commandName: string, args: string[]): string | undefined {
+  if (commandName !== 'pi') return undefined;
+  if (findCliFlagValue(args, '--provider') !== 'google') return undefined;
+  const model = findCliFlagValue(args, '--model');
+  return typeof model === 'string' && model.trim().length > 0 ? model.trim() : undefined;
+}
 
 function wrapAsGatewayReceiptEnvelope(receipt: Record<string, unknown>): Record<string, unknown> {
   if (isObjectRecord(receipt) && receipt.envelope_type === 'gateway_receipt') {
@@ -472,6 +505,14 @@ export async function wrap(
   const commandName = basename(command).toLowerCase();
   const forceBaseUrlOverride = process.env['CLAWSIG_FORCE_BASE_URL_OVERRIDE'] === '1';
   const disableBaseUrlOverride = commandName === 'codex' && !forceBaseUrlOverride;
+  const piGoogleCompatModelId =
+    !usePassthrough && configuredClawproxyToken
+      ? getPiGoogleCompatModelId(commandName, args)
+      : undefined;
+  const usePiGoogleCompat = typeof piGoogleCompatModelId === 'string';
+  const childArgs = usePiGoogleCompat
+    ? rewriteCliFlagValue(args, '--provider', 'clawsig-google-proxy')
+    : args;
 
   const childEnv: Record<string, string | undefined> = {
     ...process.env,
@@ -509,6 +550,45 @@ export async function wrap(
     ...(interposeLib ? interposeLib.env : {}),
   };
 
+  if (usePiGoogleCompat && piGoogleCompatModelId) {
+    const piAgentDir = join(tmpDir, 'pi-agent');
+    await mkdir(piAgentDir, { recursive: true });
+    const piModelsPath = join(piAgentDir, 'models.json');
+    const apiKeyEnv = process.env['GOOGLE_API_KEY'] ? 'GOOGLE_API_KEY' : 'GEMINI_API_KEY';
+    const piModels = {
+      providers: {
+        'clawsig-google-proxy': {
+          baseUrl: `http://127.0.0.1:${proxy.port}/v1/proxy/google`,
+          api: 'openai-completions',
+          apiKey: apiKeyEnv,
+          authHeader: true,
+          compat: {
+            supportsDeveloperRole: false,
+            supportsReasoningEffort: false,
+          },
+          models: [
+            {
+              id: piGoogleCompatModelId,
+              name: `${piGoogleCompatModelId} (clawsig google proxy)`,
+              reasoning: false,
+              input: ['text'],
+              contextWindow: 1048576,
+              maxTokens: 65536,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+            },
+          ],
+        },
+      },
+    };
+    await writeFile(piModelsPath, JSON.stringify(piModels, null, 2), 'utf-8');
+    childEnv['PI_CODING_AGENT_DIR'] = piAgentDir;
+  }
+
   if (!disableBaseUrlOverride) {
     childEnv['OPENAI_BASE_URL'] = `http://127.0.0.1:${proxy.port}/v1/proxy/openai`;
     childEnv['OPENAI_API_BASE'] = childEnv['OPENAI_BASE_URL'];
@@ -529,7 +609,13 @@ export async function wrap(
     childEnv['ANTHROPIC_API_KEY'] = process.env['ANTHROPIC_API_KEY'];
   }
 
-  diag(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${args.join(' ')}\n\n`);
+  if (usePiGoogleCompat) {
+    diag(
+      `\x1b[33m[clawsig]\x1b[0m pi google-provider compat: using temp PI_CODING_AGENT_DIR=${childEnv['PI_CODING_AGENT_DIR']} with provider clawsig-google-proxy for model ${piGoogleCompatModelId}\n`,
+    );
+  }
+
+  diag(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${childArgs.join(' ')}\n\n`);
 
   let childPid = 0;
   let childProcess: ChildProcess | null = null;
@@ -560,7 +646,7 @@ export async function wrap(
   if (!isWindows) process.on('SIGHUP', sighupHandler);
 
   const exitCode = await new Promise<number>((resolve) => {
-    childProcess = spawn(command, args, {
+    childProcess = spawn(command, childArgs, {
       env: childEnv,
       stdio: 'inherit',
       shell: isWindows, // Windows needs shell:true to resolve .cmd/.bat aliases (npm, npx, etc.)

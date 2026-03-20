@@ -2338,8 +2338,9 @@ async function handleProxy(
 
   // Build provider-specific URL (Gemini needs model in path)
   let providerUrl: string;
+  let openaiApi: OpenAIUpstreamApi | undefined;
   try {
-    const openaiApi: OpenAIUpstreamApi | undefined =
+    openaiApi =
       provider === 'openai' || provider === 'google'
         ? inferOpenAiUpstreamApi(request, parsedBody)
         : undefined;
@@ -2350,6 +2351,32 @@ async function handleProxy(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponseWithRateLimit('INVALID_REQUEST', message, 400, rateLimitInfo);
+  }
+
+  if (provider === 'google' && openaiApi === 'responses') {
+    try {
+      const obj = JSON.parse(finalRequestBody) as Record<string, unknown>;
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+        throw new Error('Request body must be a JSON object');
+      }
+
+      delete obj.store;
+      delete obj.prompt_cache_key;
+      delete obj.prompt_cache_retention;
+      delete obj.service_tier;
+      delete obj.reasoning;
+      delete obj.include;
+
+      finalRequestBody = JSON.stringify(stripUndefined(obj));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return errorResponseWithRateLimit(
+        'INVALID_REQUEST',
+        `Failed to normalize Google-compatible OpenAI Responses payload: ${message}`,
+        400,
+        rateLimitInfo
+      );
+    }
   }
 
   // Extend binding with policy hash and CST token scope hash (when present)
