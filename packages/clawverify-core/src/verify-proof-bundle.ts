@@ -35,6 +35,10 @@ import type {
   SelectiveDisclosurePayload,
   CoSignaturePayload,
   RateLimitClaim,
+  PolicyBindingMetadata,
+  SignedPolicyBundlePayload,
+  SignedPolicyLayer,
+  SignedPolicyStatement,
 } from './types.js';
 import {
   isAllowedVersion,
@@ -160,6 +164,18 @@ function classifyCausalSchemaValidationCode(
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isIsoDate(value: unknown): value is string {
+  return isValidIsoDate(value);
+}
+
+function isBase64Url(value: unknown): value is string {
+  return isValidBase64Url(value);
 }
 
 interface ClddMetrics {
@@ -422,6 +438,793 @@ function evaluateClddDiscrepancy(
     risk_flags: riskFlags,
     discrepancy: mismatchFields.length > 0,
   };
+}
+
+type PolicyBindingValidationFailureCode =
+  | 'SCHEMA_VALIDATION_FAILED'
+  | 'HASH_MISMATCH'
+  | 'SIGNATURE_INVALID'
+  | 'RECEIPT_BINDING_MISMATCH';
+
+interface PolicyBindingValidationFailure {
+  ok: false;
+  code: PolicyBindingValidationFailureCode;
+  message: string;
+  field: string;
+}
+
+interface PolicyBindingValidationSuccess {
+  ok: true;
+}
+
+function canonicalizeForHash(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => canonicalizeForHash(entry));
+  }
+  if (isObjectRecord(value)) {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort((a, b) => a.localeCompare(b))) {
+      out[key] = canonicalizeForHash(value[key]);
+    }
+    return out;
+  }
+  return value;
+}
+
+function normalizePolicyStatementForHash(
+  statement: SignedPolicyStatement,
+  fieldPrefix: string
+):
+  | { ok: true; value: SignedPolicyStatement }
+  | PolicyBindingValidationFailure {
+  if (!isNonEmptyString(statement.sid)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.sid must be a non-empty string`,
+      field: `${fieldPrefix}.sid`,
+    };
+  }
+  if (statement.effect !== 'Allow' && statement.effect !== 'Deny') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.effect must be Allow or Deny`,
+      field: `${fieldPrefix}.effect`,
+    };
+  }
+  if (!Array.isArray(statement.actions) || statement.actions.length === 0) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.actions must be a non-empty string array`,
+      field: `${fieldPrefix}.actions`,
+    };
+  }
+  if (!Array.isArray(statement.resources) || statement.resources.length === 0) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.resources must be a non-empty string array`,
+      field: `${fieldPrefix}.resources`,
+    };
+  }
+
+  const actions = statement.actions
+    .map((action) => (typeof action === 'string' ? action.trim() : ''))
+    .filter((action) => action.length > 0)
+    .sort((a, b) => a.localeCompare(b));
+  if (actions.length === 0) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.actions must contain non-empty strings`,
+      field: `${fieldPrefix}.actions`,
+    };
+  }
+
+  const resources = statement.resources
+    .map((resource) => (typeof resource === 'string' ? resource.trim() : ''))
+    .filter((resource) => resource.length > 0)
+    .sort((a, b) => a.localeCompare(b));
+  if (resources.length === 0) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.resources must contain non-empty strings`,
+      field: `${fieldPrefix}.resources`,
+    };
+  }
+
+  let conditions: SignedPolicyStatement['conditions'] | undefined;
+  if (statement.conditions !== undefined) {
+    if (!isObjectRecord(statement.conditions)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${fieldPrefix}.conditions must be an object when present`,
+        field: `${fieldPrefix}.conditions`,
+      };
+    }
+    const normalizedConditions: Record<string, Record<string, string[]>> = {};
+    for (const op of Object.keys(statement.conditions).sort((a, b) => a.localeCompare(b))) {
+      const conditionMap = statement.conditions[op];
+      if (!isObjectRecord(conditionMap)) {
+        return {
+          ok: false,
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: `${fieldPrefix}.conditions.${op} must be an object`,
+          field: `${fieldPrefix}.conditions.${op}`,
+        };
+      }
+      const normalizedMap: Record<string, string[]> = {};
+      for (const key of Object.keys(conditionMap).sort((a, b) => a.localeCompare(b))) {
+        const rawValues = conditionMap[key];
+        if (!Array.isArray(rawValues)) {
+          return {
+            ok: false,
+            code: 'SCHEMA_VALIDATION_FAILED',
+            message: `${fieldPrefix}.conditions.${op}.${key} must be a string array`,
+            field: `${fieldPrefix}.conditions.${op}.${key}`,
+          };
+        }
+        const values = rawValues
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter((value) => value.length > 0)
+          .sort((a, b) => a.localeCompare(b));
+        normalizedMap[key] = values;
+      }
+      normalizedConditions[op] = normalizedMap;
+    }
+    conditions = normalizedConditions;
+  }
+
+  return {
+    ok: true,
+    value: {
+      sid: statement.sid.trim(),
+      effect: statement.effect,
+      actions,
+      resources,
+      ...(conditions ? { conditions } : {}),
+    },
+  };
+}
+
+async function normalizePolicyForHash(
+  policy: unknown,
+  fieldPrefix: string
+):
+  Promise<
+    | { ok: true; normalized: { statements: SignedPolicyStatement[] }; hash: string }
+    | PolicyBindingValidationFailure
+  > {
+  if (!isObjectRecord(policy)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix} must be an object`,
+      field: fieldPrefix,
+    };
+  }
+
+  const statementsRaw = policy.statements;
+  if (!Array.isArray(statementsRaw) || statementsRaw.length === 0) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.statements must be a non-empty array`,
+      field: `${fieldPrefix}.statements`,
+    };
+  }
+
+  const bySid = new Map<string, SignedPolicyStatement>();
+  for (let i = 0; i < statementsRaw.length; i++) {
+    const rawStatement = statementsRaw[i];
+    if (!isObjectRecord(rawStatement)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${fieldPrefix}.statements[${i}] must be an object`,
+        field: `${fieldPrefix}.statements[${i}]`,
+      };
+    }
+    const normalizedStatement = normalizePolicyStatementForHash(
+      rawStatement as unknown as SignedPolicyStatement,
+      `${fieldPrefix}.statements[${i}]`
+    );
+    if (!normalizedStatement.ok) return normalizedStatement;
+    bySid.set(normalizedStatement.value.sid, normalizedStatement.value);
+  }
+
+  const normalizedPolicy = {
+    statements: [...bySid.values()].sort((a, b) => a.sid.localeCompare(b.sid)),
+  };
+
+  const hash = await computeHash(canonicalizeForHash(normalizedPolicy), 'SHA-256');
+  return { ok: true, normalized: normalizedPolicy, hash };
+}
+
+async function validateSignedPolicyBundleEnvelopeForBinding(
+  envelopeRaw: unknown,
+  fieldPrefix: string
+):
+  Promise<
+    | {
+        ok: true;
+        payload: SignedPolicyBundlePayload;
+      }
+    | PolicyBindingValidationFailure
+  > {
+  if (!isObjectRecord(envelopeRaw)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix} must be an object`,
+      field: fieldPrefix,
+    };
+  }
+
+  const envelope = envelopeRaw as Record<string, unknown>;
+  if (envelope.envelope_version !== '1') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.envelope_version must be "1"`,
+      field: `${fieldPrefix}.envelope_version`,
+    };
+  }
+  if (envelope.envelope_type !== 'policy_bundle') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.envelope_type must be "policy_bundle"`,
+      field: `${fieldPrefix}.envelope_type`,
+    };
+  }
+  if (envelope.hash_algorithm !== 'SHA-256') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.hash_algorithm must be SHA-256`,
+      field: `${fieldPrefix}.hash_algorithm`,
+    };
+  }
+  if (envelope.algorithm !== 'Ed25519') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.algorithm must be Ed25519`,
+      field: `${fieldPrefix}.algorithm`,
+    };
+  }
+  if (!isBase64Url(envelope.payload_hash_b64u)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload_hash_b64u must be base64url`,
+      field: `${fieldPrefix}.payload_hash_b64u`,
+    };
+  }
+  if (!isBase64Url(envelope.signature_b64u)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.signature_b64u must be base64url`,
+      field: `${fieldPrefix}.signature_b64u`,
+    };
+  }
+  if (!isValidDidFormat(envelope.signer_did)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.signer_did must be a valid DID`,
+      field: `${fieldPrefix}.signer_did`,
+    };
+  }
+  if (!isIsoDate(envelope.issued_at)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.issued_at must be ISO-8601`,
+      field: `${fieldPrefix}.issued_at`,
+    };
+  }
+
+  if (!isObjectRecord(envelope.payload)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload must be an object`,
+      field: `${fieldPrefix}.payload`,
+    };
+  }
+
+  const payloadRecord = envelope.payload;
+  if (payloadRecord.policy_bundle_version !== '1') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload.policy_bundle_version must be "1"`,
+      field: `${fieldPrefix}.payload.policy_bundle_version`,
+    };
+  }
+  if (!isNonEmptyString(payloadRecord.bundle_id)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload.bundle_id must be non-empty`,
+      field: `${fieldPrefix}.payload.bundle_id`,
+    };
+  }
+  if (!isValidDidFormat(payloadRecord.issuer_did)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload.issuer_did must be a valid DID`,
+      field: `${fieldPrefix}.payload.issuer_did`,
+    };
+  }
+  if (!isIsoDate(payloadRecord.issued_at)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload.issued_at must be ISO-8601`,
+      field: `${fieldPrefix}.payload.issued_at`,
+    };
+  }
+  if (payloadRecord.hash_algorithm !== 'SHA-256') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload.hash_algorithm must be SHA-256`,
+      field: `${fieldPrefix}.payload.hash_algorithm`,
+    };
+  }
+  if (!Array.isArray(payloadRecord.layers) || payloadRecord.layers.length === 0) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload.layers must be a non-empty array`,
+      field: `${fieldPrefix}.payload.layers`,
+    };
+  }
+
+  const normalizedLayers: SignedPolicyLayer[] = [];
+  for (let i = 0; i < payloadRecord.layers.length; i++) {
+    const rawLayer = payloadRecord.layers[i];
+    if (!isObjectRecord(rawLayer)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${fieldPrefix}.payload.layers[${i}] must be an object`,
+        field: `${fieldPrefix}.payload.layers[${i}]`,
+      };
+    }
+    if (!isNonEmptyString(rawLayer.layer_id)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${fieldPrefix}.payload.layers[${i}].layer_id must be non-empty`,
+        field: `${fieldPrefix}.payload.layers[${i}].layer_id`,
+      };
+    }
+    if (!isObjectRecord(rawLayer.scope)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${fieldPrefix}.payload.layers[${i}].scope must be an object`,
+        field: `${fieldPrefix}.payload.layers[${i}].scope`,
+      };
+    }
+    const rawScope = rawLayer.scope;
+    const scopeType = rawScope.scope_type;
+    if (
+      scopeType !== 'org' &&
+      scopeType !== 'project' &&
+      scopeType !== 'task' &&
+      scopeType !== 'exception'
+    ) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${fieldPrefix}.payload.layers[${i}].scope.scope_type is invalid`,
+        field: `${fieldPrefix}.payload.layers[${i}].scope.scope_type`,
+      };
+    }
+    if (!isNonEmptyString(rawScope.org_id)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${fieldPrefix}.payload.layers[${i}].scope.org_id must be non-empty`,
+        field: `${fieldPrefix}.payload.layers[${i}].scope.org_id`,
+      };
+    }
+    if (!isBase64Url(rawLayer.policy_hash_b64u)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${fieldPrefix}.payload.layers[${i}].policy_hash_b64u must be base64url`,
+        field: `${fieldPrefix}.payload.layers[${i}].policy_hash_b64u`,
+      };
+    }
+
+    const normalizedPolicy = await normalizePolicyForHash(
+      rawLayer.policy,
+      `${fieldPrefix}.payload.layers[${i}].policy`
+    );
+    if (!normalizedPolicy.ok) return normalizedPolicy;
+
+    if (normalizedPolicy.hash !== rawLayer.policy_hash_b64u) {
+      return {
+        ok: false,
+        code: 'HASH_MISMATCH',
+        message: `${fieldPrefix}.payload.layers[${i}].policy_hash_b64u mismatch`,
+        field: `${fieldPrefix}.payload.layers[${i}].policy_hash_b64u`,
+      };
+    }
+
+    normalizedLayers.push({
+      layer_id: String(rawLayer.layer_id).trim(),
+      scope: {
+        scope_type: scopeType,
+        org_id: String(rawScope.org_id).trim(),
+        ...(isNonEmptyString(rawScope.project_id)
+          ? { project_id: String(rawScope.project_id).trim() }
+          : {}),
+        ...(isNonEmptyString(rawScope.task_id)
+          ? { task_id: String(rawScope.task_id).trim() }
+          : {}),
+        ...(isNonEmptyString(rawScope.exception_id)
+          ? { exception_id: String(rawScope.exception_id).trim() }
+          : {}),
+        ...(typeof rawScope.priority === 'number'
+          ? { priority: Math.trunc(rawScope.priority) }
+          : {}),
+        ...(isIsoDate(rawScope.expires_at)
+          ? { expires_at: String(rawScope.expires_at) }
+          : {}),
+      },
+      apply_mode:
+        rawLayer.apply_mode === 'replace' || rawLayer.apply_mode === 'merge'
+          ? rawLayer.apply_mode
+          : 'merge',
+      policy: normalizedPolicy.normalized,
+      policy_hash_b64u: String(rawLayer.policy_hash_b64u),
+      ...(isObjectRecord(rawLayer.metadata) ? { metadata: rawLayer.metadata } : {}),
+    });
+  }
+
+  const normalizedPayload: SignedPolicyBundlePayload = {
+    policy_bundle_version: '1',
+    bundle_id: String(payloadRecord.bundle_id).trim(),
+    issuer_did: String(payloadRecord.issuer_did).trim(),
+    issued_at: String(payloadRecord.issued_at),
+    hash_algorithm: 'SHA-256',
+    layers: normalizedLayers,
+    ...(isObjectRecord(payloadRecord.metadata)
+      ? { metadata: payloadRecord.metadata }
+      : {}),
+  };
+
+  const computedPayloadHash = await computeHash(
+    canonicalizeForHash(normalizedPayload),
+    'SHA-256'
+  );
+  if (computedPayloadHash !== envelope.payload_hash_b64u) {
+    return {
+      ok: false,
+      code: 'HASH_MISMATCH',
+      message: `${fieldPrefix}.payload_hash_b64u mismatch`,
+      field: `${fieldPrefix}.payload_hash_b64u`,
+    };
+  }
+
+  const publicKey = extractPublicKeyFromDidKey(String(envelope.signer_did));
+  if (!publicKey) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.signer_did must resolve to an Ed25519 did:key`,
+      field: `${fieldPrefix}.signer_did`,
+    };
+  }
+
+  const signatureValid = await verifySignature(
+    'Ed25519',
+    publicKey,
+    base64UrlDecode(String(envelope.signature_b64u)),
+    new TextEncoder().encode(String(envelope.payload_hash_b64u))
+  );
+  if (!signatureValid) {
+    return {
+      ok: false,
+      code: 'SIGNATURE_INVALID',
+      message: `${fieldPrefix}.signature_b64u failed verification`,
+      field: `${fieldPrefix}.signature_b64u`,
+    };
+  }
+
+  return {
+    ok: true,
+    payload: normalizedPayload,
+  };
+}
+
+async function validatePolicyBindingMetadata(args: {
+  payload: ProofBundlePayload;
+  metadataRecord: Record<string, unknown> | null;
+  eventChainValid: boolean;
+}): Promise<PolicyBindingValidationSuccess | PolicyBindingValidationFailure> {
+  const bindingRaw = args.metadataRecord?.policy_binding;
+  if (bindingRaw === undefined) {
+    return { ok: true };
+  }
+  if (!isObjectRecord(bindingRaw)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.policy_binding must be an object when present',
+      field: 'payload.metadata.policy_binding',
+    };
+  }
+
+  const binding = bindingRaw as unknown as PolicyBindingMetadata;
+  if (binding.binding_version !== '1') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.policy_binding.binding_version must be "1"',
+      field: 'payload.metadata.policy_binding.binding_version',
+    };
+  }
+  if (
+    typeof binding.effective_policy_hash_b64u !== 'string' ||
+    !isValidBase64Url(binding.effective_policy_hash_b64u)
+  ) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.policy_binding.effective_policy_hash_b64u must be base64url',
+      field: 'payload.metadata.policy_binding.effective_policy_hash_b64u',
+    };
+  }
+  if (!isObjectRecord(binding.effective_policy_snapshot)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.policy_binding.effective_policy_snapshot must be an object',
+      field: 'payload.metadata.policy_binding.effective_policy_snapshot',
+    };
+  }
+
+  const snapshot = binding.effective_policy_snapshot;
+  if (snapshot.snapshot_version !== '1') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.policy_binding.effective_policy_snapshot.snapshot_version must be "1"',
+      field: 'payload.metadata.policy_binding.effective_policy_snapshot.snapshot_version',
+    };
+  }
+  if (snapshot.resolver_version !== 'org_project_task_exception.v1') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.policy_binding.effective_policy_snapshot.resolver_version must be org_project_task_exception.v1',
+      field: 'payload.metadata.policy_binding.effective_policy_snapshot.resolver_version',
+    };
+  }
+  if (!isObjectRecord(snapshot.context) || !isNonEmptyString(snapshot.context.org_id)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.policy_binding.effective_policy_snapshot.context.org_id is required',
+      field: 'payload.metadata.policy_binding.effective_policy_snapshot.context.org_id',
+    };
+  }
+  if (
+    !isObjectRecord(snapshot.source_bundle) ||
+    !isNonEmptyString(snapshot.source_bundle.bundle_id) ||
+    !isValidDidFormat(snapshot.source_bundle.issuer_did) ||
+    !isIsoDate(snapshot.source_bundle.issued_at)
+  ) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.policy_binding.effective_policy_snapshot.source_bundle is malformed',
+      field: 'payload.metadata.policy_binding.effective_policy_snapshot.source_bundle',
+    };
+  }
+  if (!Array.isArray(snapshot.applied_layers) || snapshot.applied_layers.length === 0) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.policy_binding.effective_policy_snapshot.applied_layers must be non-empty',
+      field: 'payload.metadata.policy_binding.effective_policy_snapshot.applied_layers',
+    };
+  }
+
+  const normalizedEffectivePolicy = await normalizePolicyForHash(
+    snapshot.effective_policy,
+    'payload.metadata.policy_binding.effective_policy_snapshot.effective_policy'
+  );
+  if (!normalizedEffectivePolicy.ok) return normalizedEffectivePolicy;
+
+  const normalizedSnapshot = {
+    ...snapshot,
+    effective_policy: normalizedEffectivePolicy.normalized,
+  };
+
+  const computedEffectiveHash = await computeHash(
+    canonicalizeForHash(normalizedSnapshot),
+    'SHA-256'
+  );
+  if (computedEffectiveHash !== binding.effective_policy_hash_b64u) {
+    return {
+      ok: false,
+      code: 'HASH_MISMATCH',
+      message:
+        'payload.metadata.policy_binding.effective_policy_hash_b64u does not match effective_policy_snapshot',
+      field: 'payload.metadata.policy_binding.effective_policy_hash_b64u',
+    };
+  }
+
+  if (binding.signed_policy_bundle_envelope === undefined) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.policy_binding.signed_policy_bundle_envelope is required',
+      field: 'payload.metadata.policy_binding.signed_policy_bundle_envelope',
+    };
+  }
+
+  const signedBundleValidation = await validateSignedPolicyBundleEnvelopeForBinding(
+    binding.signed_policy_bundle_envelope,
+    'payload.metadata.policy_binding.signed_policy_bundle_envelope'
+  );
+  if (!signedBundleValidation.ok) return signedBundleValidation;
+
+  const signedPayload = signedBundleValidation.payload;
+  if (signedPayload.bundle_id !== snapshot.source_bundle.bundle_id) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'policy binding source_bundle.bundle_id must match signed policy bundle payload.bundle_id',
+      field: 'payload.metadata.policy_binding.effective_policy_snapshot.source_bundle.bundle_id',
+    };
+  }
+  if (signedPayload.issuer_did !== snapshot.source_bundle.issuer_did) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'policy binding source_bundle.issuer_did must match signed policy bundle payload.issuer_did',
+      field: 'payload.metadata.policy_binding.effective_policy_snapshot.source_bundle.issuer_did',
+    };
+  }
+
+  const signedLayerById = new Map(
+    signedPayload.layers.map((layer) => [layer.layer_id, layer])
+  );
+  for (let i = 0; i < snapshot.applied_layers.length; i++) {
+    const applied = snapshot.applied_layers[i];
+    const signedLayer = signedLayerById.get(applied.layer_id);
+    if (!signedLayer) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'policy binding applied layer is missing from signed policy bundle layers',
+        field: `payload.metadata.policy_binding.effective_policy_snapshot.applied_layers[${i}].layer_id`,
+      };
+    }
+    if (signedLayer.policy_hash_b64u !== applied.policy_hash_b64u) {
+      return {
+        ok: false,
+        code: 'HASH_MISMATCH',
+        message:
+          'policy binding applied layer policy hash does not match signed policy bundle layer hash',
+        field: `payload.metadata.policy_binding.effective_policy_snapshot.applied_layers[${i}].policy_hash_b64u`,
+      };
+    }
+  }
+
+  const sentinels = args.metadataRecord && isObjectRecord(args.metadataRecord.sentinels)
+    ? args.metadataRecord.sentinels
+    : null;
+  if (!sentinels || !isObjectRecord(sentinels.egress_policy_receipt)) {
+    return {
+      ok: false,
+      code: 'RECEIPT_BINDING_MISMATCH',
+      message:
+        'payload.metadata.policy_binding requires payload.metadata.sentinels.egress_policy_receipt',
+      field: 'payload.metadata.sentinels.egress_policy_receipt',
+    };
+  }
+
+  const egress = sentinels.egress_policy_receipt as Record<string, unknown>;
+  const egressPayload = isObjectRecord(egress.payload) ? egress.payload : null;
+  if (!egressPayload) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.sentinels.egress_policy_receipt.payload must be an object when policy_binding is present',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload',
+    };
+  }
+
+  const egressEffectiveHash =
+    typeof egressPayload.effective_policy_hash_b64u === 'string'
+      ? egressPayload.effective_policy_hash_b64u
+      : null;
+
+  if (!egressEffectiveHash || !isValidBase64Url(egressEffectiveHash)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'egress policy receipt must carry an effective policy hash when policy_binding is present',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.effective_policy_hash_b64u',
+    };
+  }
+
+  if (egressEffectiveHash !== binding.effective_policy_hash_b64u) {
+    return {
+      ok: false,
+      code: 'RECEIPT_BINDING_MISMATCH',
+      message:
+        'egress policy receipt effective policy hash does not match payload.metadata.policy_binding.effective_policy_hash_b64u',
+      field: 'payload.metadata.sentinels.egress_policy_receipt.payload.effective_policy_hash_b64u',
+    };
+  }
+
+  if (args.eventChainValid && Array.isArray(args.payload.event_chain) && args.payload.event_chain.length > 0) {
+    const expectedRunId = args.payload.event_chain[0].run_id;
+    const eventHashSet = new Set(args.payload.event_chain.map((event) => event.event_hash_b64u));
+    const bindingRaw = isObjectRecord(egressPayload.binding) ? egressPayload.binding : null;
+    if (!bindingRaw) {
+      return {
+        ok: false,
+        code: 'RECEIPT_BINDING_MISMATCH',
+        message:
+          'egress policy receipt must include binding.run_id/event_hash_b64u when event_chain is present',
+        field: 'payload.metadata.sentinels.egress_policy_receipt.payload.binding',
+      };
+    }
+
+    if (bindingRaw.run_id !== expectedRunId) {
+      return {
+        ok: false,
+        code: 'RECEIPT_BINDING_MISMATCH',
+        message: 'egress policy receipt binding.run_id does not match payload.event_chain run_id',
+        field: 'payload.metadata.sentinels.egress_policy_receipt.payload.binding.run_id',
+      };
+    }
+    if (
+      typeof bindingRaw.event_hash_b64u !== 'string' ||
+      !eventHashSet.has(bindingRaw.event_hash_b64u)
+    ) {
+      return {
+        ok: false,
+        code: 'RECEIPT_BINDING_MISMATCH',
+        message:
+          'egress policy receipt binding.event_hash_b64u must reference payload.event_chain',
+        field: 'payload.metadata.sentinels.egress_policy_receipt.payload.binding.event_hash_b64u',
+      };
+    }
+  }
+
+  return { ok: true };
 }
 
 function hasOwnField(record: Record<string, unknown>, key: string): boolean {
@@ -3378,6 +4181,26 @@ export async function verifyProofBundle(
   const mdRecord = md && typeof md === 'object' && md !== null && !Array.isArray(md)
     ? (md as Record<string, unknown>)
     : null;
+
+  const policyBindingValidation = await validatePolicyBindingMetadata({
+    payload,
+    metadataRecord: mdRecord,
+    eventChainValid: componentResults.event_chain_valid === true,
+  });
+  if (!policyBindingValidation.ok) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: policyBindingValidation.message,
+        verified_at: now,
+      },
+      error: {
+        code: policyBindingValidation.code,
+        message: policyBindingValidation.message,
+        field: policyBindingValidation.field,
+      },
+    };
+  }
 
   const promptPackRaw = mdRecord ? mdRecord.prompt_pack : undefined;
   if (promptPackRaw !== undefined) {

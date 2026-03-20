@@ -268,6 +268,7 @@ export interface EgressPolicyReceiptPayload {
   receipt_id: string;
   policy_version: '1';
   policy_hash_b64u: string;
+  effective_policy_hash_b64u?: string;
   proofed_mode: boolean;
   clawproxy_url: string;
   allowed_proxy_destinations: string[];
@@ -1121,6 +1122,83 @@ export interface SentinelTelemetry {
   };
 }
 
+export interface SignedPolicyScope {
+  scope_type: 'org' | 'project' | 'task' | 'exception';
+  org_id: string;
+  project_id?: string;
+  task_id?: string;
+  exception_id?: string;
+  priority?: number;
+  expires_at?: string;
+}
+
+export interface SignedPolicyStatement {
+  sid: string;
+  effect: 'Allow' | 'Deny';
+  actions: string[];
+  resources: string[];
+  conditions?: Record<string, Record<string, string[]>>;
+}
+
+export interface SignedLayerPolicy {
+  statements: SignedPolicyStatement[];
+}
+
+export interface SignedPolicyLayer {
+  layer_id: string;
+  scope: SignedPolicyScope;
+  apply_mode?: 'merge' | 'replace';
+  policy: SignedLayerPolicy;
+  policy_hash_b64u: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SignedPolicyBundlePayload {
+  policy_bundle_version: '1';
+  bundle_id: string;
+  issuer_did: string;
+  issued_at: string;
+  hash_algorithm: 'SHA-256';
+  layers: SignedPolicyLayer[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface AppliedPolicyLayerRef {
+  layer_id: string;
+  scope_type: SignedPolicyScope['scope_type'];
+  org_id: string;
+  project_id?: string;
+  task_id?: string;
+  exception_id?: string;
+  priority: number;
+  apply_mode: 'merge' | 'replace';
+  policy_hash_b64u: string;
+}
+
+export interface EffectivePolicySnapshot {
+  snapshot_version: '1';
+  resolver_version: 'org_project_task_exception.v1';
+  context: {
+    org_id: string;
+    project_id?: string;
+    task_id?: string;
+  };
+  source_bundle: {
+    bundle_id: string;
+    issuer_did: string;
+    issued_at: string;
+  };
+  applied_layers: AppliedPolicyLayerRef[];
+  effective_policy: SignedLayerPolicy;
+}
+
+export interface PolicyBindingMetadata {
+  binding_version: '1';
+  effective_policy_hash_b64u: string;
+  effective_policy_snapshot: EffectivePolicySnapshot;
+  signed_policy_bundle_envelope?: SignedEnvelope<SignedPolicyBundlePayload>;
+}
+
 export interface CoverageAttestationPayload {
   attestation_version: '1';
   attestation_id: string;
@@ -1237,6 +1315,8 @@ export interface ProofBundleMetadata {
   harness?: HarnessMetadata;
   /** Deterministic coverage telemetry from local sentinels. */
   sentinels?: SentinelTelemetry;
+  /** AF2-POL-001/002 policy binding metadata for proofed runs. */
+  policy_binding?: PolicyBindingMetadata;
   /** Additional metadata (non-normative) */
   [key: string]: unknown;
 }

@@ -67,6 +67,15 @@ export { analyzeCommand } from './command-analyzer.js';
 // Policy Compiler — WPC JSON → bash patterns
 export { compilePolicyToBash } from './compile-policy.js';
 
+// Signed Policy Resolution (AF2-POL-001/002)
+export {
+  computeSignedPolicyLayerHashB64u,
+  computeSignedPolicyBundlePayloadHashB64u,
+  normalizeSignedLayerPolicy,
+  verifySignedPolicyBundleEnvelope,
+  resolveEffectivePolicyFromSignedBundle,
+} from './policy-resolution.js';
+
 // Types
 export type {
   ClawproofConfig,
@@ -91,6 +100,15 @@ export type {
   EventChainEntry,
   GatewayReceiptPayload,
   EgressPolicyReceiptPayload,
+  SignedPolicyScope,
+  SignedPolicyStatement,
+  SignedLayerPolicy,
+  SignedPolicyLayer,
+  SignedPolicyBundlePayload,
+  PolicyResolutionContext,
+  AppliedPolicyLayerRef,
+  EffectivePolicySnapshot,
+  EffectivePolicyBindingMetadata,
   ToolReceiptPayload,
   SideEffectReceiptPayload,
   ExecutionReceiptPayload,

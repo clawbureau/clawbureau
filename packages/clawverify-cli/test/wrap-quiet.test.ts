@@ -1,12 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import {
+  computeSignedPolicyBundlePayloadHashB64u,
+  computeSignedPolicyLayerHashB64u,
+} from '../../clawsig-sdk/src/policy-resolution.js';
+import {
+  didFromPublicKey,
+  generateKeyPair,
+  signEd25519,
+} from '../../clawsig-sdk/src/crypto.js';
 import {
   isNoiseExecutionReceipt,
   isNoiseNetworkReceipt,
@@ -18,6 +27,83 @@ const execFileAsync = promisify(execFile);
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const CLI_PATH = resolve(__dirname, '../dist/cli.js');
+
+async function ensureSignedPolicyBundleForProofedMode(
+  workdir: string,
+  env: Record<string, string | undefined>,
+): Promise<void> {
+  const proofed = env['CLAWSIG_PROOFED'] === '1' || env['CLAWSIG_PROOFED_MODE'] === '1';
+  if (!proofed || env['CLAWSIG_POLICY_BUNDLE_PATH']) return;
+
+  const clawsigDir = join(workdir, '.clawsig');
+  const bundlePath = join(clawsigDir, 'policy.bundle.json');
+
+  try {
+    await readFile(bundlePath, 'utf-8');
+    return;
+  } catch {
+    // create below
+  }
+
+  await mkdir(clawsigDir, { recursive: true });
+
+  const keyPair = await generateKeyPair();
+  const issuerDid = await didFromPublicKey(keyPair.publicKey);
+  const orgId = env['CLAWSIG_POLICY_ORG_ID']?.trim() || env['CLAWSIG_ORG_ID']?.trim() || 'local';
+
+  const payload = {
+    policy_bundle_version: '1' as const,
+    bundle_id: `bundle_test_${Date.now()}`,
+    issuer_did: issuerDid,
+    issued_at: '2026-03-20T00:00:00.000Z',
+    hash_algorithm: 'SHA-256' as const,
+    layers: [
+      {
+        layer_id: 'org',
+        scope: { scope_type: 'org' as const, org_id: orgId },
+        apply_mode: 'merge' as const,
+        policy: {
+          statements: [
+            {
+              sid: 'org.allow',
+              effect: 'Allow' as const,
+              actions: ['model:invoke', 'side_effect:network_egress', 'tool:execute'],
+              resources: ['*'],
+            },
+          ],
+        },
+        policy_hash_b64u: '',
+      },
+    ],
+  };
+
+  payload.layers[0]!.policy_hash_b64u = await computeSignedPolicyLayerHashB64u(payload.layers[0]!.policy);
+  const payloadHash = await computeSignedPolicyBundlePayloadHashB64u(payload);
+  const signature = await signEd25519(
+    keyPair.privateKey,
+    new TextEncoder().encode(payloadHash),
+  );
+
+  await writeFile(
+    bundlePath,
+    JSON.stringify(
+      {
+        envelope_version: '1',
+        envelope_type: 'policy_bundle',
+        payload,
+        payload_hash_b64u: payloadHash,
+        hash_algorithm: 'SHA-256',
+        signature_b64u: signature,
+        algorithm: 'Ed25519',
+        signer_did: issuerDid,
+        issued_at: payload.issued_at,
+      },
+      null,
+      2,
+    ),
+    'utf-8',
+  );
+}
 
 /**
  * Run clawsig wrap with the given extra CLI flags, capturing stderr.
@@ -85,14 +171,18 @@ async function runWrapRaw(
     ...(opts.childArgs ?? [process.execPath, '-e', "console.log('hello from child')"]),
   ];
 
+  const env = {
+    ...process.env,
+    CLAWSIG_DISABLE_INTERPOSE: '1',
+    ...(opts.extraEnv ?? {}),
+  };
+
+  await ensureSignedPolicyBundleForProofedMode(workdir, env);
+
   try {
     const { stdout, stderr } = await execFileAsync(process.execPath, args, {
       cwd: workdir,
-      env: {
-        ...process.env,
-        CLAWSIG_DISABLE_INTERPOSE: '1',
-        ...(opts.extraEnv ?? {}),
-      },
+      env,
       timeout: 60_000,
     });
 
