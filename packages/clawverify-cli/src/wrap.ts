@@ -133,6 +133,18 @@ function isGatewayReceiptEnvelope(
   );
 }
 
+function isSignedGatewayReceiptEnvelope(
+  value: unknown,
+): value is SignedEnvelope<GatewayReceiptPayload> {
+  return (
+    isGatewayReceiptEnvelope(value) &&
+    value.envelope_version === '1' &&
+    typeof (value as unknown as Record<string, unknown>).payload_hash_b64u === 'string' &&
+    typeof (value as unknown as Record<string, unknown>).signature_b64u === 'string' &&
+    typeof (value as unknown as Record<string, unknown>).signer_did === 'string'
+  );
+}
+
 interface FallbackSigner {
   did: string;
   sign(data: Uint8Array): Promise<string>;
@@ -151,7 +163,7 @@ async function ensureMinimalHarnessEvidence(args: {
     ? [...bundle.payload.receipts]
     : [];
 
-  const hasGatewayReceipt = receipts.some((r) => isGatewayReceiptEnvelope(r));
+  const hasGatewayReceipt = receipts.some((r) => isSignedGatewayReceiptEnvelope(r));
 
   if (!hasGatewayReceipt) {
     const now = new Date().toISOString();
@@ -201,7 +213,7 @@ async function ensureMinimalHarnessEvidence(args: {
     Array.isArray(bundle.payload.event_chain) && bundle.payload.event_chain.length > 0;
 
   if (!hasEventChain) {
-    const gatewayReceipt = receipts.find((r) => isGatewayReceiptEnvelope(r));
+    const gatewayReceipt = receipts.find((r) => isSignedGatewayReceiptEnvelope(r));
     const ts = gatewayReceipt?.payload?.timestamp ?? new Date().toISOString();
 
     const payloadHash = await sha256TextB64u(
@@ -773,6 +785,7 @@ export async function wrap(
       bundle.payload.receipts = [...existing, ...additions] as typeof bundle.payload.receipts;
     }
   }
+
   // Add sentinel metadata
   const sentinelsMetadata = {
     shell_events: shellEvents.length,
@@ -1128,6 +1141,13 @@ function collectToolsUsed(
 
       if (rawReceipt['receipt_type'] === 'tool_call') {
         addTool(rawReceipt['tool_name']);
+      }
+
+      if (envelopeType === 'gateway_receipt' && isObjectRecord(rawReceipt['payload'])) {
+        const nestedPayload = rawReceipt['payload'];
+        if (nestedPayload['receipt_type'] === 'tool_call') {
+          addTool(nestedPayload['tool_name']);
+        }
       }
     }
   }
