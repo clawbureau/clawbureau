@@ -49,7 +49,7 @@ function usageText(): string {
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>] [--json]',
     '  clawverify verify export-bundle|aggregate-bundle --input <path> [--config <path>] [--json]',
     '  clawverify verify commit-sig   --input <path> [--json]',
-    '  clawsig sign-commit <sha> [--json]',
+    '  clawsig sign-commit <sha> [--repo-claim-id <claim_id>] [--json]',
     '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>] [--json]',
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
@@ -156,7 +156,7 @@ type ParsedArgs =
   | { command: 'fleet-add'; name: string }
   | { command: 'fleet-list' }
   | { command: 'fleet-revoke'; name: string }
-  | { command: 'sign-commit'; commitSha: string }
+  | { command: 'sign-commit'; commitSha: string; repoClaimId?: string }
   | { command: 'version' };
 
 function parseCliArgs(argv: string[]): ParsedArgs {
@@ -171,9 +171,12 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   if (argv[0] === 'sign-commit') {
     const commitSha = argv[1];
     if (!commitSha || commitSha.startsWith('--')) {
-      throw new CliUsageError('Usage: clawsig sign-commit <sha> [--json]');
+      throw new CliUsageError(
+        'Usage: clawsig sign-commit <sha> [--repo-claim-id <claim_id>] [--json]',
+      );
     }
-    return { command: 'sign-commit', commitSha };
+    const repoClaimId = readFlag(argv, '--repo-claim-id');
+    return { command: 'sign-commit', commitSha, repoClaimId };
   }
 
   if (argv[0] === 'inspect') {
@@ -459,7 +462,13 @@ function classifyReceiptType(raw: unknown): string {
   if (!raw || typeof raw !== 'object') return 'unknown';
   const r = raw as Record<string, unknown>;
   const envType = r.envelope_type as string | undefined;
-  const rcptType = r.receipt_type as string | undefined;
+  const nestedPayload =
+    envType === 'gateway_receipt' && r.payload && typeof r.payload === 'object'
+      ? (r.payload as Record<string, unknown>)
+      : undefined;
+  const rcptType =
+    (r.receipt_type as string | undefined) ??
+    (nestedPayload?.receipt_type as string | undefined);
   if (envType === 'gateway_receipt' || rcptType?.includes('gateway')) return 'gateway';
   if (envType === 'tool_receipt' || rcptType?.includes('tool')) return 'tool_call';
   if (envType === 'side_effect_receipt' || rcptType?.includes('side_effect')) return 'side_effect';
@@ -488,7 +497,9 @@ async function main() {
   }
 
   if (parsed.command === 'sign-commit') {
-    const envelope = await signCommitProofEnvelopeForCurrentIdentity(parsed.commitSha);
+    const envelope = await signCommitProofEnvelopeForCurrentIdentity(parsed.commitSha, undefined, {
+      repoClaimId: parsed.repoClaimId,
+    });
     if (jsonMode) {
       printJson(envelope);
     } else {

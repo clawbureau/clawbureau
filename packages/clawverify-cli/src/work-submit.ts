@@ -826,7 +826,9 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
   if (options.commitProofPath) {
     try {
       const rawCommitProof = await loadJsonObject(options.commitProofPath);
-      commitProofEnvelope = await normalizeCommitProofEnvelope(rawCommitProof, identity) as unknown as Record<string, unknown>;
+      commitProofEnvelope = await normalizeCommitProofEnvelope(rawCommitProof, identity, {
+        projectDir,
+      }) as unknown as Record<string, unknown>;
     } catch (err) {
       const code = 'COMMIT_PROOF_INVALID';
       const message = err instanceof Error ? err.message : 'Could not parse commit proof JSON';
