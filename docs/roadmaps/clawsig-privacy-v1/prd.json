@@ -1,0 +1,166 @@
+{
+  "name": "clawbureau",
+  "project": "clawbureau",
+  "description": "Clawsig Privacy Assurance v1 — fail-closed egress, sensitivity handling, processor policy, privacy proof UX",
+  "branchName": "ralph/clawsig-privacy-v1",
+  "userStories": [
+    {
+      "id": "PRV-EGR-001",
+      "title": "Fail-closed outbound allowlist for proofed runs",
+      "description": "Add deny-by-default outbound policy for proofed runs. Only explicitly allowlisted destinations (Clawproxy + approved internal services) may be reached. Direct provider endpoints and arbitrary third-party egress must fail closed.",
+      "acceptanceCriteria": [
+        "Proofed mode defaults to deny-by-default outbound traffic",
+        "Allowed destinations are configurable via policy",
+        "Direct provider endpoints are rejected in proofed mode",
+        "Blocked outbound attempts return deterministic reason codes",
+        "Integration test proves unauthorized host egress is blocked"
+      ],
+      "priority": 1,
+      "passes": false,
+      "beadId": "monorepo-prv.1"
+    },
+    {
+      "id": "PRV-EGR-002",
+      "title": "Proxy-only model execution in proofed mode",
+      "description": "Force proofed runs to route model traffic through Clawproxy only. If the proxy path is unavailable or a provider would be called directly, fail closed instead of silently downgrading provenance/privacy guarantees.",
+      "acceptanceCriteria": [
+        "Proofed mode routes Google/OpenAI/Anthropic/OpenRouter traffic through Clawproxy only",
+        "Direct provider calls fail closed in proofed mode",
+        "Proofed child processes do not rely on raw provider access outside the proxy path",
+        "Gateway-tier proofs are impossible without proxy mediation",
+        "Regression tests cover at least one real proofed provider path"
+      ],
+      "priority": 1,
+      "passes": false,
+      "beadId": "monorepo-prv.2",
+      "dependsOn": ["PRV-EGR-001"]
+    },
+    {
+      "id": "PRV-EGR-003",
+      "title": "Signed egress policy receipt",
+      "description": "Emit a signed receipt describing the egress policy in force for the run: allowed destinations, whether direct providers were blocked, and whether any blocked attempts occurred. This becomes canonical privacy evidence instead of requiring reviewers to infer posture from raw net events.",
+      "acceptanceCriteria": [
+        "Proof bundle carries a signed egress policy receipt or equivalent canonical attestation",
+        "Receipt records policy version or hash",
+        "Receipt records whether direct provider access was blocked",
+        "Receipt records blocked attempt counts",
+        "clawverify validates the receipt and fails closed on malformed policy evidence"
+      ],
+      "priority": 1,
+      "passes": false,
+      "beadId": "monorepo-prv.3",
+      "dependsOn": ["PRV-EGR-001", "PRV-EGR-002"]
+    },
+    {
+      "id": "PRV-RUN-001",
+      "title": "Minimal proofed sandbox profile",
+      "description": "Define a minimal runtime profile for privacy-sensitive proofed runs with reduced ambient process/network noise. The goal is to make privacy telemetry interpretable and reduce side-path risk from desktop/browser helper processes.",
+      "acceptanceCriteria": [
+        "A dedicated proofed sandbox/runtime profile exists",
+        "Baseline process inventory is captured at run start",
+        "Proofed mode documents the difference between dev mode and privacy-assurance mode",
+        "Runtime profile reduces ambient browser/helper noise versus current ad hoc execution",
+        "Fallback behavior is explicit when the profile cannot be activated"
+      ],
+      "priority": 1,
+      "passes": false,
+      "beadId": "monorepo-prv.4"
+    },
+    {
+      "id": "PRV-RUN-002",
+      "title": "Runtime hygiene receipt + CLDD noise budget",
+      "description": "Convert raw runtime telemetry into a signed runtime hygiene receipt with clear verdicts: interpose active, baseline hash, unmediated/unmonitored counts, and whether the run stayed inside the acceptable noise budget.",
+      "acceptanceCriteria": [
+        "Proof bundle carries a signed runtime hygiene receipt",
+        "Receipt includes sandbox/profile identity and baseline process metadata",
+        "Raw CLDD signals are bucketed into good/caution/action verdicts",
+        "clawsig prove can distinguish background noise from reviewer-action-required signals",
+        "Regression tests cover at least one noisy-environment classification path"
+      ],
+      "priority": 1,
+      "passes": false,
+      "beadId": "monorepo-prv.5",
+      "dependsOn": ["PRV-RUN-001"]
+    },
+    {
+      "id": "PRV-DLP-001",
+      "title": "Pre-egress sensitivity classifier",
+      "description": "Classify outbound model payloads before egress for secrets, credentials, PII, customer-restricted content, and custom policy patterns. Privacy assurance needs to know what class of data would leave the machine before deciding whether to allow, redact, or block it.",
+      "acceptanceCriteria": [
+        "Classifier runs before outbound model requests in proofed mode",
+        "Default rule set covers secrets, credentials, PII, and customer-defined patterns",
+        "Classifier returns deterministic class/rule IDs for matched content",
+        "Unknown/unsupported classifier states fail closed or require explicit override",
+        "Tests cover positive and negative matches for at least secrets + PII"
+      ],
+      "priority": 1,
+      "passes": false,
+      "beadId": "monorepo-prv.6",
+      "dependsOn": ["PRV-EGR-002"]
+    },
+    {
+      "id": "PRV-DLP-002",
+      "title": "Block/redact/approval action engine + data-handling receipt",
+      "description": "Add a policy action engine for sensitive classes: allow, redact, block, or require approval. Emit a signed data-handling receipt so reviewers can see what classes were found and what action was taken.",
+      "acceptanceCriteria": [
+        "Each sensitive class maps to allow/redact/block/require-approval",
+        "Redacted payloads are the actual payloads sent to the provider",
+        "Blocked payloads fail closed with deterministic reason codes",
+        "Proof bundle carries a signed data-handling receipt with class list + action taken",
+        "clawverify validates the data-handling receipt"
+      ],
+      "priority": 1,
+      "passes": false,
+      "beadId": "monorepo-prv.7",
+      "dependsOn": ["PRV-DLP-001"]
+    },
+    {
+      "id": "PRV-POL-001",
+      "title": "Processor policy engine + processor receipt",
+      "description": "Enforce approved provider/model/region/retention combinations for proofed runs. Emit signed processor policy evidence so reviewers can see whether data went only to approved processors under the configured policy profile.",
+      "acceptanceCriteria": [
+        "Policy supports provider/model allowlists",
+        "Policy supports region and retention-profile constraints",
+        "Disallowed processor routes fail closed in proofed mode",
+        "Proof bundle carries a signed processor policy receipt",
+        "clawsig prove surfaces the approved processor profile used for the run"
+      ],
+      "priority": 1,
+      "passes": false,
+      "beadId": "monorepo-prv.8",
+      "dependsOn": ["PRV-EGR-002"]
+    },
+    {
+      "id": "PRV-UX-001",
+      "title": "Privacy posture report in clawsig prove",
+      "description": "Upgrade `clawsig prove` to render privacy posture clearly: allowed processors used, blocked destinations, sensitive classes detected, actions taken, runtime hygiene, and reviewer action needed. The output should be readable by buyers/reviewers, not just engineers reading JSON.",
+      "acceptanceCriteria": [
+        "Terminal + HTML proof reports include a privacy posture section",
+        "Report shows allowed processor(s), blocked egress attempts, sensitive classes, and data-handling actions",
+        "Report distinguishes background noise from action-required privacy signals",
+        "JSON output includes machine-readable privacy verdicts",
+        "Sample proof report can explain what is proven vs what is not proven"
+      ],
+      "priority": 2,
+      "passes": false,
+      "beadId": "monorepo-prv.9",
+      "dependsOn": ["PRV-EGR-003", "PRV-RUN-002", "PRV-DLP-002", "PRV-POL-001"]
+    },
+    {
+      "id": "PRV-AUD-001",
+      "title": "Privacy/compliance export pack",
+      "description": "Produce an auditor-facing export pack that bundles proof bundle evidence, policy receipts, and a clear statement of privacy claims and non-claims. This is the artifact a buyer/security reviewer should attach to tickets, approvals, or postmortems.",
+      "acceptanceCriteria": [
+        "Single command emits a privacy/compliance export pack",
+        "Export pack includes proof bundle plus privacy policy receipts",
+        "Export pack includes a human-readable 'what is proven / not proven' summary",
+        "Artifact is stable enough to attach to security reviews and disputes",
+        "Docs explain how reviewers should interpret the pack"
+      ],
+      "priority": 2,
+      "passes": false,
+      "beadId": "monorepo-prv.10",
+      "dependsOn": ["PRV-UX-001"]
+    }
+  ]
+}
