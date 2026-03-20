@@ -2147,7 +2147,6 @@ function normalizePolicyStatementForHash(
 
   return {
     ok: true,
-    valid: true,
     value: {
       sid: statement.sid.trim(),
       effect: statement.effect,
@@ -2200,7 +2199,7 @@ async function normalizePolicyForHash(
       rawStatement as unknown as SignedPolicyStatement,
       `${fieldPrefix}.statements[${i}]`,
     );
-    if (!normalizedStatement.valid) return normalizedStatement;
+    if (!normalizedStatement.ok) return normalizedStatement;
     bySid.set(normalizedStatement.value.sid, normalizedStatement.value);
   }
 
@@ -2208,7 +2207,7 @@ async function normalizePolicyForHash(
     statements: [...bySid.values()].sort((a, b) => a.sid.localeCompare(b.sid)),
   };
   const hash = await computeHash(canonicalizeForHash(normalizedPolicy), 'SHA-256');
-  return { ok: true, valid: true, normalized: normalizedPolicy, hash };
+  return { ok: true, normalized: normalizedPolicy, hash };
 }
 
 async function validateSignedPolicyBundleEnvelopeForBinding(
@@ -2510,7 +2509,6 @@ async function validateSignedPolicyBundleEnvelopeForBinding(
 
   return {
     ok: true,
-    valid: true,
     payload: normalizedPayload,
   };
 }
