@@ -47,6 +47,7 @@ export {
   mapToISO27001,
   mapToEUAIAct,
   generateComplianceReport,
+  compileAuthoritativeComplianceWave1,
 } from './compliance.js';
 export type {
   ComplianceFramework,
@@ -57,6 +58,12 @@ export type {
   ComplianceReport,
   ComplianceBundleInput,
   CompliancePolicyInput,
+  AuthoritativeVerificationFact,
+  AuthoritativeCompilerInput,
+  AuthoritativeCompilerState,
+  AuthoritativeCompilerRuntime,
+  AuthoritativeCompilerFailure,
+  AuthoritativeCompilerResult,
 } from './compliance.js';
 
 export {

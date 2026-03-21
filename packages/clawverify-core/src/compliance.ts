@@ -1,24 +1,26 @@
 /**
- * Compliance Report Generator
+ * Compliance report compiler (Wave 1 foundations)
  *
- * Maps verified Clawsig proof bundles to enterprise compliance framework controls.
- * P9 (Revenue): SOC2 is the wedge, EU AI Act is the whale.
- *
- * Mapping rules (from Gemini Deep Think Round 2):
- *   CC6.1 (Logical Access)       <- WPC allowed_models + proof_tier
- *   CC6.2 (System Boundaries)    <- side_effect_receipts (network_egress)
- *   CC7.1 (Detection of Changes) <- tool_receipts (file changes)
- *   CC7.2 (Monitoring)           <- event_chain existence + log_inclusion_proof
- *   CC8.1 (Change Management)    <- human_approval_receipts OR gateway_receipt tier
+ * CEC-RT-001: verified-evidence ingest contract
+ * CEC-RT-002: deterministic control-pack runtime
+ * CEC-RT-003: fail-closed compiler state machine
  */
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type ComplianceFramework = 'SOC2_Type2' | 'ISO27001' | 'EU_AI_Act' | 'NIST_AI_RMF';
+export type ComplianceFramework =
+  | 'SOC2_Type2'
+  | 'ISO27001'
+  | 'EU_AI_Act'
+  | 'NIST_AI_RMF';
 
-export type ControlStatus = 'PASS' | 'FAIL' | 'NOT_APPLICABLE' | 'INSUFFICIENT_EVIDENCE';
+export type ControlStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'NOT_APPLICABLE'
+  | 'INSUFFICIENT_EVIDENCE';
 
 export type EvidenceType =
   | 'gateway_receipt'
@@ -37,6 +39,8 @@ export interface ControlResult {
   evidence_type?: EvidenceType;
   evidence_ref?: string;
   narrative?: string;
+  /** Deterministic outcome code for this control branch. */
+  reason_code?: string;
 }
 
 export interface ComplianceGap {
@@ -57,8 +61,7 @@ export interface ComplianceReport {
 }
 
 // ---------------------------------------------------------------------------
-// Lightweight bundle shape (avoids coupling to full ProofBundlePayload import
-// path — the compliance mapper only inspects presence/counts, not signatures).
+// Lightweight bundle shape
 // ---------------------------------------------------------------------------
 
 export interface ComplianceBundleInput {
@@ -109,20 +112,287 @@ export interface CompliancePolicyInput {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Authoritative Wave-1 compiler contract
 // ---------------------------------------------------------------------------
 
-function hashBundle(bundle: ComplianceBundleInput): string {
-  // Deterministic hash placeholder — in production this would be
-  // sha256_b64u(JCS(bundle)). The CLI layer computes the real hash
-  // before calling the mapper.
-  return 'BUNDLE_HASH_COMPUTED_BY_CALLER';
+export interface AuthoritativeVerificationFact {
+  fact_version: '1';
+  status: 'VALID' | 'INVALID';
+  reason_code: string;
+  reason: string;
+  verified_at: string;
+  verifier?: string;
+  proof_tier?: string;
+  agent_did?: string;
 }
 
-function hasNetworkEgressReceipts(bundle: ComplianceBundleInput): boolean {
-  return (bundle.side_effect_receipts ?? []).some(
-    (r) => r.effect_class === 'network_egress',
+export interface AuthoritativeCompilerInput {
+  compiler_input_version: '1';
+  framework: ComplianceFramework;
+  bundle_hash_b64u: string;
+  bundle: ComplianceBundleInput;
+  policy?: CompliancePolicyInput;
+  verification_fact: AuthoritativeVerificationFact;
+}
+
+export type AuthoritativeCompilerState =
+  | 'INPUT_REJECTED'
+  | 'HALTED_UPSTREAM_INVALID'
+  | 'COMPILED_PASS'
+  | 'COMPILED_FAIL';
+
+export interface AuthoritativeCompilerRuntime {
+  runtime_version: '1';
+  engine: 'clawcompiler-runtime-v1-wave1';
+  deterministic: true;
+  state: AuthoritativeCompilerState;
+  framework?: ComplianceFramework;
+  bundle_hash_b64u?: string;
+  generated_at: string;
+  global_status: 'PASS' | 'FAIL';
+  global_reason_code: string;
+}
+
+export interface AuthoritativeCompilerFailure {
+  reason_code: string;
+  reason: string;
+  upstream_reason_code?: string;
+}
+
+export interface AuthoritativeCompilerResult {
+  runtime: AuthoritativeCompilerRuntime;
+  report?: ComplianceReport;
+  failure?: AuthoritativeCompilerFailure;
+}
+
+// ---------------------------------------------------------------------------
+// Constants + helpers
+// ---------------------------------------------------------------------------
+
+const DETERMINISTIC_EPOCH_ISO = '1970-01-01T00:00:00.000Z';
+const REASON_CODE_RE = /^[A-Z0-9_]{1,64}$/;
+const STRICT_ISO_UTC_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+
+interface ParseFailure {
+  ok: false;
+  reason_code: string;
+  reason: string;
+}
+
+const FRAMEWORKS: ReadonlySet<ComplianceFramework> = new Set([
+  'SOC2_Type2',
+  'ISO27001',
+  'EU_AI_Act',
+  'NIST_AI_RMF',
+]);
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function asString(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined;
+}
+
+function isFramework(v: unknown): v is ComplianceFramework {
+  return typeof v === 'string' && FRAMEWORKS.has(v as ComplianceFramework);
+}
+
+function normalizeReasonCode(raw: unknown, fallback: string): string {
+  if (typeof raw !== 'string') return fallback;
+
+  const normalized = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  if (!normalized) return fallback;
+  if (!REASON_CODE_RE.test(normalized)) return fallback;
+  return normalized;
+}
+
+function resolveGeneratedAt(raw: unknown): string {
+  if (typeof raw !== 'string') return DETERMINISTIC_EPOCH_ISO;
+  return STRICT_ISO_UTC_RE.test(raw) ? raw : DETERMINISTIC_EPOCH_ISO;
+}
+
+function reportGeneratedAt(raw: unknown): string {
+  return resolveGeneratedAt(raw);
+}
+
+function ensureOptionalArrayField(
+  raw: Record<string, unknown>,
+  field: string,
+  reason_code: string,
+  reason: string,
+): ParseFailure | undefined {
+  const value = raw[field];
+  if (value !== undefined && !Array.isArray(value)) {
+    return {
+      ok: false,
+      reason_code,
+      reason,
+    };
+  }
+  return undefined;
+}
+
+function parseBundleInput(
+  rawBundle: Record<string, unknown>,
+): { ok: true; value: ComplianceBundleInput } | ParseFailure {
+  if (typeof rawBundle.agent_did !== 'string' || rawBundle.agent_did.trim().length === 0) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_BUNDLE_AGENT_DID',
+      reason: 'bundle.agent_did must be a non-empty string.',
+    };
+  }
+
+  const collectionChecks: Array<ParseFailure | undefined> = [
+    ensureOptionalArrayField(
+      rawBundle,
+      'event_chain',
+      'COMPILER_INPUT_MALFORMED_EVENT_CHAIN',
+      'bundle.event_chain, when present, must be an array.',
+    ),
+    ensureOptionalArrayField(
+      rawBundle,
+      'receipts',
+      'COMPILER_INPUT_MALFORMED_RECEIPTS',
+      'bundle.receipts, when present, must be an array.',
+    ),
+    ensureOptionalArrayField(
+      rawBundle,
+      'tool_receipts',
+      'COMPILER_INPUT_MALFORMED_TOOL_RECEIPTS',
+      'bundle.tool_receipts, when present, must be an array.',
+    ),
+    ensureOptionalArrayField(
+      rawBundle,
+      'side_effect_receipts',
+      'COMPILER_INPUT_MALFORMED_SIDE_EFFECT_RECEIPTS',
+      'bundle.side_effect_receipts, when present, must be an array.',
+    ),
+    ensureOptionalArrayField(
+      rawBundle,
+      'human_approval_receipts',
+      'COMPILER_INPUT_MALFORMED_HUMAN_APPROVAL_RECEIPTS',
+      'bundle.human_approval_receipts, when present, must be an array.',
+    ),
+    ensureOptionalArrayField(
+      rawBundle,
+      'delegation_receipts',
+      'COMPILER_INPUT_MALFORMED_DELEGATION_RECEIPTS',
+      'bundle.delegation_receipts, when present, must be an array.',
+    ),
+    ensureOptionalArrayField(
+      rawBundle,
+      'attestations',
+      'COMPILER_INPUT_MALFORMED_ATTESTATIONS',
+      'bundle.attestations, when present, must be an array.',
+    ),
+  ];
+
+  const collectionFailure = collectionChecks.find(
+    (failure): failure is ParseFailure => failure !== undefined,
   );
+  if (collectionFailure) {
+    return collectionFailure;
+  }
+
+  if (rawBundle.metadata !== undefined && !isRecord(rawBundle.metadata)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_BUNDLE_METADATA',
+      reason: 'bundle.metadata, when present, must be a JSON object.',
+    };
+  }
+
+  if (
+    rawBundle.bundle_version !== undefined &&
+    typeof rawBundle.bundle_version !== 'string'
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_BUNDLE_VERSION',
+      reason: 'bundle.bundle_version, when present, must be a string.',
+    };
+  }
+
+  if (rawBundle.bundle_id !== undefined && typeof rawBundle.bundle_id !== 'string') {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_BUNDLE_ID',
+      reason: 'bundle.bundle_id, when present, must be a string.',
+    };
+  }
+
+  return {
+    ok: true,
+    value: rawBundle as unknown as ComplianceBundleInput,
+  };
+}
+
+function parsePolicyInput(
+  rawPolicy: Record<string, unknown>,
+): { ok: true; value: CompliancePolicyInput } | ParseFailure {
+  if (
+    rawPolicy.policy_hash_b64u !== undefined &&
+    typeof rawPolicy.policy_hash_b64u !== 'string'
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_POLICY_HASH',
+      reason: 'policy.policy_hash_b64u, when present, must be a string.',
+    };
+  }
+
+  if (
+    rawPolicy.minimum_model_identity_tier !== undefined &&
+    typeof rawPolicy.minimum_model_identity_tier !== 'string'
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_MINIMUM_MODEL_IDENTITY_TIER',
+      reason:
+        'policy.minimum_model_identity_tier, when present, must be a string.',
+    };
+  }
+
+  if (rawPolicy.allowed_models !== undefined) {
+    if (!Array.isArray(rawPolicy.allowed_models)) {
+      return {
+        ok: false,
+        reason_code: 'COMPILER_INPUT_MALFORMED_ALLOWED_MODELS',
+        reason: 'policy.allowed_models, when present, must be an array of strings.',
+      };
+    }
+
+    const hasInvalidModel = rawPolicy.allowed_models.some(
+      (model) => typeof model !== 'string' || model.trim().length === 0,
+    );
+
+    if (hasInvalidModel) {
+      return {
+        ok: false,
+        reason_code: 'COMPILER_INPUT_MALFORMED_ALLOWED_MODELS',
+        reason: 'policy.allowed_models, when present, must be an array of strings.',
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    value: rawPolicy as CompliancePolicyInput,
+  };
+}
+
+function hashBundle(_bundle: ComplianceBundleInput): string {
+  // Deterministic fallback only. Authoritative compiler requires caller-provided
+  // bundle_hash_b64u and never relies on this value.
+  return 'UNSPECIFIED_BUNDLE_HASH';
 }
 
 function hasFileWriteReceipts(bundle: ComplianceBundleInput): boolean {
@@ -144,7 +414,7 @@ function hasEventChain(bundle: ComplianceBundleInput): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// SOC2 Type II Mapper
+// SOC2 Type II Mapper (deterministic branch reason codes)
 // ---------------------------------------------------------------------------
 
 function mapCC6_1(
@@ -155,46 +425,54 @@ function mapCC6_1(
     control_id: 'CC6.1',
     control_name: 'Logical Access Controls',
     status: 'INSUFFICIENT_EVIDENCE',
+    reason_code: 'CC6_1_UNEVALUATED',
   };
 
-  // CC6.1: WPC allowed_models + proof_tier from gateway receipts
   if (policy?.allowed_models && policy.allowed_models.length > 0) {
     const gatewayModels = (bundle.receipts ?? [])
       .map((r) => r.payload?.model)
-      .filter(Boolean) as string[];
+      .filter((m): m is string => typeof m === 'string' && m.length > 0);
 
     if (gatewayModels.length > 0) {
       const allWithinPolicy = gatewayModels.every((m) =>
         policy.allowed_models!.includes(m),
       );
+
       control.status = allWithinPolicy ? 'PASS' : 'FAIL';
       control.evidence_type = 'wpc';
       control.evidence_ref = policy.policy_hash_b64u;
+      control.reason_code = allWithinPolicy
+        ? 'CC6_1_PASS_WPC_ALLOWLIST_ENFORCED'
+        : 'CC6_1_FAIL_MODEL_OUTSIDE_WPC_ALLOWLIST';
       control.narrative = allWithinPolicy
-        ? `All ${gatewayModels.length} gateway receipt(s) reference models within the WPC allowlist (${policy.allowed_models.join(', ')}). Agent operated strictly within approved intelligence boundaries.`
+        ? `All ${gatewayModels.length} gateway receipt(s) reference models within the WPC allowlist (${policy.allowed_models.join(', ')}).`
         : `One or more gateway receipts reference a model outside the WPC allowlist. Models used: ${gatewayModels.join(', ')}.`;
-    } else if (hasGatewayReceipts(bundle)) {
-      control.status = 'PASS';
-      control.evidence_type = 'gateway_receipt';
-      control.evidence_ref = bundle.receipts![0].payload?.receipt_id;
-      control.narrative =
-        'Gateway receipts present; WPC policy defines allowed models. Agent used approved gateway for all LLM calls.';
-    } else {
-      control.narrative =
-        'WPC defines allowed_models but no gateway receipts present to verify compliance.';
+      return control;
     }
-  } else if (hasGatewayReceipts(bundle)) {
-    // No WPC but gateway receipts exist — partial evidence
-    control.status = 'PASS';
-    control.evidence_type = 'gateway_receipt';
-    control.evidence_ref = bundle.receipts![0].payload?.receipt_id;
+
+    control.status = 'INSUFFICIENT_EVIDENCE';
+    control.reason_code = 'CC6_1_MISSING_GATEWAY_RECEIPTS_FOR_WPC';
     control.narrative =
-      'Gateway receipts prove agent routed through trusted proxy. No WPC model allowlist configured — recommend adding allowed_models for full CC6.1 coverage.';
-  } else {
-    control.narrative =
-      'No gateway receipts and no WPC model allowlist. Cannot verify logical access controls for LLM usage.';
+      'WPC defines allowed_models but no gateway receipts are present to prove model usage.';
+    return control;
   }
 
+  if (hasGatewayReceipts(bundle)) {
+    const firstGatewayReceiptId = bundle.receipts?.[0]?.payload?.receipt_id;
+
+    control.status = 'PASS';
+    control.evidence_type = 'gateway_receipt';
+    control.evidence_ref = firstGatewayReceiptId;
+    control.reason_code = 'CC6_1_PASS_GATEWAY_RECEIPTS_PRESENT';
+    control.narrative =
+      'Gateway receipts are present. No WPC model allowlist was supplied; add allowed_models for stronger CC6.1 evidence.';
+    return control;
+  }
+
+  control.status = 'INSUFFICIENT_EVIDENCE';
+  control.reason_code = 'CC6_1_MISSING_WPC_AND_GATEWAY_RECEIPTS';
+  control.narrative =
+    'No gateway receipts and no WPC allowlist are present. Logical access evidence is incomplete.';
   return control;
 }
 
@@ -203,29 +481,37 @@ function mapCC6_2(bundle: ComplianceBundleInput): ControlResult {
     control_id: 'CC6.2',
     control_name: 'System Boundary Controls',
     status: 'INSUFFICIENT_EVIDENCE',
+    reason_code: 'CC6_2_UNEVALUATED',
   };
 
-  const networkReceipts = (bundle.side_effect_receipts ?? []).filter(
+  const sideEffects = bundle.side_effect_receipts ?? [];
+  const networkReceipts = sideEffects.filter(
     (r) => r.effect_class === 'network_egress',
   );
 
   if (networkReceipts.length > 0) {
     control.status = 'PASS';
     control.evidence_type = 'side_effect_receipt';
-    control.evidence_ref = networkReceipts[0].receipt_id;
-    control.narrative = `${networkReceipts.length} network egress side-effect receipt(s) present. Every outbound network call by the agent is cryptographically logged with target digest and response hash.`;
-  } else if ((bundle.side_effect_receipts ?? []).length > 0) {
-    // Has side-effect receipts but none for network egress
-    control.status = 'PASS';
-    control.evidence_type = 'side_effect_receipt';
-    control.evidence_ref = bundle.side_effect_receipts![0].receipt_id;
-    control.narrative =
-      'Side-effect receipts present (non-network). No network egress detected — agent stayed within system boundaries.';
-  } else {
-    control.narrative =
-      'No side-effect receipts present. Cannot verify system boundary compliance. Add side-effect receipt instrumentation to the harness.';
+    control.evidence_ref = networkReceipts[0]?.receipt_id;
+    control.reason_code = 'CC6_2_PASS_NETWORK_EGRESS_RECEIPTS_PRESENT';
+    control.narrative = `${networkReceipts.length} network egress side-effect receipt(s) are present.`;
+    return control;
   }
 
+  if (sideEffects.length > 0) {
+    control.status = 'PASS';
+    control.evidence_type = 'side_effect_receipt';
+    control.evidence_ref = sideEffects[0]?.receipt_id;
+    control.reason_code = 'CC6_2_PASS_SIDE_EFFECT_RECEIPTS_NON_NETWORK';
+    control.narrative =
+      'Side-effect receipts are present and no network egress side effects were recorded.';
+    return control;
+  }
+
+  control.status = 'INSUFFICIENT_EVIDENCE';
+  control.reason_code = 'CC6_2_MISSING_SIDE_EFFECT_RECEIPTS';
+  control.narrative =
+    'No side-effect receipts are present. Boundary controls cannot be evidenced.';
   return control;
 }
 
@@ -234,23 +520,31 @@ function mapCC7_1(bundle: ComplianceBundleInput): ControlResult {
     control_id: 'CC7.1',
     control_name: 'Detection of Changes',
     status: 'INSUFFICIENT_EVIDENCE',
+    reason_code: 'CC7_1_UNEVALUATED',
   };
 
   if (hasFileWriteReceipts(bundle)) {
     control.status = 'PASS';
     control.evidence_type = 'tool_receipt';
-    control.evidence_ref = bundle.tool_receipts![0].receipt_id;
-    control.narrative = `${bundle.tool_receipts!.length} tool receipt(s) present. Every file modification and tool invocation by the agent is logged with input/output hashes in an immutable event chain.`;
-  } else if (hasEventChain(bundle)) {
-    control.status = 'PASS';
-    control.evidence_type = 'event_chain';
-    control.narrative =
-      'Event chain present but no tool receipts. Change detection relies on event chain integrity — recommend adding tool receipt instrumentation for granular file-level evidence.';
-  } else {
-    control.narrative =
-      'No tool receipts or event chain present. Cannot verify change detection compliance.';
+    control.evidence_ref = bundle.tool_receipts?.[0]?.receipt_id;
+    control.reason_code = 'CC7_1_PASS_TOOL_RECEIPTS_PRESENT';
+    control.narrative = `${bundle.tool_receipts?.length ?? 0} tool receipt(s) are present.`;
+    return control;
   }
 
+  if (hasEventChain(bundle)) {
+    control.status = 'INSUFFICIENT_EVIDENCE';
+    control.evidence_type = 'event_chain';
+    control.reason_code = 'CC7_1_MISSING_TOOL_RECEIPTS';
+    control.narrative =
+      'Event chain exists, but required tool receipts are missing for file/tool change detection.';
+    return control;
+  }
+
+  control.status = 'INSUFFICIENT_EVIDENCE';
+  control.reason_code = 'CC7_1_MISSING_EVENT_CHAIN_AND_TOOL_RECEIPTS';
+  control.narrative =
+    'No event chain and no tool receipts are present. Change detection evidence is missing.';
   return control;
 }
 
@@ -259,17 +553,21 @@ function mapCC7_2(bundle: ComplianceBundleInput): ControlResult {
     control_id: 'CC7.2',
     control_name: 'System Monitoring',
     status: 'INSUFFICIENT_EVIDENCE',
+    reason_code: 'CC7_2_UNEVALUATED',
   };
 
   if (hasEventChain(bundle)) {
     control.status = 'PASS';
     control.evidence_type = 'event_chain';
-    control.narrative = `Hash-linked event chain present with ${bundle.event_chain!.length} event(s). Every agent action is logged to a tamper-evident, append-only chain. Receipt Transparency Log integration provides additional Merkle tree inclusion proof coverage.`;
-  } else {
-    control.narrative =
-      'No event chain present. System monitoring requires a tamper-evident event log. Configure the harness to emit an event chain.';
+    control.reason_code = 'CC7_2_PASS_EVENT_CHAIN_PRESENT';
+    control.narrative = `Hash-linked event chain present with ${bundle.event_chain?.length ?? 0} event(s).`;
+    return control;
   }
 
+  control.status = 'INSUFFICIENT_EVIDENCE';
+  control.reason_code = 'CC7_2_MISSING_EVENT_CHAIN';
+  control.narrative =
+    'No event chain is present. Monitoring evidence is incomplete.';
   return control;
 }
 
@@ -278,41 +576,46 @@ function mapCC8_1(bundle: ComplianceBundleInput): ControlResult {
     control_id: 'CC8.1',
     control_name: 'Change Management',
     status: 'INSUFFICIENT_EVIDENCE',
+    reason_code: 'CC8_1_UNEVALUATED',
   };
 
   if (hasHumanApprovals(bundle)) {
-    const approvals = bundle.human_approval_receipts!.filter(
+    const approvals = (bundle.human_approval_receipts ?? []).filter(
       (r) => r.approval_type === 'explicit_approve',
     );
+
     control.status = 'PASS';
     control.evidence_type = 'human_approval_receipt';
     control.evidence_ref = approvals[0]?.receipt_id;
-    control.narrative = `${approvals.length} explicit human approval receipt(s) present. Cryptographic proof that a human reviewer authorized changes before deployment. This satisfies change management controls without traditional peer review.`;
-  } else if (hasGatewayReceipts(bundle)) {
-    // Gateway receipts provide weaker but acceptable evidence
-    control.status = 'PASS';
-    control.evidence_type = 'gateway_receipt';
-    control.evidence_ref = bundle.receipts![0].payload?.receipt_id;
-    control.narrative =
-      'Gateway receipts prove code was generated through a trusted, auditable proxy under policy constraints. No explicit human approval — recommend adding human_approval_receipts for stronger CC8.1 evidence.';
-  } else {
-    control.narrative =
-      'No human approval receipts or gateway receipts present. Change management requires either human oversight proof or gateway-tier evidence.';
+    control.reason_code = 'CC8_1_PASS_HUMAN_APPROVAL_PRESENT';
+    control.narrative = `${approvals.length} explicit human approval receipt(s) are present.`;
+    return control;
   }
 
+  if (hasGatewayReceipts(bundle)) {
+    control.status = 'PASS';
+    control.evidence_type = 'gateway_receipt';
+    control.evidence_ref = bundle.receipts?.[0]?.payload?.receipt_id;
+    control.reason_code = 'CC8_1_PASS_GATEWAY_RECEIPT_EVIDENCE';
+    control.narrative =
+      'Gateway receipts are present. No explicit human approval receipts were provided.';
+    return control;
+  }
+
+  control.status = 'INSUFFICIENT_EVIDENCE';
+  control.reason_code = 'CC8_1_MISSING_HUMAN_APPROVAL_AND_GATEWAY_RECEIPTS';
+  control.narrative =
+    'No human approval receipts and no gateway receipts are present.';
   return control;
 }
 
 /**
  * Maps a proof bundle to SOC2 Type II controls.
- *
- * The bundle should already be verified (signature + hash chain valid).
- * This function evaluates evidence presence and quality, not cryptographic integrity.
  */
 export function mapToSOC2(
   bundle: ComplianceBundleInput,
   policy?: CompliancePolicyInput,
-  opts?: { bundleHash?: string },
+  opts?: { bundleHash?: string; generatedAt?: string },
 ): ComplianceReport {
   const controls: ControlResult[] = [
     mapCC6_1(bundle, policy),
@@ -325,16 +628,14 @@ export function mapToSOC2(
   const gaps: ComplianceGap[] = [];
 
   for (const c of controls) {
-    if (c.status === 'FAIL') {
+    if (c.status === 'FAIL' || c.status === 'INSUFFICIENT_EVIDENCE') {
       gaps.push({
         control_id: c.control_id,
-        description: c.narrative ?? `Control ${c.control_id} failed evaluation.`,
-        recommendation: getRemediation(c.control_id),
-      });
-    } else if (c.status === 'INSUFFICIENT_EVIDENCE') {
-      gaps.push({
-        control_id: c.control_id,
-        description: c.narrative ?? `Insufficient evidence for ${c.control_id}.`,
+        description:
+          c.narrative ??
+          (c.status === 'FAIL'
+            ? `Control ${c.control_id} failed evaluation.`
+            : `Insufficient evidence for ${c.control_id}.`),
         recommendation: getRemediation(c.control_id),
       });
     }
@@ -343,7 +644,7 @@ export function mapToSOC2(
   return {
     report_version: '1',
     framework: 'SOC2_Type2',
-    generated_at: new Date().toISOString(),
+    generated_at: reportGeneratedAt(opts?.generatedAt),
     proof_bundle_hash_b64u: opts?.bundleHash ?? hashBundle(bundle),
     agent_did: bundle.agent_did,
     policy_hash_b64u: policy?.policy_hash_b64u,
@@ -363,7 +664,7 @@ function getRemediation(controlId: string): string {
     case 'CC7.2':
       return 'Configure the agent harness to emit a hash-linked event chain. Enable Receipt Transparency Log integration for Merkle tree inclusion proofs.';
     case 'CC8.1':
-      return 'Add human-in-the-loop approval gates for high-risk actions. The harness should emit human_approval_receipts, or at minimum route through clawproxy for gateway-tier evidence.';
+      return 'Add human-in-the-loop approval gates for high-risk actions, or route through clawproxy for gateway-tier evidence.';
     default:
       return 'Review the Clawsig Protocol documentation for instrumentation guidance.';
   }
@@ -373,22 +674,15 @@ function getRemediation(controlId: string): string {
 // ISO 27001 Mapper (stub)
 // ---------------------------------------------------------------------------
 
-// TODO: Implement ISO 27001 information security control mapping.
-// Key controls to map:
-//   A.9.1 (Access Control Policy) <- WPC + gateway_receipts
-//   A.9.2 (User Access Management) <- agent_did + owner_attestation
-//   A.12.4 (Logging and Monitoring) <- event_chain + log_inclusion_proof
-//   A.14.2 (Security in Development) <- tool_receipts + human_approval_receipts
-//   A.18.1 (Compliance with Legal Requirements) <- full proof_bundle
 export function mapToISO27001(
   bundle: ComplianceBundleInput,
   policy?: CompliancePolicyInput,
-  opts?: { bundleHash?: string },
+  opts?: { bundleHash?: string; generatedAt?: string },
 ): ComplianceReport {
   return {
     report_version: '1',
     framework: 'ISO27001',
-    generated_at: new Date().toISOString(),
+    generated_at: reportGeneratedAt(opts?.generatedAt),
     proof_bundle_hash_b64u: opts?.bundleHash ?? hashBundle(bundle),
     agent_did: bundle.agent_did,
     policy_hash_b64u: policy?.policy_hash_b64u,
@@ -397,14 +691,17 @@ export function mapToISO27001(
         control_id: 'A.9.1',
         control_name: 'Access Control Policy',
         status: 'NOT_APPLICABLE',
-        narrative: 'ISO 27001 mapper not yet implemented. SOC2 mapping is available.',
+        reason_code: 'ISO27001_MAPPER_NOT_IMPLEMENTED',
+        narrative:
+          'ISO 27001 mapper not yet implemented. SOC2 mapping is currently available.',
       },
     ],
     gaps: [
       {
         control_id: 'A.9.1',
         description: 'ISO 27001 compliance mapping is not yet implemented.',
-        recommendation: 'Use SOC2 framework for current compliance reporting. ISO 27001 support is planned.',
+        recommendation:
+          'Use SOC2 framework for current compliance reporting. ISO 27001 support is planned.',
       },
     ],
   };
@@ -414,22 +711,20 @@ export function mapToISO27001(
 // EU AI Act Mapper (stub)
 // ---------------------------------------------------------------------------
 
-// TODO: Implement EU AI Act compliance mapping.
-// Key articles to map:
-//   Art 9 (Risk Management) <- WPC + proof_tier
-//   Art 11 (Technical Documentation) <- export_bundle + urm
-//   Art 13 (Transparency) <- system_prompt_report + model_identity
-//   Art 14 (Human Oversight) <- human_approval_receipts (the killer feature)
-//   Art 15 (Accuracy, Robustness, Security) <- audit_result_attestations
 export function mapToEUAIAct(
   bundle: ComplianceBundleInput,
   policy?: CompliancePolicyInput,
-  opts?: { bundleHash?: string },
+  opts?: { bundleHash?: string; generatedAt?: string },
 ): ComplianceReport {
+  const hasApprovals = hasHumanApprovals(bundle);
+  const firstApproval = bundle.human_approval_receipts?.find(
+    (r) => r.approval_type === 'explicit_approve',
+  );
+
   return {
     report_version: '1',
     framework: 'EU_AI_Act',
-    generated_at: new Date().toISOString(),
+    generated_at: reportGeneratedAt(opts?.generatedAt),
     proof_bundle_hash_b64u: opts?.bundleHash ?? hashBundle(bundle),
     agent_did: bundle.agent_did,
     policy_hash_b64u: policy?.policy_hash_b64u,
@@ -437,40 +732,40 @@ export function mapToEUAIAct(
       {
         control_id: 'Art14',
         control_name: 'Human Oversight',
-        status: hasHumanApprovals(bundle) ? 'PASS' : 'INSUFFICIENT_EVIDENCE',
-        evidence_type: hasHumanApprovals(bundle) ? 'human_approval_receipt' : undefined,
-        evidence_ref: hasHumanApprovals(bundle)
-          ? bundle.human_approval_receipts?.find((r) => r.approval_type === 'explicit_approve')?.receipt_id
-          : undefined,
-        narrative: hasHumanApprovals(bundle)
-          ? 'Cryptographic proof of Article 14 compliance. High-risk actions are mathematically locked until a HumanApprovalReceipt is signed by a verified operator.'
-          : 'No human approval receipts present. Article 14 requires proof of human oversight for high-risk AI systems.',
+        status: hasApprovals ? 'PASS' : 'INSUFFICIENT_EVIDENCE',
+        evidence_type: hasApprovals ? 'human_approval_receipt' : undefined,
+        evidence_ref: hasApprovals ? firstApproval?.receipt_id : undefined,
+        reason_code: hasApprovals
+          ? 'ART14_PASS_HUMAN_APPROVAL_PRESENT'
+          : 'ART14_MISSING_HUMAN_APPROVAL',
+        narrative: hasApprovals
+          ? 'Cryptographic proof of Article 14 human oversight is present.'
+          : 'No human approval receipts present. Article 14 evidence is incomplete.',
       },
     ],
-    gaps: hasHumanApprovals(bundle)
+    gaps: hasApprovals
       ? []
       : [
           {
             control_id: 'Art14',
-            description: 'No human approval receipts. EU AI Act Article 14 requires verifiable human oversight.',
-            recommendation: 'Add human-in-the-loop approval gates. The harness should emit human_approval_receipts for high-risk operations.',
+            description:
+              'No human approval receipts. EU AI Act Article 14 requires verifiable human oversight.',
+            recommendation:
+              'Add human-in-the-loop approval gates and emit human_approval_receipts for high-risk operations.',
           },
         ],
   };
 }
 
 // ---------------------------------------------------------------------------
-// Dispatcher
+// Framework dispatcher
 // ---------------------------------------------------------------------------
 
-/**
- * Generate a compliance report for any supported framework.
- */
 export function generateComplianceReport(
   framework: ComplianceFramework,
   bundle: ComplianceBundleInput,
   policy?: CompliancePolicyInput,
-  opts?: { bundleHash?: string },
+  opts?: { bundleHash?: string; generatedAt?: string },
 ): ComplianceReport {
   switch (framework) {
     case 'SOC2_Type2':
@@ -480,11 +775,10 @@ export function generateComplianceReport(
     case 'EU_AI_Act':
       return mapToEUAIAct(bundle, policy, opts);
     case 'NIST_AI_RMF':
-      // TODO: Implement NIST AI RMF mapping
       return {
         report_version: '1',
         framework: 'NIST_AI_RMF',
-        generated_at: new Date().toISOString(),
+        generated_at: reportGeneratedAt(opts?.generatedAt),
         proof_bundle_hash_b64u: opts?.bundleHash ?? hashBundle(bundle),
         agent_did: bundle.agent_did,
         policy_hash_b64u: policy?.policy_hash_b64u,
@@ -493,7 +787,8 @@ export function generateComplianceReport(
           {
             control_id: 'GOVERN',
             description: 'NIST AI RMF compliance mapping is not yet implemented.',
-            recommendation: 'Use SOC2 framework for current compliance reporting. NIST AI RMF support is planned.',
+            recommendation:
+              'Use SOC2 framework for current compliance reporting. NIST AI RMF support is planned.',
           },
         ],
       };
@@ -502,4 +797,284 @@ export function generateComplianceReport(
       throw new Error(`Unknown compliance framework: ${_exhaustive}`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Authoritative Wave-1 compiler (fail-closed state machine)
+// ---------------------------------------------------------------------------
+
+type ParseCompilerResult =
+  | { ok: true; value: AuthoritativeCompilerInput }
+  | ParseFailure;
+
+function parseCompilerInput(rawInput: unknown): ParseCompilerResult {
+  if (!isRecord(rawInput)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED',
+      reason: 'Authoritative compiler input must be a JSON object.',
+    };
+  }
+
+  if (rawInput.compiler_input_version !== '1') {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_UNSUPPORTED_VERSION',
+      reason: 'compiler_input_version must be "1".',
+    };
+  }
+
+  if (!isFramework(rawInput.framework)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_UNKNOWN_FRAMEWORK',
+      reason: 'framework is missing or unsupported.',
+    };
+  }
+
+  if (typeof rawInput.bundle_hash_b64u !== 'string' || rawInput.bundle_hash_b64u.trim().length === 0) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MISSING_BUNDLE_HASH',
+      reason: 'bundle_hash_b64u is required for authoritative compilation.',
+    };
+  }
+
+  if (!isRecord(rawInput.bundle)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MISSING_BUNDLE',
+      reason: 'bundle is required for authoritative compilation.',
+    };
+  }
+
+  const parsedBundle = parseBundleInput(rawInput.bundle);
+  if (!parsedBundle.ok) {
+    return parsedBundle;
+  }
+
+  if (rawInput.policy !== undefined && !isRecord(rawInput.policy)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_POLICY',
+      reason: 'policy, when present, must be a JSON object.',
+    };
+  }
+
+  const parsedPolicy =
+    rawInput.policy !== undefined ? parsePolicyInput(rawInput.policy) : undefined;
+  if (parsedPolicy && !parsedPolicy.ok) {
+    return parsedPolicy;
+  }
+  const normalizedPolicy = parsedPolicy?.ok ? parsedPolicy.value : undefined;
+
+  if (!isRecord(rawInput.verification_fact)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MISSING_VERIFICATION_FACT',
+      reason:
+        'verification_fact is required. Authoritative compilation only accepts verifier-backed evidence.',
+    };
+  }
+
+  const vf = rawInput.verification_fact;
+
+  if (vf.fact_version !== '1') {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_UNSUPPORTED_VERIFICATION_FACT_VERSION',
+      reason: 'verification_fact.fact_version must be "1".',
+    };
+  }
+
+  if (vf.status !== 'VALID' && vf.status !== 'INVALID') {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_VERIFICATION_STATUS',
+      reason: 'verification_fact.status must be VALID or INVALID.',
+    };
+  }
+
+  if (typeof vf.reason_code !== 'string' || vf.reason_code.trim().length === 0) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MISSING_VERIFICATION_REASON_CODE',
+      reason: 'verification_fact.reason_code must be a non-empty string.',
+    };
+  }
+
+  if (typeof vf.reason !== 'string' || vf.reason.trim().length === 0) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MISSING_VERIFICATION_REASON',
+      reason: 'verification_fact.reason must be a non-empty string.',
+    };
+  }
+
+  if (typeof vf.verified_at !== 'string' || vf.verified_at.trim().length === 0) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MISSING_VERIFICATION_TIMESTAMP',
+      reason: 'verification_fact.verified_at must be a non-empty string.',
+    };
+  }
+
+  if (!STRICT_ISO_UTC_RE.test(vf.verified_at)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_VERIFICATION_TIMESTAMP',
+      reason:
+        'verification_fact.verified_at must be a strict UTC ISO-8601 timestamp.',
+    };
+  }
+
+  const bundleAgentDid = parsedBundle.value.agent_did;
+  const vfAgentDid = asString(vf.agent_did);
+
+  if (vfAgentDid !== undefined && vfAgentDid !== bundleAgentDid) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_VERIFICATION_AGENT_DID_MISMATCH',
+      reason: 'verification_fact.agent_did must match bundle.agent_did when provided.',
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      compiler_input_version: '1',
+      framework: rawInput.framework,
+      bundle_hash_b64u: rawInput.bundle_hash_b64u,
+      bundle: parsedBundle.value,
+      policy: normalizedPolicy,
+      verification_fact: {
+        fact_version: '1',
+        status: vf.status,
+        reason_code: vf.reason_code,
+        reason: vf.reason,
+        verified_at: vf.verified_at,
+        verifier: asString(vf.verifier),
+        proof_tier: asString(vf.proof_tier),
+        agent_did: vfAgentDid,
+      },
+    },
+  };
+}
+
+function firstBlockingControl(
+  report: ComplianceReport,
+): ControlResult | undefined {
+  return report.controls.find((control) => control.status !== 'PASS');
+}
+
+/**
+ * Authoritative Wave-1 compiler entrypoint.
+ *
+ * Fail-closed behavior:
+ * - malformed input => INPUT_REJECTED
+ * - upstream INVALID verification => HALTED_UPSTREAM_INVALID
+ * - missing/failed control evidence => COMPILED_FAIL
+ */
+export function compileAuthoritativeComplianceWave1(
+  rawInput: unknown,
+): AuthoritativeCompilerResult {
+  const parsed = parseCompilerInput(rawInput);
+
+  if (!parsed.ok) {
+    return {
+      runtime: {
+        runtime_version: '1',
+        engine: 'clawcompiler-runtime-v1-wave1',
+        deterministic: true,
+        state: 'INPUT_REJECTED',
+        generated_at: DETERMINISTIC_EPOCH_ISO,
+        global_status: 'FAIL',
+        global_reason_code: parsed.reason_code,
+      },
+      failure: {
+        reason_code: parsed.reason_code,
+        reason: parsed.reason,
+      },
+    };
+  }
+
+  const input = parsed.value;
+  const generatedAt = resolveGeneratedAt(input.verification_fact.verified_at);
+
+  if (input.verification_fact.status !== 'VALID') {
+    const mappedUpstreamReasonCode = normalizeReasonCode(
+      input.verification_fact.reason_code,
+      'UPSTREAM_VERIFICATION_FAILED',
+    );
+
+    return {
+      runtime: {
+        runtime_version: '1',
+        engine: 'clawcompiler-runtime-v1-wave1',
+        deterministic: true,
+        state: 'HALTED_UPSTREAM_INVALID',
+        framework: input.framework,
+        bundle_hash_b64u: input.bundle_hash_b64u,
+        generated_at: generatedAt,
+        global_status: 'FAIL',
+        global_reason_code: mappedUpstreamReasonCode,
+      },
+      failure: {
+        reason_code: mappedUpstreamReasonCode,
+        reason:
+          'Authoritative compilation halted because upstream verification status is INVALID.',
+        upstream_reason_code: input.verification_fact.reason_code,
+      },
+    };
+  }
+
+  const report = generateComplianceReport(input.framework, input.bundle, input.policy, {
+    bundleHash: input.bundle_hash_b64u,
+    generatedAt,
+  });
+
+  const blocking = firstBlockingControl(report);
+
+  if (!blocking) {
+    return {
+      runtime: {
+        runtime_version: '1',
+        engine: 'clawcompiler-runtime-v1-wave1',
+        deterministic: true,
+        state: 'COMPILED_PASS',
+        framework: input.framework,
+        bundle_hash_b64u: input.bundle_hash_b64u,
+        generated_at: generatedAt,
+        global_status: 'PASS',
+        global_reason_code: 'OK',
+      },
+      report,
+    };
+  }
+
+  const blockingReasonCode = normalizeReasonCode(
+    blocking.reason_code,
+    blocking.status === 'FAIL' ? 'CONTROL_FAILURE' : 'INSUFFICIENT_EVIDENCE',
+  );
+
+  return {
+    runtime: {
+      runtime_version: '1',
+      engine: 'clawcompiler-runtime-v1-wave1',
+      deterministic: true,
+      state: 'COMPILED_FAIL',
+      framework: input.framework,
+      bundle_hash_b64u: input.bundle_hash_b64u,
+      generated_at: generatedAt,
+      global_status: 'FAIL',
+      global_reason_code: blockingReasonCode,
+    },
+    report,
+    failure: {
+      reason_code: blockingReasonCode,
+      reason:
+        blocking.narrative ??
+        `Control ${blocking.control_id} did not pass authoritative compilation.`,
+    },
+  };
 }

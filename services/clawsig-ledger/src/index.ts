@@ -8,6 +8,7 @@ import {
   type ComplianceBundleInput,
   type CompliancePolicyInput,
 } from './stubs';
+import { jcsCanonicalize } from '@clawbureau/clawverify-core';
 import { base64UrlEncode } from './utils';
 import {
   authenticateRequestApiKey,
@@ -51,6 +52,12 @@ async function computeBodyEtag(body: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
   const encoded = base64UrlEncode(new Uint8Array(digest));
   return `"${encoded}"`;
+}
+
+async function hashCanonicalJson(value: unknown): Promise<string> {
+  const canonical = jcsCanonicalize(value);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+  return base64UrlEncode(new Uint8Array(digest));
 }
 
 function parseIfNoneMatch(raw: string | null): Set<string> {
@@ -402,12 +409,16 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
   try { body = (await req.json()) as VerifyRequest; } catch { return errorJson('Invalid JSON', 'INVALID_JSON'); }
   if (!body.proof_bundle || typeof body.proof_bundle !== 'object') return errorJson('Missing proof_bundle', 'MISSING_REQUIRED_FIELD');
 
+  const bundle = body.proof_bundle as Record<string, unknown>;
+  const payload = (bundle.payload ?? bundle) as Record<string, unknown>;
+
   const bundleJsonStr = JSON.stringify(body.proof_bundle);
   const bundleHashB64u = base64UrlEncode(
     new Uint8Array(
       await crypto.subtle.digest('SHA-256', new TextEncoder().encode(bundleJsonStr))
     )
   );
+  const complianceBundleHashB64u = await hashCanonicalJson(payload);
 
   const auth = await authenticateRequestApiKey(req, env);
   if (auth.error_code === 'UNAUTHORIZED') {
@@ -461,25 +472,37 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
 
   const shouldPublishToLedger = publishToLedger && failureClass === 'none';
 
-  const bundle = body.proof_bundle as Record<string, unknown>;
-  const payload = (bundle.payload ?? bundle) as Record<string, unknown>;
   const receipts = payload.receipts as Array<{ payload?: { model?: string } }> | undefined;
   const modelsUsed = receipts ? [...new Set(receipts.map(r => r.payload?.model).filter(Boolean) as string[])] : [];
 
   const complianceReports: Record<string, unknown> = {};
-  if (isAuthenticated && body.options?.emit_compliance_report && status === 'PASS') {
+  if (isAuthenticated && body.options?.emit_compliance_report && failureClass === 'none') {
     for (const fw of body.options.emit_compliance_report) {
       try {
         const report = generateComplianceReport(
           fw as ComplianceFramework,
-          payload as ComplianceBundleInput,
+          payload as unknown as ComplianceBundleInput,
           body.wpc_policy_override
             ? (body.wpc_policy_override as CompliancePolicyInput)
-            : undefined
+            : undefined,
+          {
+            bundle_hash_b64u: complianceBundleHashB64u,
+            verification_fact: {
+              status: verification.status,
+              reason_code: verification.reason_code,
+              reason:
+                verification.status === 'VALID'
+                  ? 'Proof bundle verified successfully'
+                  : 'Proof bundle verification failed',
+              verifier: verificationSource,
+              proof_tier: verification.proof_tier,
+              agent_did: verification.agent_did,
+            },
+          }
         );
         complianceReports[fw] = {
           ...(typeof report === 'object' && report ? report : { report }),
-          bundle_hash_b64u: bundleHashB64u,
+          bundle_hash_b64u: complianceBundleHashB64u,
         };
       } catch {
         complianceReports[fw] = { error: `Unknown framework: ${fw}` };
