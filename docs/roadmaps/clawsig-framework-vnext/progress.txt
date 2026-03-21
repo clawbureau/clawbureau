@@ -95,3 +95,33 @@ Started: 2026-03-20T22:40:00Z
   - Rebasing this lane after PR #489 required aligning approval-related tests with the richer `credential.password` DLP taxonomy while preserving signed policy evidence.
   - Wave 2 foundations are now in place for attestation-receipt issuance and later trust-tier uplift lanes.
 ---
+
+## 2026-03-21T02:28:29Z - Wave 3 runner-attestation lane merged
+- What was implemented
+  - Closed `AF2-ATT-002` via PR #492.
+  - Added signed runner attestation receipts bound to runner measurement metadata, event/run anchors, and effective signed policy hash, with fail-closed offline/service verification.
+- Validation
+  - `packages/clawsig-sdk`: `npm run typecheck && npm run build`
+  - `packages/clawverify-core`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm test -- test/policy-binding.test.ts test/wrap-policy-binding.test.ts`
+  - `services/clawverify`: `npm ci && npm run typecheck`
+  - `services/clawverify`: `npm test -- test/policy-binding.test.ts`
+- Notes
+  - Reviewer fixes normalized offline/service missing-sibling behavior so `runner_measurement` and `runner_attestation_receipt` fail closed coherently as `MISSING_REQUIRED_FIELD` when not paired.
+---
+
+## 2026-03-21T02:36:18Z - Wave 3 DLP simulation lane merged
+- What was implemented
+  - Closed `AF2-DLP-002` via PR #493.
+  - Added deterministic structured redaction operations and explicit simulated-vs-enforced DLP receipt semantics, including metadata counters and verifier component summaries.
+- Validation
+  - `packages/clawsig-sdk`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npx vitest run test/wrap-quiet.test.ts`
+  - `services/clawverify`: `npm ci && npm run typecheck`
+  - `services/clawverify`: `npx vitest run test/proof-bundle-data-handling.test.ts`
+- Notes
+  - Reviewer fixes forced global matching for custom redact rules so repeated secrets are fully redacted even when the author omits the `g` flag.
+  - Wave 3 now unlocks attested trust-tier uplift (`AF2-ATT-003`) as the next dependency-satisfied attestation lane.
+---
