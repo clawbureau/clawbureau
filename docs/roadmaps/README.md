@@ -16,7 +16,7 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 - **Clawsig Framework vNext** (attestation, signed policy bundles, marketplace enforcement, reviewer/dispute UX)
   - Folder: `docs/roadmaps/clawsig-framework-vnext/`
-  - Status: roadmap created, 24 planned stories, 0 shipped
+  - Status: roadmap active, 24 planned stories, 6 shipped (PRs #484/#485)
   - Beads: `monorepo-af2`, `monorepo-af2.1`..`monorepo-af2.24`
 
 - **Clawcompiler bootstrap** (deterministic compiled-evidence schemas + conformance scaffolding)
