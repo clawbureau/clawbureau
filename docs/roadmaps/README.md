@@ -14,16 +14,15 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## In progress / partially shipped
 
-- **Clawsig Framework vNext** (attestation, signed policy bundles, marketplace enforcement, reviewer/dispute UX)
-  - Folder: `docs/roadmaps/clawsig-framework-vnext/`
-  - Status: roadmap active, 24 planned stories, 23 shipped (PRs #484/#485/#487/#489/#490/#492/#493/#495/#497/#498/#500/#501/#503/#504/#506/#507/#508/#510/#511)
-  - Beads: `monorepo-af2`, `monorepo-af2.1`..`monorepo-af2.24`
-
 - **Clawcompiler bootstrap** (deterministic compiled-evidence schemas + conformance scaffolding)
   - Folder: `docs/roadmaps/clawcompiler/`
   - Status: bootstrap complete for CEC-US-001..003; runtime service not yet scheduled
 
 ## Completed roadmaps
+
+- **Clawsig Framework vNext** (24/24 ✅ — reliability, signed policy, attestation, marketplace enforcement, reviewer/dispute UX, DLP, cross-runtime parity, transparency, revocation)
+  - Folder: `docs/roadmaps/clawsig-framework-vnext/`
+  - Status: complete (PRs #484/#485/#487/#489/#490/#492/#493/#495/#497/#498/#500/#501/#503/#504/#506/#507/#508/#510/#511/#513)
 
 - **Clawsig Privacy Assurance v1** (10/10 ✅ — fail-closed egress, runtime hygiene, sensitivity handling, processor policy, reviewer-facing privacy posture, export packs)
   - Folder: `docs/roadmaps/clawsig-privacy-v1/`

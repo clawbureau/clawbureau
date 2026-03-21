@@ -1,7 +1,7 @@
 > **Type:** Roadmap
-> **Status:** ACTIVE
+> **Status:** COMPLETE
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-03-20
+> **Last reviewed:** 2026-03-21
 > **Source of truth:** `prd.json` + `progress.txt` in this folder
 
 # Clawsig Framework vNext — Attestation, Signed Policy, Marketplace Enforcement, Review UX
@@ -104,6 +104,10 @@ Attestation + export/reviewer surfaces → reviewer/dispute UX → transparency 
 - universal legal/compliance automation
 - perfect non-disclosure guarantees across all environments
 - TEE/measured-boot guarantees without delivered attestation lanes
+
+## Outcome
+
+Framework vNext is now complete: all 24 planned stories shipped across reliability, signed policy, attestation, marketplace enforcement, reviewer UX, DLP, cross-runtime parity, transparency, and revocation.
 
 ## Success Criteria
 - Framework test/release surfaces are green on canonical proof paths
