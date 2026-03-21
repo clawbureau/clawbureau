@@ -917,9 +917,11 @@ describe('runProveReport export pack', () => {
           'privacy-evidence/runtime_hygiene.json',
           'privacy-evidence/data_handling.json',
           'privacy-evidence/processor_policy.json',
+          'reports/proof-report.html',
           'reports/proof-report.json',
           'reports/proof-report.txt',
           'reports/claims-boundary.md',
+          'viewer/index.html',
         ]),
       );
       for (const entry of manifest.entries) {
@@ -949,6 +951,19 @@ describe('runProveReport export pack', () => {
       const reportText = await readFile(join(exportPackPath, 'reports/proof-report.txt'), 'utf-8');
       expect(reportText).not.toContain('Export pack      :');
 
+      const reportHtml = await readFile(join(exportPackPath, 'reports/proof-report.html'), 'utf-8');
+      expect(reportHtml).toContain('Privacy posture');
+      expect(reportHtml).toContain('Runner attestation posture');
+      expect(reportHtml).not.toContain(bundlePath);
+
+      const viewerHtml = await readFile(join(exportPackPath, 'viewer/index.html'), 'utf-8');
+      expect(viewerHtml).toContain('Export-pack viewer');
+      expect(viewerHtml).toContain('Privacy posture');
+      expect(viewerHtml).toContain('Runner attestation posture');
+      expect(viewerHtml).toContain('../reports/proof-report.json');
+      expect(viewerHtml).toContain('../proof-bundle/proof_bundle.json');
+      expect(viewerHtml).not.toContain(bundlePath);
+
       const filesToMatch = [
         'README.md',
         'manifest.json',
@@ -959,8 +974,10 @@ describe('runProveReport export pack', () => {
         'privacy-evidence/runtime_hygiene.json',
         'privacy-evidence/runtime_profile.json',
         'reports/claims-boundary.md',
+        'reports/proof-report.html',
         'reports/proof-report.json',
         'reports/proof-report.txt',
+        'viewer/index.html',
       ];
       for (const relativePath of filesToMatch) {
         const first = await readFile(join(exportPackPath, relativePath), 'utf-8');

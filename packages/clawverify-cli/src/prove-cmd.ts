@@ -658,8 +658,10 @@ interface PrivacyExportPackManifest {
 const EXPORT_PACK_BUNDLE_PATH = 'proof-bundle/proof_bundle.json';
 const EXPORT_PACK_REPORT_JSON_PATH = 'reports/proof-report.json';
 const EXPORT_PACK_REPORT_TEXT_PATH = 'reports/proof-report.txt';
+const EXPORT_PACK_REPORT_HTML_PATH = 'reports/proof-report.html';
 const EXPORT_PACK_CLAIMS_BOUNDARY_PATH = 'reports/claims-boundary.md';
 const EXPORT_PACK_README_PATH = 'README.md';
+const EXPORT_PACK_VIEWER_PATH = 'viewer/index.html';
 
 function sha256B64u(bytes: Buffer): string {
   return crypto.createHash('sha256').update(bytes).digest('base64url');
@@ -737,15 +739,191 @@ function renderPrivacyExportPackReadme(report: ProofReport): string {
   lines.push('- Runner measurement / runner attestation evidence is copied into `privacy-evidence/` when present so reviewers can inspect the exact posture inputs.');
   lines.push('- `reports/proof-report.json`: machine-readable prove report (includes privacy + runner-attestation posture).');
   lines.push('- `reports/proof-report.txt`: human-readable prove report.');
+  lines.push('- `reports/proof-report.html`: pre-rendered proof report HTML using the same prove/export posture language.');
   lines.push('- `reports/claims-boundary.md`: explicit what-is-proven / not-proven boundaries.');
+  lines.push('- `viewer/index.html`: portable hosted/local reviewer surface with pack-local artifact navigation.');
   lines.push('- `manifest.json`: deterministic file manifest with SHA-256 digests.');
   lines.push('');
   lines.push('## How To Interpret');
   lines.push(`1. Verify canonical cryptographic validity with \`${report.verify_command}\`.`);
-  lines.push('2. Review claim limits in `reports/claims-boundary.md` before making privacy/compliance statements.');
-  lines.push('3. Use `manifest.json` to detect tampering when sharing this pack externally.');
+  lines.push('2. Open `viewer/index.html` for reviewer-facing navigation, then drill into raw files as needed.');
+  lines.push('3. Review claim limits in `reports/claims-boundary.md` before making privacy/compliance statements.');
+  lines.push('4. Use `manifest.json` to detect tampering when sharing this pack externally.');
   lines.push('');
   return lines.join('\n');
+}
+
+function normalizePackRelativePath(path: string): string | null {
+  const normalized = path.replaceAll('\\', '/').trim();
+  if (
+    normalized.length === 0 ||
+    normalized === '.' ||
+    normalized === '..' ||
+    normalized.startsWith('/') ||
+    normalized.startsWith('../') ||
+    normalized.includes('/../') ||
+    /^[A-Za-z]:\//.test(normalized)
+  ) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function requirePackRelativePath(path: string): string {
+  const normalized = normalizePackRelativePath(path);
+  if (!normalized) {
+    throw new Error(`Export pack paths must stay pack-local and relative: ${path}`);
+  }
+  return normalized;
+}
+
+function toViewerHref(path: string): string | null {
+  const normalized = normalizePackRelativePath(path);
+  return normalized ? `../${normalized}` : null;
+}
+
+function renderExportPackViewerHtml(args: {
+  report: ProofReport;
+  artifactPaths: string[];
+}): string {
+  const { report } = args;
+  const artifactLinks = dedupeStrings(args.artifactPaths)
+    .map((path) => requirePackRelativePath(path))
+    .sort((a, b) => a.localeCompare(b))
+    .map((path) => {
+      const href = toViewerHref(path);
+      return `<li><a href="${escapeHtml(href!)}">${escapeHtml(path)}</a></li>`;
+    })
+    .join('');
+  const runnerMeasurementEvidence = describeAttestationEvidenceState(
+    report.privacy_posture.runner_attestation.evidence.runner_measurement_present,
+    report.privacy_posture.runner_attestation.evidence.runner_measurement_structured,
+  );
+  const runnerAttestationReceiptEvidence = describeAttestationEvidenceState(
+    report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_present,
+    report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_structured,
+  );
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clawsig export-pack viewer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --line: #d9e2ef;
+      --text: #12253f;
+      --muted: #526780;
+      --accent: #0b62d6;
+      --good: #0c7a43;
+      --caution: #9a6400;
+      --action: #a81f36;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.5;
+    }
+    main { max-width: 1040px; margin: 0 auto; padding: 28px 18px 64px; }
+    h1, h2, h3, p { margin: 0; }
+    .hero, .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(17, 37, 62, 0.06);
+    }
+    .hero { padding: 24px; margin-bottom: 14px; }
+    .subtitle { color: var(--muted); margin-top: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    .card { padding: 18px; }
+    .rows { margin-top: 10px; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px solid #eef3f9;
+    }
+    .row:last-child { border-bottom: 0; }
+    .label { color: var(--muted); }
+    .pill {
+      display: inline-block;
+      margin-top: 10px;
+      border-radius: 999px;
+      padding: 5px 11px;
+      border: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .pill.good { color: var(--good); border-color: #bce3cf; background: #eefaf3; }
+    .pill.caution { color: var(--caution); border-color: #f0d8a6; background: #fff8eb; }
+    .pill.action { color: var(--action); border-color: #f4bcc7; background: #fff0f3; }
+    ul { margin: 10px 0 0 18px; padding: 0; }
+    li + li { margin-top: 7px; }
+    a { color: var(--accent); word-break: break-all; }
+    .section { margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Export-pack viewer</h1>
+      <p class="subtitle">Portable reviewer surface for hosted or local inspection. This viewer reuses the same prove/export privacy posture and runner attestation posture outputs in this pack.</p>
+      <p class="subtitle">Canonical verification command: <code>${escapeHtml(report.verify_command)}</code></p>
+      <span class="pill ${escapeHtml(report.privacy_posture.overall_verdict)}">Privacy verdict: ${escapeHtml(report.privacy_posture.overall_verdict.toUpperCase())}</span>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Privacy posture</h2>
+        <div class="rows">
+          <div class="row"><span class="label">Overall verdict</span><strong>${escapeHtml(report.privacy_posture.overall_verdict.toUpperCase())}</strong></div>
+          <div class="row"><span class="label">Reviewer action required</span><strong>${report.privacy_posture.reviewer_action_required ? 'yes' : 'no'}</strong></div>
+          <div class="row"><span class="label">Runner attestation posture</span><strong>${escapeHtml(report.privacy_posture.runner_attestation.posture.toUpperCase())}</strong></div>
+          <div class="row"><span class="label">Attested-tier reason code</span><strong>${escapeHtml(report.privacy_posture.runner_attestation.reason_code)}</strong></div>
+          <div class="row"><span class="label">Runner measurement evidence</span><strong>${escapeHtml(runnerMeasurementEvidence)}</strong></div>
+          <div class="row"><span class="label">Runner attestation receipt</span><strong>${escapeHtml(runnerAttestationReceiptEvidence)}</strong></div>
+          <div class="row"><span class="label">Runner attestation bindings</span><strong>${report.privacy_posture.runner_attestation.evidence.binding_consistent ? 'consistent' : 'not established'}</strong></div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Primary reports</h2>
+        <ul>
+          <li><a href="../${EXPORT_PACK_REPORT_HTML_PATH}">${EXPORT_PACK_REPORT_HTML_PATH}</a></li>
+          <li><a href="../${EXPORT_PACK_REPORT_TEXT_PATH}">${EXPORT_PACK_REPORT_TEXT_PATH}</a></li>
+          <li><a href="../${EXPORT_PACK_REPORT_JSON_PATH}">${EXPORT_PACK_REPORT_JSON_PATH}</a></li>
+          <li><a href="../${EXPORT_PACK_CLAIMS_BOUNDARY_PATH}">${EXPORT_PACK_CLAIMS_BOUNDARY_PATH}</a></li>
+          <li><a href="../manifest.json">manifest.json</a></li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>What is proven</h2>
+        <ul>${renderList(report.privacy_posture.proven_claims)}</ul>
+        <div class="section">
+          <h3>What is not proven</h3>
+          <ul>${renderList(report.privacy_posture.not_proven_claims)}</ul>
+        </div>
+      </article>
+    </section>
+
+    <section class="card section">
+      <h2>Pack-local artifacts</h2>
+      <p class="subtitle">All links are relative to this pack so the viewer remains portable across local and hosted static environments.</p>
+      <ul>${artifactLinks || '<li>No artifacts listed.</li>'}</ul>
+    </section>
+  </main>
+</body>
+</html>`;
 }
 
 function collectPrivacyEvidenceFiles(bundle: Record<string, unknown>): Array<{
@@ -810,11 +988,12 @@ async function writeExportPackFile(
   contentType: string,
   entries: PrivacyExportPackManifestEntry[],
 ): Promise<void> {
-  const fullPath = resolve(packRoot, relativePath);
+  const normalizedPath = requirePackRelativePath(relativePath);
+  const fullPath = resolve(packRoot, normalizedPath);
   await mkdir(dirname(fullPath), { recursive: true });
   await writeFile(fullPath, bytes);
   entries.push({
-    path: relativePath,
+    path: normalizedPath,
     content_type: contentType,
     size_bytes: bytes.length,
     sha256_b64u: sha256B64u(bytes),
@@ -841,6 +1020,7 @@ async function writePrivacyComplianceExportPack(args: {
   const bundleBytes = Buffer.from(JSON.stringify(args.bundle, null, 2) + '\n', 'utf-8');
   const reportJsonBytes = Buffer.from(JSON.stringify(packReport, null, 2) + '\n', 'utf-8');
   const reportTextBytes = Buffer.from(renderProofReportText(packReport), 'utf-8');
+  const reportHtmlBytes = Buffer.from(renderProofReportHtml(packReport), 'utf-8');
   const claimsBoundaryBytes = Buffer.from(renderPrivacyClaimsBoundaryMarkdown(packReport), 'utf-8');
   const readmeBytes = Buffer.from(renderPrivacyExportPackReadme(packReport), 'utf-8');
 
@@ -880,6 +1060,13 @@ async function writePrivacyComplianceExportPack(args: {
   );
   await writeExportPackFile(
     packRoot,
+    EXPORT_PACK_REPORT_HTML_PATH,
+    reportHtmlBytes,
+    'text/html; charset=utf-8',
+    entries,
+  );
+  await writeExportPackFile(
+    packRoot,
     EXPORT_PACK_CLAIMS_BOUNDARY_PATH,
     claimsBoundaryBytes,
     'text/markdown; charset=utf-8',
@@ -890,6 +1077,20 @@ async function writePrivacyComplianceExportPack(args: {
     EXPORT_PACK_README_PATH,
     readmeBytes,
     'text/markdown; charset=utf-8',
+    entries,
+  );
+  const viewerBytes = Buffer.from(
+    renderExportPackViewerHtml({
+      report: packReport,
+      artifactPaths: [...entries.map((entry) => entry.path), EXPORT_PACK_VIEWER_PATH, 'manifest.json'],
+    }),
+    'utf-8',
+  );
+  await writeExportPackFile(
+    packRoot,
+    EXPORT_PACK_VIEWER_PATH,
+    viewerBytes,
+    'text/html; charset=utf-8',
     entries,
   );
 
