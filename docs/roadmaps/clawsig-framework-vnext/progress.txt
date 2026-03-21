@@ -63,3 +63,35 @@ Started: 2026-03-20T22:40:00Z
   - Reviewer fixes required proofed runs to fail closed when mandatory runner assets could not be hashed and required both verifier surfaces to validate `runner_measurement` instead of treating it as opaque metadata.
   - Wave 1 foundations are now complete; attestation receipt issuance/trust-tier uplift remains for later lanes.
 ---
+
+## 2026-03-21T01:00:03Z - Wave 2 richer DLP taxonomy lane merged
+- What was implemented
+  - Closed `AF2-DLP-001` via PR #489.
+  - Expanded proofed DLP evidence from the minimal privacy-v1 classes to a richer deterministic taxonomy with custom-rule support and policy-bound verifier checks.
+- Validation
+  - `packages/clawsig-sdk`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm test -- test/wrap-quiet.test.ts`
+  - `services/clawverify`: `npm ci && npm run typecheck`
+  - `services/clawverify`: `npm test -- test/proof-bundle-data-handling.test.ts`
+  - `services/clawverify`: `npm test`
+- Notes
+  - Reviewer fixes tightened built-in class/rule coherence and required signed policy evidence for custom-rule matches so expanded DLP receipts stay deterministic and fail closed.
+---
+
+## 2026-03-21T01:52:26Z - Wave 2 policy-bound approval lane merged
+- What was implemented
+  - Closed `AF2-POL-003` and `AF2-POL-004` via PR #490.
+  - Replaced proofed-mode ad hoc approval-token semantics with signed human approval receipts and bound approval/data-handling verification to the effective signed policy hash.
+- Validation
+  - `packages/clawsig-sdk`: `npm run typecheck && npm run build`
+  - `packages/clawverify-core`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm test -- test/policy-binding.test.ts test/wrap-quiet.test.ts`
+  - `services/clawverify`: `npm ci && npm run typecheck`
+  - `services/clawverify`: `npm test -- test/proof-bundle-data-handling.test.ts`
+- Notes
+  - Reviewer fixes closed an offline-verification replay gap by requiring embedded approval-receipt event bindings to belong to the bundle event chain.
+  - Rebasing this lane after PR #489 required aligning approval-related tests with the richer `credential.password` DLP taxonomy while preserving signed policy evidence.
+  - Wave 2 foundations are now in place for attestation-receipt issuance and later trust-tier uplift lanes.
+---
