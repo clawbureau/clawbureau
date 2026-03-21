@@ -310,6 +310,99 @@ function isPythonCommand(commandName: string): boolean {
   );
 }
 
+function isBrowserAutomationBinary(commandName: string): boolean {
+  const normalized = commandName.trim().toLowerCase();
+  return (
+    normalized === 'chromium' ||
+    normalized === 'chromium-browser' ||
+    normalized === 'chrome' ||
+    normalized === 'google-chrome' ||
+    normalized === 'google-chrome-stable' ||
+    normalized === 'chrome.exe' ||
+    normalized === 'msedge' ||
+    normalized === 'msedge.exe' ||
+    normalized === 'microsoft-edge' ||
+    normalized === 'microsoft-edge.exe'
+  );
+}
+
+const BROWSER_PROOFED_HOST_RESOLVER_RULES =
+  '--host-resolver-rules=MAP * ~NOTFOUND,EXCLUDE localhost,EXCLUDE 127.0.0.1,EXCLUDE ::1';
+
+function findBrowserProofedReservedFlag(args: string[]): string | null {
+  for (const rawArg of args) {
+    const arg = rawArg.trim();
+    if (!arg) continue;
+    if (arg === '--no-proxy-server') return arg;
+    if (arg === '--proxy-auto-detect') return arg;
+    if (
+      arg === '--proxy-server' ||
+      arg === '--proxy-pac-url' ||
+      arg === '--proxy-bypass-list' ||
+      arg === '--host-resolver-rules'
+    ) {
+      return arg;
+    }
+    if (
+      arg.startsWith('--proxy-server=') ||
+      arg.startsWith('--proxy-pac-url=') ||
+      arg.startsWith('--proxy-bypass-list=') ||
+      arg.startsWith('--host-resolver-rules=')
+    ) {
+      return arg;
+    }
+  }
+
+  return null;
+}
+
+function findBrowserProofedBypassFlag(args: string[], proxyUrl: string): string | null {
+  const expectedProxyArg = `--proxy-server=${proxyUrl}`;
+
+  for (const rawArg of args) {
+    const arg = rawArg.trim();
+    if (!arg) continue;
+    if (arg === '--no-proxy-server') return arg;
+    if (arg === '--proxy-auto-detect') return arg;
+    if (
+      arg === '--proxy-server' ||
+      arg === '--proxy-pac-url' ||
+      arg === '--proxy-bypass-list' ||
+      arg === '--host-resolver-rules'
+    ) {
+      return arg;
+    }
+    if (arg.startsWith('--proxy-pac-url=')) return arg;
+    if (arg.startsWith('--proxy-bypass-list=')) return arg;
+    if (arg.startsWith('--proxy-server=') && arg !== expectedProxyArg) return arg;
+    if (arg.startsWith('--host-resolver-rules=') && arg !== BROWSER_PROOFED_HOST_RESOLVER_RULES) {
+      return arg;
+    }
+  }
+
+  return null;
+}
+
+function ensureBrowserProofedLaunchArgs(args: string[], proxyUrl: string): string[] {
+  const bypassFlag = findBrowserProofedBypassFlag(args, proxyUrl);
+  if (bypassFlag) {
+    throw new Error(
+      `PRV_BROWSER_ADAPTER_BYPASS_FLAG: proofed browser runs cannot use ${bypassFlag} because browser proxy mediation is controlled by clawsig.`,
+    );
+  }
+
+  const next = [...args];
+  const expectedProxyArg = `--proxy-server=${proxyUrl}`;
+  if (!next.some((arg) => arg === expectedProxyArg)) {
+    next.push(`--proxy-server=${proxyUrl}`);
+  }
+  if (!next.some((arg) => arg === BROWSER_PROOFED_HOST_RESOLVER_RULES)) {
+    next.push(BROWSER_PROOFED_HOST_RESOLVER_RULES);
+  }
+
+  return next;
+}
+
 function findPythonProofedBypassFlag(args: string[]): string | null {
   for (const arg of args) {
     if (!arg) continue;
@@ -1102,10 +1195,20 @@ export async function wrap(
     proofedMode && isPythonCommand(commandName)
       ? findPythonProofedBypassFlag(args)
       : null;
+  const browserProofedReservedFlag =
+    proofedMode && isBrowserAutomationBinary(commandName)
+      ? findBrowserProofedReservedFlag(args)
+      : null;
 
   if (pythonProofedBypassFlag) {
     process.stderr.write(
       `\x1b[31m[clawsig]\x1b[0m PRV_PYTHON_ADAPTER_BYPASS_FLAG: proofed Python runs cannot use ${pythonProofedBypassFlag} because it disables the sitecustomize egress guard.\n`,
+    );
+    return 2;
+  }
+  if (browserProofedReservedFlag) {
+    process.stderr.write(
+      `\x1b[31m[clawsig]\x1b[0m PRV_BROWSER_ADAPTER_BYPASS_FLAG: proofed browser runs cannot use ${browserProofedReservedFlag} because browser proxy mediation is controlled by clawsig.\n`,
     );
     return 2;
   }
@@ -1267,6 +1370,8 @@ export async function wrap(
   const childArgs = usePiGoogleCompat
     ? rewriteCliFlagValue(args, '--provider', 'clawsig-google-proxy')
     : args;
+  const browserAutomationBinary = isBrowserAutomationBinary(commandName);
+  let effectiveChildArgs = childArgs;
 
   const childEnv: Record<string, string | undefined> = {
     ...process.env,
@@ -1330,6 +1435,29 @@ export async function wrap(
     );
   } else {
     delete childEnv['CLAWSIG_PYTHON_PROOFED_ADAPTER'];
+  }
+
+  if (proofedMode && browserAutomationBinary) {
+    const proxyUrl = `http://127.0.0.1:${proxy.port}`;
+    try {
+      effectiveChildArgs = ensureBrowserProofedLaunchArgs(effectiveChildArgs, proxyUrl);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`\x1b[31m[clawsig]\x1b[0m ${message}\n`);
+      await fsSentinel.stop();
+      netSentinel.stop();
+      await proxy.stop();
+      return 2;
+    }
+    childEnv['HTTP_PROXY'] = proxyUrl;
+    childEnv['HTTPS_PROXY'] = proxyUrl;
+    childEnv['ALL_PROXY'] = proxyUrl;
+    childEnv['CLAWSIG_BROWSER_PROOFED_ADAPTER'] = '1';
+    diag(
+      `\x1b[36m[clawsig]\x1b[0m Browser proofed adapter: ACTIVE (proxy=${proxyUrl})\n`,
+    );
+  } else {
+    delete childEnv['CLAWSIG_BROWSER_PROOFED_ADAPTER'];
   }
 
   if (usePiGoogleCompat && piGoogleCompatModelId) {
@@ -1401,7 +1529,7 @@ export async function wrap(
     diag('\x1b[33m[clawsig]\x1b[0m Proofed mode: forcing provider base URL override for codex\n');
   }
 
-  diag(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${childArgs.join(' ')}\n\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${effectiveChildArgs.join(' ')}\n\n`);
 
   let childPid = 0;
   let childProcess: ChildProcess | null = null;
@@ -1432,7 +1560,7 @@ export async function wrap(
   if (!isWindows) process.on('SIGHUP', sighupHandler);
 
   const exitCode = await new Promise<number>((resolve) => {
-    childProcess = spawn(command, childArgs, {
+    childProcess = spawn(command, effectiveChildArgs, {
       env: childEnv,
       stdio: 'inherit',
       shell: isWindows, // Windows needs shell:true to resolve .cmd/.bat aliases (npm, npx, etc.)

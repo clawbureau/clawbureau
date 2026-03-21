@@ -158,6 +158,107 @@ function assertEgressAllowedUrl(urlObj) {
   throw makeEgressPolicyError(host || urlObj.toString());
 }
 
+function commandBasenameLower(rawCommand) {
+  if (!rawCommand || typeof rawCommand !== 'string') return '';
+  const base = rawCommand.split(/[\\/]/).pop() || rawCommand;
+  return base.trim().toLowerCase();
+}
+
+function isBrowserAutomationBinaryCommand(rawCommand) {
+  const command = commandBasenameLower(rawCommand);
+  return (
+    command === 'chromium' ||
+    command === 'chromium-browser' ||
+    command === 'chrome' ||
+    command === 'google-chrome' ||
+    command === 'google-chrome-stable' ||
+    command === 'chrome.exe' ||
+    command === 'msedge' ||
+    command === 'msedge.exe' ||
+    command === 'microsoft-edge' ||
+    command === 'microsoft-edge.exe'
+  );
+}
+
+function resolveProofedProxyUrl() {
+  const configured = String(process.env.CLAWSIG_PROXY_URL || '').trim();
+  if (configured) return configured;
+  const port = String(process.env.CLAWSIG_PROXY_PORT || '').trim();
+  return port ? `http://127.0.0.1:${port}` : '';
+}
+
+const BROWSER_PROOFED_HOST_RESOLVER_RULES =
+  '--host-resolver-rules=MAP * ~NOTFOUND,EXCLUDE localhost,EXCLUDE 127.0.0.1,EXCLUDE ::1';
+
+function makeBrowserProofedAdapterError(flag) {
+  const err = new Error(
+    `Proofed browser runs cannot use ${flag} because browser proxy mediation is controlled by clawsig.`,
+  );
+  err.name = 'BrowserProofedAdapterError';
+  err.code = 'PRV_BROWSER_ADAPTER_BYPASS_FLAG';
+  err.flag = flag;
+  return err;
+}
+
+function findBrowserProofedBypassFlag(args, proxyUrl) {
+  const expectedProxyArg = `--proxy-server=${proxyUrl}`;
+
+  for (const rawArg of args) {
+    const arg = String(rawArg || '').trim();
+    if (!arg) continue;
+    if (arg === '--no-proxy-server') return arg;
+    if (arg === '--proxy-auto-detect') return arg;
+    if (
+      arg === '--proxy-server' ||
+      arg === '--proxy-pac-url' ||
+      arg === '--proxy-bypass-list' ||
+      arg === '--host-resolver-rules'
+    ) {
+      return arg;
+    }
+    if (arg.startsWith('--proxy-pac-url=')) return arg;
+    if (arg.startsWith('--proxy-bypass-list=')) return arg;
+    if (arg.startsWith('--proxy-server=') && arg !== expectedProxyArg) return arg;
+    if (arg.startsWith('--host-resolver-rules=') && arg !== BROWSER_PROOFED_HOST_RESOLVER_RULES) {
+      return arg;
+    }
+  }
+
+  return null;
+}
+
+function ensureBrowserProofedProxyArgs(args, proxyUrl) {
+  const bypassFlag = findBrowserProofedBypassFlag(args, proxyUrl);
+  if (bypassFlag) {
+    throw makeBrowserProofedAdapterError(bypassFlag);
+  }
+
+  const next = [...args];
+  const expectedProxyArg = `--proxy-server=${proxyUrl}`;
+  if (!next.some((arg) => String(arg) === expectedProxyArg)) {
+    next.push(expectedProxyArg);
+  }
+  if (!next.some((arg) => String(arg) === BROWSER_PROOFED_HOST_RESOLVER_RULES)) {
+    next.push(BROWSER_PROOFED_HOST_RESOLVER_RULES);
+  }
+  return next;
+}
+
+function ensureCommandArgsArray(method, args) {
+  if (!['spawn', 'spawnSync', 'execFile', 'execFileSync'].includes(method)) return null;
+  if (Array.isArray(args[1])) return args[1];
+  const second = args[1];
+  if (
+    second === undefined ||
+    typeof second === 'function' ||
+    (second && typeof second === 'object' && !Array.isArray(second))
+  ) {
+    args.splice(1, 0, []);
+    return args[1];
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // SSE Tool Call State Machine
 // Handles OpenAI (index-based delta), Anthropic (content_block_delta),
@@ -582,6 +683,22 @@ for (const method of cpMethods) {
   if (typeof cp[method] === 'function') {
     const orig = cp[method];
     cp[method] = function clawsigCpMethod(...args) {
+      if (enforceEgressAllowlist && isBrowserAutomationBinaryCommand(args[0])) {
+        const proxyUrl = resolveProofedProxyUrl();
+        if (proxyUrl) {
+          const commandArgs = ensureCommandArgsArray(method, args);
+          if (Array.isArray(commandArgs)) {
+            args[1] = ensureBrowserProofedProxyArgs(commandArgs, proxyUrl);
+            emitTrace({
+              type: 'browser_adapter',
+              source: 'child_process',
+              command: commandBasenameLower(args[0]),
+              proxy_url: proxyUrl,
+            });
+          }
+        }
+      }
+
       let optsIndex = -1;
 
       if (['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork'].includes(method)) {
@@ -603,7 +720,17 @@ for (const method of cpMethods) {
         let nodeOpts = env.NODE_OPTIONS || '';
         if (!nodeOpts.includes('preload.mjs')) nodeOpts = `${nodeOpts} ${importFlags}`.trim();
 
-        opts.env = { ...env, NODE_OPTIONS: nodeOpts, CLAWSIG_TRACE_FILE: traceFile };
+        const nextEnv = { ...env, NODE_OPTIONS: nodeOpts, CLAWSIG_TRACE_FILE: traceFile };
+        if (enforceEgressAllowlist && isBrowserAutomationBinaryCommand(args[0])) {
+          const proxyUrl = resolveProofedProxyUrl();
+          if (proxyUrl) {
+            nextEnv.HTTP_PROXY = nextEnv.HTTP_PROXY || proxyUrl;
+            nextEnv.HTTPS_PROXY = nextEnv.HTTPS_PROXY || proxyUrl;
+            nextEnv.ALL_PROXY = nextEnv.ALL_PROXY || proxyUrl;
+            nextEnv.CLAWSIG_BROWSER_PROOFED_ADAPTER = '1';
+          }
+        }
+        opts.env = nextEnv;
       }
 
       return orig.apply(this, args);
@@ -614,6 +741,28 @@ for (const method of cpMethods) {
 // Also patch ChildProcess.prototype.spawn for envPairs injection
 const origCpSpawn = cp.ChildProcess.prototype.spawn;
 cp.ChildProcess.prototype.spawn = function(options) {
+  const browserProofedAdapterTarget =
+    enforceEgressAllowlist &&
+    options &&
+    typeof options.file === 'string' &&
+    isBrowserAutomationBinaryCommand(options.file);
+  const browserProxyUrl = browserProofedAdapterTarget ? resolveProofedProxyUrl() : '';
+
+  if (
+    browserProofedAdapterTarget &&
+    Array.isArray(options.args)
+  ) {
+    if (browserProxyUrl) {
+      options.args = ensureBrowserProofedProxyArgs(options.args, browserProxyUrl);
+      emitTrace({
+        type: 'browser_adapter',
+        source: 'child_process_proto',
+        command: commandBasenameLower(options.file),
+        proxy_url: browserProxyUrl,
+      });
+    }
+  }
+
   if (options && options.envPairs) {
     let myPath = import.meta.url;
     if (myPath.startsWith('file://')) myPath = fileURLToPath(myPath);
@@ -624,6 +773,10 @@ cp.ChildProcess.prototype.spawn = function(options) {
 
     let hasNodeOptions = false;
     let hasTraceFile = false;
+    let hasBrowserProofedAdapter = false;
+    let hasHttpProxy = false;
+    let hasHttpsProxy = false;
+    let hasAllProxy = false;
 
     for (let i = 0; i < options.envPairs.length; i++) {
       const pair = options.envPairs[i];
@@ -636,10 +789,24 @@ cp.ChildProcess.prototype.spawn = function(options) {
         options.envPairs[i] = newPair;
       }
       if (pair.startsWith('CLAWSIG_TRACE_FILE=')) hasTraceFile = true;
+      if (pair.startsWith('CLAWSIG_BROWSER_PROOFED_ADAPTER=')) hasBrowserProofedAdapter = true;
+      if (pair.startsWith('HTTP_PROXY=')) hasHttpProxy = true;
+      if (pair.startsWith('HTTPS_PROXY=')) hasHttpsProxy = true;
+      if (pair.startsWith('ALL_PROXY=')) hasAllProxy = true;
     }
 
     if (!hasNodeOptions) options.envPairs.push(`NODE_OPTIONS=${importFlag1} ${importFlag2}`);
     if (!hasTraceFile && traceFile) options.envPairs.push(`CLAWSIG_TRACE_FILE=${traceFile}`);
+    if (browserProofedAdapterTarget) {
+      if (!hasBrowserProofedAdapter) {
+        options.envPairs.push('CLAWSIG_BROWSER_PROOFED_ADAPTER=1');
+      }
+      if (browserProxyUrl) {
+        if (!hasHttpProxy) options.envPairs.push(`HTTP_PROXY=${browserProxyUrl}`);
+        if (!hasHttpsProxy) options.envPairs.push(`HTTPS_PROXY=${browserProxyUrl}`);
+        if (!hasAllProxy) options.envPairs.push(`ALL_PROXY=${browserProxyUrl}`);
+      }
+    }
   }
   return origCpSpawn.apply(this, arguments);
 };
