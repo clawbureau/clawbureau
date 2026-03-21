@@ -192,3 +192,27 @@ Started: 2026-03-20T22:40:00Z
   - Reviewer fixes made proof-backed privacy/processor/approval gates fail closed while proof verification is still pending and added automatic reconciliation so quarantined submissions can advance into review once verified evidence satisfies the contract.
   - Wave 6 unlocks payout/review routing by assurance tier (`AF2-MKT-003`) and side-by-side review flows (`AF2-REV-002`, `AF2-REV-003`) as the next dependency-cleared lanes.
 ---
+
+## 2026-03-21T05:02:19Z - Wave 7 payout-routing lane merged
+- What was implemented
+  - Closed `AF2-MKT-003` via PR #503.
+  - Added a unified payout/review policy evaluator that routes or blocks payout/readiness based on assurance gating, proof/commit verification, submission status, closure type, and minimum proof-tier requirements.
+- Validation
+  - `services/_archived/clawbounties`: `npm run typecheck`
+  - `git diff --check`
+- Notes
+  - Reviewer fixes added deterministic minimum-proof-tier payout blockers even without explicit assurance-level requirements and carried payout-review policy through next-action surfaces so operators see the true wait/gate reason.
+---
+
+## 2026-03-21T05:06:45Z - Wave 7 run-comparison lane merged
+- What was implemented
+  - Closed `AF2-REV-002` via PR #504.
+  - Added `clawsig prove --compare-with` plus portable export-pack comparison artifacts and viewer/report deltas across assurance, evidence, policy, processor, and privacy categories.
+- Validation
+  - `packages/clawverify-cli`: `npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck`
+  - `packages/clawverify-cli`: `npm test`
+- Notes
+  - Reviewer fixes removed wall-clock nondeterminism from comparison artifacts and made reviewer highlights category-aware so evidence-only or policy-only deltas do not collapse into a misleading no-delta message.
+  - Wave 7 leaves reviewer signoff/dispute binding (`AF2-REV-003`) and later transparency/revocation lanes as the next reviewer-surface dependency chain.
+---
