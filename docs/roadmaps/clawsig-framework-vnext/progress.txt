@@ -274,3 +274,20 @@ Started: 2026-03-20T22:40:00Z
   - Reviewer fixes tightened same-tree consistency semantics and rejected malformed transparency `anchor_uri` values fail-closed.
   - Wave 9 leaves revocation (`AF2-TRN-002`) as the final remaining Framework vNext lane.
 ---
+
+## 2026-03-21T17:31:20Z - Wave 10 revocation lane merged
+- What was implemented
+  - Closed `AF2-TRN-002` via PR #513.
+  - Added revocation artifacts for policy-issuer, runner, and reviewer trust roots, with deterministic verifier rejection and conservative prove/export/report surfacing for revocation-driven failures.
+- Validation
+  - `packages/clawverify-core`: `npm run typecheck`
+  - `packages/clawverify-core`: `npm run build`
+  - `services/clawverify`: `npm run typecheck`
+  - `packages/clawverify-cli`: `npm run typecheck`
+  - `packages/clawverify-cli`: `npm run build`
+  - `services/clawverify`: `npm test -- test/policy-binding.test.ts test/reviewer-signoff.test.ts`
+  - `packages/clawverify-cli`: `npm test -- test/policy-binding.test.ts test/reviewer-signoff-verifier.test.ts test/prove-cmd.test.ts`
+- Notes
+  - Reviewer fixes ensured nested runner/reviewer receipt revocation is enforced only after nested payload/signature authentication, preventing tampered receipts from over-claiming `REVOKED`.
+  - With revocation shipped, Framework vNext is complete: all 24 planned stories are now merged.
+---
