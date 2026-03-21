@@ -112,6 +112,8 @@ export type {
   RunnerMeasurementArtifactHashes,
   RunnerMeasurementManifest,
   RunnerMeasurementBindingMetadata,
+  RunnerAttestationReceiptPayload,
+  RunnerAttestationReceiptEnvelope,
   ToolReceiptPayload,
   SideEffectReceiptPayload,
   ExecutionReceiptPayload,

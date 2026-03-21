@@ -28,6 +28,7 @@ export const ENVELOPE_TYPES = [
   'audit_result_attestation',
   'export_bundle',
   'scoped_token',
+  'policy_bundle',
 ] as const;
 export type EnvelopeType = (typeof ENVELOPE_TYPES)[number];
 
@@ -1243,6 +1244,40 @@ export interface RunnerMeasurementBindingMetadata {
   manifest: RunnerMeasurementManifest;
 }
 
+/** AF2-ATT-002: signed receipt binding runner measurement + policy hash to run anchors. */
+export interface RunnerAttestationReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  hash_algorithm: 'SHA-256';
+  agent_did: string;
+  timestamp: string;
+  binding: {
+    run_id: string;
+    event_hash_b64u: string;
+  };
+  runner_measurement: {
+    manifest_hash_b64u: string;
+    runtime_hash_b64u: string;
+    artifacts: RunnerMeasurementArtifactHashes;
+  };
+  policy: {
+    effective_policy_hash_b64u: string;
+  };
+}
+
+/** AF2-ATT-002: envelope for runner attestation receipts. */
+export interface RunnerAttestationReceiptEnvelope {
+  envelope_version: '1';
+  envelope_type: 'runner_attestation_receipt';
+  payload: RunnerAttestationReceiptPayload;
+  payload_hash_b64u: string;
+  hash_algorithm: HashAlgorithm;
+  signature_b64u: string;
+  algorithm: Algorithm;
+  signer_did: string;
+  issued_at: string;
+}
+
 export interface CoverageAttestationPayload {
   attestation_version: '1';
   attestation_id: string;
@@ -1363,6 +1398,8 @@ export interface ProofBundleMetadata {
   policy_binding?: PolicyBindingMetadata;
   /** AF2-ATT-001 deterministic runner measurement foundation for proofed runs. */
   runner_measurement?: RunnerMeasurementBindingMetadata;
+  /** AF2-ATT-002 signed runner attestation receipt bound to run/event/policy. */
+  runner_attestation_receipt?: RunnerAttestationReceiptEnvelope;
   /** Additional metadata (non-normative) */
   [key: string]: unknown;
 }

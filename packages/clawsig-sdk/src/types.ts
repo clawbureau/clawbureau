@@ -364,6 +364,40 @@ export interface RunnerMeasurementBindingMetadata {
   manifest: RunnerMeasurementManifest;
 }
 
+/** AF2-ATT-002: signed receipt binding runner measurement + policy hash to run anchors. */
+export interface RunnerAttestationReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  hash_algorithm: 'SHA-256';
+  agent_did: string;
+  timestamp: string;
+  binding: {
+    run_id: string;
+    event_hash_b64u: string;
+  };
+  runner_measurement: {
+    manifest_hash_b64u: string;
+    runtime_hash_b64u: string;
+    artifacts: RunnerMeasurementArtifactHashes;
+  };
+  policy: {
+    effective_policy_hash_b64u: string;
+  };
+}
+
+/** AF2-ATT-002: envelope for runner attestation receipts. */
+export interface RunnerAttestationReceiptEnvelope {
+  envelope_version: '1';
+  envelope_type: 'runner_attestation_receipt';
+  payload: RunnerAttestationReceiptPayload;
+  payload_hash_b64u: string;
+  hash_algorithm: 'SHA-256';
+  signature_b64u: string;
+  algorithm: 'Ed25519';
+  signer_did: string;
+  issued_at: string;
+}
+
 /** Signed envelope (matches clawverify). */
 export interface SignedEnvelope<T = unknown> {
   envelope_version: '1';
@@ -474,6 +508,8 @@ export interface ProofBundlePayload {
     policy_binding?: EffectivePolicyBindingMetadata;
     /** AF2-ATT-001: deterministic runner measurement foundation for proofed runs. */
     runner_measurement?: RunnerMeasurementBindingMetadata;
+    /** AF2-ATT-002: signed runner attestation receipt bound to run/event/policy. */
+    runner_attestation_receipt?: RunnerAttestationReceiptEnvelope;
     [key: string]: unknown;
   };
 }
