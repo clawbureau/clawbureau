@@ -36,8 +36,12 @@ Turn Clawcompiler into the service that can honestly say:
   - `CEC-RT-001` verified-evidence ingest contract
   - `CEC-RT-002` deterministic control-pack runtime
   - `CEC-RT-003` fail-closed compiler state machine
-- Current roadmap progress: **3/10 shipped stories**
-- Next up: **Wave 2** (`CEC-RT-004`..`CEC-RT-006`)
+- **Wave 2 shipped** via PR #518:
+  - `CEC-RT-004` deterministic compiled report generation
+  - `CEC-RT-005` signed compiler service/runtime
+  - `CEC-RT-006` compiled-report verification in CLI/service
+- Current roadmap progress: **6/10 shipped stories**
+- Next up: **Wave 3** (`CEC-RT-007`..`CEC-RT-008`)
 
 ## Tracks
 
