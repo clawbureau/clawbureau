@@ -955,6 +955,8 @@ interface SubmissionSummaryView {
   bounty_id: string;
   worker_did: string;
   status: SubmissionStatus;
+  reason_codes: string[];
+  assurance_gating: SubmissionAssuranceGatingView | null;
   proof_verify_status: ProofVerifyStatus;
   proof_tier: SubmissionTrustTier | null;
   commit_proof_verify_status: 'valid' | 'invalid' | null;
@@ -976,6 +978,8 @@ interface SubmissionDetailView {
   bounty_id: string;
   worker_did: string;
   status: SubmissionStatus;
+  reason_codes: string[];
+  assurance_gating: SubmissionAssuranceGatingView | null;
   idempotency_key: string | null;
   verification: {
     proof_bundle: {
@@ -1018,6 +1022,47 @@ interface SubmissionDetailView {
   arena?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+}
+
+type SubmissionAssuranceGatingStatus = 'satisfied' | 'rejected' | 'quarantined';
+type SubmissionAssuranceFailureField =
+  | 'required_assurance_level'
+  | 'required_privacy_posture'
+  | 'required_processors'
+  | 'approval_policy';
+
+interface SubmissionAssuranceFailureView {
+  code: string;
+  field: SubmissionAssuranceFailureField;
+  message: string;
+  expected: unknown;
+  observed: unknown;
+  evidence_path: string;
+}
+
+interface SubmissionAssuranceObservedEvidenceView {
+  proof_verify_status: ProofVerifyStatus;
+  proof_tier: SubmissionTrustTier | null;
+  privacy_posture: AssurancePrivacyPosture | null;
+  privacy_posture_source: string | null;
+  processors: string[];
+  processor_sources: string[];
+  human_approval_receipt_count: number;
+  explicit_human_approval_receipt_count: number;
+}
+
+interface SubmissionAssuranceGatingView {
+  status: SubmissionAssuranceGatingStatus;
+  required: AssuranceRequirementsV1;
+  reason_codes: string[];
+  failures: SubmissionAssuranceFailureView[];
+  observed: SubmissionAssuranceObservedEvidenceView;
+}
+
+interface SubmissionAssuranceEvaluation {
+  decision: 'pass' | 'reject' | 'quarantine';
+  reason_codes: string[];
+  view: SubmissionAssuranceGatingView | null;
 }
 
 type SubmissionViewerContext =
@@ -1078,6 +1123,8 @@ interface SubmitBountyResponseV1 {
   bounty_id: string;
   status: SubmissionStatus;
   proof_status?: 'pending' | 'valid' | 'invalid';
+  reason_codes?: string[];
+  assurance_gating?: SubmissionAssuranceGatingView;
   verification: {
     proof_bundle: {
       status: ProofVerifyStatus;
@@ -5127,11 +5174,17 @@ async function computeReplayReceiptKeys(
   };
 }
 
-function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
+function buildSubmitResponse(
+  record: SubmissionRecord,
+  assuranceGating: SubmissionAssuranceGatingView | null,
+): SubmitBountyResponseV1 {
+  const reasonCodes = assuranceGating?.reason_codes ?? [];
   const response: SubmitBountyResponseV1 = {
     submission_id: record.submission_id,
     bounty_id: record.bounty_id,
     status: record.status,
+    ...(reasonCodes.length > 0 ? { reason_codes: reasonCodes } : {}),
+    ...(assuranceGating ? { assurance_gating: assuranceGating } : {}),
     verification: {
       proof_bundle: {
         status: record.proof_verify_status,
@@ -5140,7 +5193,7 @@ function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
         tier: record.proof_tier ?? undefined,
       },
     },
-    next_actions: buildSubmitNextActions(record),
+    next_actions: buildSubmitNextActions(record, assuranceGating),
   };
 
   if (record.proof_verify_status === 'pending' || record.proof_verify_status === 'valid' || record.proof_verify_status === 'invalid') {
@@ -5194,9 +5247,16 @@ function buildClaimNextActions(bountyId: string): NextAction[] {
   ];
 }
 
-function buildSubmissionFixReason(record: SubmissionRecord): string {
+function buildSubmissionFixReason(
+  record: SubmissionRecord,
+  assuranceGating: SubmissionAssuranceGatingView | null,
+): string {
   if (record.status === 'rejected') {
     return 'Submission was rejected during review';
+  }
+
+  if (assuranceGating && assuranceGating.failures.length > 0) {
+    return assuranceGating.failures.map((entry) => `${entry.code}: ${entry.message}`).join('; ');
   }
 
   const reasons: string[] = [];
@@ -5213,9 +5273,14 @@ function buildSubmissionFixReason(record: SubmissionRecord): string {
   return 'Submission requires fixes before it can be accepted';
 }
 
-function buildSubmissionFixDetails(record: SubmissionRecord): Record<string, unknown> {
+function buildSubmissionFixDetails(
+  record: SubmissionRecord,
+  assuranceGating: SubmissionAssuranceGatingView | null,
+): Record<string, unknown> {
   return {
     submission_status: record.status,
+    reason_codes: assuranceGating?.reason_codes ?? [],
+    assurance_gating: assuranceGating,
     proof_bundle: {
       status: record.proof_verify_status,
       reason: record.proof_verify_reason,
@@ -5229,14 +5294,32 @@ function buildSubmissionFixDetails(record: SubmissionRecord): Record<string, unk
   };
 }
 
-function buildSubmitNextActions(record: SubmissionRecord): NextAction[] {
-  if (record.status === 'invalid') {
+function buildSubmitNextActions(
+  record: SubmissionRecord,
+  assuranceGating: SubmissionAssuranceGatingView | null,
+): NextAction[] {
+  if (assuranceGating?.status === 'quarantined') {
+    return [
+      {
+        action: 'wait',
+        reason: 'Submission is quarantined pending required assurance evidence verification',
+        poll_url: `/v1/submissions/${record.submission_id}`,
+        details: {
+          reason_codes: assuranceGating.reason_codes,
+          assurance_gating: assuranceGating,
+        },
+      },
+    ];
+  }
+
+  const requiresFix = record.status === 'invalid' || record.status === 'rejected' || assuranceGating?.status === 'rejected';
+  if (requiresFix) {
     return [
       {
         action: 'fix',
         command: `clawsig work submit --bounty ${record.bounty_id} --proof-bundle .clawsig/proof_bundle.json`,
-        reason: buildSubmissionFixReason(record),
-        details: buildSubmissionFixDetails(record),
+        reason: buildSubmissionFixReason(record, assuranceGating),
+        details: buildSubmissionFixDetails(record, assuranceGating),
       },
     ];
   }
@@ -5252,7 +5335,35 @@ function buildSubmitNextActions(record: SubmissionRecord): NextAction[] {
   ];
 }
 
-function buildSubmissionStatusNextActions(record: SubmissionRecord): NextAction[] {
+function buildSubmissionStatusNextActions(
+  record: SubmissionRecord,
+  assuranceGating: SubmissionAssuranceGatingView | null,
+): NextAction[] {
+  if (assuranceGating?.status === 'quarantined') {
+    return [
+      {
+        action: 'wait',
+        reason: 'Submission is quarantined pending required assurance evidence verification',
+        poll_url: `/v1/submissions/${record.submission_id}`,
+        details: {
+          reason_codes: assuranceGating.reason_codes,
+          assurance_gating: assuranceGating,
+        },
+      },
+    ];
+  }
+
+  if (assuranceGating?.status === 'rejected') {
+    return [
+      {
+        action: 'fix',
+        command: `clawsig work submit --bounty ${record.bounty_id} --proof-bundle .clawsig/proof_bundle.json`,
+        reason: buildSubmissionFixReason(record, assuranceGating),
+        details: buildSubmissionFixDetails(record, assuranceGating),
+      },
+    ];
+  }
+
   if (record.status === 'pending_review') {
     return [
       {
@@ -5268,8 +5379,8 @@ function buildSubmissionStatusNextActions(record: SubmissionRecord): NextAction[
       {
         action: 'fix',
         command: `clawsig work submit --bounty ${record.bounty_id} --proof-bundle .clawsig/proof_bundle.json`,
-        reason: buildSubmissionFixReason(record),
-        details: buildSubmissionFixDetails(record),
+        reason: buildSubmissionFixReason(record, assuranceGating),
+        details: buildSubmissionFixDetails(record, assuranceGating),
       },
     ];
   }
@@ -5845,6 +5956,12 @@ function parseJsonStringArray(text: string): string[] | null {
 }
 
 const ASSURANCE_REQUIRED_PROCESSOR_RE = /^[a-z0-9][a-z0-9._:-]{0,119}$/;
+const ASSURANCE_PENDING_REASON_CODES = new Set([
+  'MKT_ASSURANCE_LEVEL_EVIDENCE_PENDING',
+  'MKT_PRIVACY_POSTURE_EVIDENCE_PENDING',
+  'MKT_REQUIRED_PROCESSORS_EVIDENCE_PENDING',
+  'MKT_APPROVAL_RECEIPT_EVIDENCE_PENDING',
+]);
 
 function parseAssuranceRequirementsV1(
   value: unknown,
@@ -5971,6 +6088,619 @@ function parseAssuranceRequirementsFromMetadata(
   const parsed = parseAssuranceRequirementsV1(raw);
   if (!parsed.ok) return parsed;
   return { ok: true, value: parsed.value };
+}
+
+function assuranceRequiredLevelRank(level: AssuranceRequiredLevel): number {
+  switch (level) {
+    case 'none':
+      return 0;
+    case 'gateway':
+      return 1;
+    case 'sandbox':
+      return 2;
+  }
+}
+
+function assurancePrivacyPostureRank(posture: AssurancePrivacyPosture): number {
+  switch (posture) {
+    case 'action':
+      return 1;
+    case 'caution':
+      return 2;
+    case 'good':
+      return 3;
+  }
+}
+
+function submissionTrustTierToAssuranceLevel(tier: SubmissionTrustTier | null): AssuranceRequiredLevel {
+  if (tier === 'sandbox') return 'sandbox';
+  if (tier === 'gateway') return 'gateway';
+  return 'none';
+}
+
+function parseAssurancePrivacyPosture(value: unknown): AssurancePrivacyPosture | null {
+  if (!isNonEmptyString(value)) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'good' || normalized === 'caution' || normalized === 'action') {
+    return normalized;
+  }
+  return null;
+}
+
+function normalizeRequiredProcessorName(value: unknown): string | null {
+  if (!isNonEmptyString(value)) return null;
+  const normalized = value.trim().toLowerCase();
+  if (!ASSURANCE_REQUIRED_PROCESSOR_RE.test(normalized)) return null;
+  return normalized;
+}
+
+function extractSubmissionProofPayload(submission: SubmissionRecord): Record<string, unknown> | null {
+  const payload = submission.proof_bundle_envelope.payload;
+  if (!isRecord(payload)) return null;
+  return payload;
+}
+
+function extractSubmissionPrivacyPostureEvidence(submission: SubmissionRecord): {
+  present: boolean;
+  value: AssurancePrivacyPosture | null;
+  source: string | null;
+  raw: unknown;
+} {
+  const proofPayload = extractSubmissionProofPayload(submission);
+  const proofMetadata = isRecord(proofPayload?.metadata) ? proofPayload.metadata : null;
+  const metadataPrivacy = isRecord(proofMetadata?.privacy_posture) ? proofMetadata.privacy_posture : null;
+  const agentPrivacy = isRecord(submission.agent_pack?.privacy_posture) ? submission.agent_pack.privacy_posture : null;
+
+  const candidates: Array<{ source: string; raw: unknown }> = [
+    { source: 'agent_pack.privacy_posture.overall_verdict', raw: agentPrivacy?.overall_verdict },
+    { source: 'agent_pack.privacy_verdict', raw: submission.agent_pack?.privacy_verdict },
+    { source: 'proof_bundle_envelope.payload.metadata.privacy_posture.overall_verdict', raw: metadataPrivacy?.overall_verdict },
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate.raw === undefined || candidate.raw === null) continue;
+    return {
+      present: true,
+      value: parseAssurancePrivacyPosture(candidate.raw),
+      source: candidate.source,
+      raw: candidate.raw,
+    };
+  }
+
+  return {
+    present: false,
+    value: null,
+    source: null,
+    raw: null,
+  };
+}
+
+function extractSubmissionProcessorEvidence(submission: SubmissionRecord): {
+  processors: string[];
+  sources: string[];
+  evidence_present: boolean;
+  invalid_entries: number;
+} {
+  const processors = new Set<string>();
+  const sources = new Set<string>();
+  let evidence_present = false;
+  let invalid_entries = 0;
+
+  const addProcessor = (provider: unknown): void => {
+    const normalized = normalizeRequiredProcessorName(provider);
+    if (!normalized) {
+      invalid_entries += 1;
+      return;
+    }
+    processors.add(normalized);
+  };
+
+  const proofPayload = extractSubmissionProofPayload(submission);
+  const proofMetadata = isRecord(proofPayload?.metadata) ? proofPayload.metadata : null;
+  const metadataProcessorPolicy = isRecord(proofMetadata?.processor_policy) ? proofMetadata.processor_policy : null;
+  const metadataUsedProcessors = metadataProcessorPolicy?.used_processors;
+  if (metadataUsedProcessors !== undefined && metadataUsedProcessors !== null) {
+    evidence_present = true;
+    sources.add('proof_bundle_envelope.payload.metadata.processor_policy.used_processors');
+    if (Array.isArray(metadataUsedProcessors)) {
+      for (const entry of metadataUsedProcessors) {
+        if (!isRecord(entry)) {
+          invalid_entries += 1;
+          continue;
+        }
+        addProcessor(entry.provider);
+      }
+    } else {
+      invalid_entries += 1;
+    }
+  }
+
+  const receipts = proofPayload?.receipts;
+  if (receipts !== undefined && receipts !== null) {
+    evidence_present = true;
+    sources.add('proof_bundle_envelope.payload.receipts[*].payload.provider');
+    if (Array.isArray(receipts)) {
+      for (const entry of receipts) {
+        if (!isRecord(entry)) {
+          invalid_entries += 1;
+          continue;
+        }
+        const payload = isRecord(entry.payload) ? entry.payload : null;
+        if (!payload) {
+          invalid_entries += 1;
+          continue;
+        }
+        addProcessor(payload.provider);
+      }
+    } else {
+      invalid_entries += 1;
+    }
+  }
+
+  const agentPrivacy = isRecord(submission.agent_pack?.privacy_posture) ? submission.agent_pack.privacy_posture : null;
+  const agentProcessorPolicy = isRecord(agentPrivacy?.processor_policy) ? agentPrivacy.processor_policy : null;
+  const agentUsedProcessors = agentProcessorPolicy?.used_processors;
+  if (agentUsedProcessors !== undefined && agentUsedProcessors !== null) {
+    evidence_present = true;
+    sources.add('agent_pack.privacy_posture.processor_policy.used_processors');
+    if (Array.isArray(agentUsedProcessors)) {
+      for (const entry of agentUsedProcessors) {
+        if (!isRecord(entry)) {
+          invalid_entries += 1;
+          continue;
+        }
+        addProcessor(entry.provider);
+      }
+    } else {
+      invalid_entries += 1;
+    }
+  }
+
+  return {
+    processors: Array.from(processors).sort((a, b) => a.localeCompare(b)),
+    sources: Array.from(sources).sort((a, b) => a.localeCompare(b)),
+    evidence_present,
+    invalid_entries,
+  };
+}
+
+function extractSubmissionApprovalReceiptEvidence(submission: SubmissionRecord): {
+  evidence_present: boolean;
+  receipt_count: number;
+  explicit_approve_count: number;
+  invalid_entries: number;
+} {
+  const proofPayload = extractSubmissionProofPayload(submission);
+  const receiptsRaw = proofPayload?.human_approval_receipts;
+
+  if (receiptsRaw === undefined || receiptsRaw === null) {
+    return {
+      evidence_present: false,
+      receipt_count: 0,
+      explicit_approve_count: 0,
+      invalid_entries: 0,
+    };
+  }
+
+  let receipt_count = 0;
+  let explicit_approve_count = 0;
+  let invalid_entries = 0;
+
+  if (!Array.isArray(receiptsRaw)) {
+    return {
+      evidence_present: true,
+      receipt_count: 0,
+      explicit_approve_count: 0,
+      invalid_entries: 1,
+    };
+  }
+
+  for (const entry of receiptsRaw) {
+    if (!isRecord(entry)) {
+      invalid_entries += 1;
+      continue;
+    }
+
+    const payload = isRecord(entry.payload) ? entry.payload : entry;
+    const approvalType = payload.approval_type;
+    if (!isNonEmptyString(approvalType)) {
+      invalid_entries += 1;
+      continue;
+    }
+
+    receipt_count += 1;
+    if (approvalType.trim() === 'explicit_approve') {
+      explicit_approve_count += 1;
+    }
+  }
+
+  return {
+    evidence_present: true,
+    receipt_count,
+    explicit_approve_count,
+    invalid_entries,
+  };
+}
+
+function buildProofBackedAssuranceFailure(
+  submission: SubmissionRecord,
+  params: {
+    code_prefix: 'MKT_PRIVACY_POSTURE' | 'MKT_REQUIRED_PROCESSORS' | 'MKT_APPROVAL_RECEIPT';
+    field: SubmissionAssuranceFailureField;
+    expected: unknown;
+    pending_message: string;
+    missing_message: string;
+    invalid_message: string;
+  },
+): SubmissionAssuranceFailureView | null {
+  if (submission.proof_verify_status === 'pending') {
+    return {
+      code: `${params.code_prefix}_EVIDENCE_PENDING`,
+      field: params.field,
+      message: params.pending_message,
+      expected: params.expected,
+      observed: submission.proof_verify_status,
+      evidence_path: 'verification.proof_bundle.status',
+    };
+  }
+
+  if (submission.proof_verify_status === 'not_provided') {
+    return {
+      code: `${params.code_prefix}_EVIDENCE_MISSING`,
+      field: params.field,
+      message: params.missing_message,
+      expected: params.expected,
+      observed: submission.proof_verify_status,
+      evidence_path: 'verification.proof_bundle.status',
+    };
+  }
+
+  if (submission.proof_verify_status !== 'valid') {
+    return {
+      code: `${params.code_prefix}_EVIDENCE_INVALID`,
+      field: params.field,
+      message: params.invalid_message,
+      expected: params.expected,
+      observed: submission.proof_verify_status,
+      evidence_path: 'verification.proof_bundle.status',
+    };
+  }
+
+  return null;
+}
+
+function evaluateSubmissionAssuranceRequirements(
+  requirements: AssuranceRequirementsV1 | null,
+  submission: SubmissionRecord,
+): SubmissionAssuranceEvaluation {
+  if (!requirements) {
+    return {
+      decision: 'pass',
+      reason_codes: [],
+      view: null,
+    };
+  }
+
+  const privacyEvidence = extractSubmissionPrivacyPostureEvidence(submission);
+  const processorEvidence = extractSubmissionProcessorEvidence(submission);
+  const approvalEvidence = extractSubmissionApprovalReceiptEvidence(submission);
+
+  const failures: SubmissionAssuranceFailureView[] = [];
+
+  if (requirements.required_assurance_level && requirements.required_assurance_level !== 'none') {
+    if (submission.proof_verify_status === 'pending') {
+      failures.push({
+        code: 'MKT_ASSURANCE_LEVEL_EVIDENCE_PENDING',
+        field: 'required_assurance_level',
+        message: 'proof verification is still pending',
+        expected: requirements.required_assurance_level,
+        observed: submission.proof_verify_status,
+        evidence_path: 'verification.proof_bundle.status',
+      });
+    } else if (submission.proof_verify_status === 'not_provided') {
+      failures.push({
+        code: 'MKT_ASSURANCE_LEVEL_EVIDENCE_MISSING',
+        field: 'required_assurance_level',
+        message: 'proof bundle evidence is missing',
+        expected: requirements.required_assurance_level,
+        observed: submission.proof_verify_status,
+        evidence_path: 'verification.proof_bundle.status',
+      });
+    } else if (submission.proof_verify_status !== 'valid' || !submission.proof_tier) {
+      failures.push({
+        code: 'MKT_ASSURANCE_LEVEL_EVIDENCE_INVALID',
+        field: 'required_assurance_level',
+        message: 'proof bundle evidence is invalid',
+        expected: requirements.required_assurance_level,
+        observed: {
+          proof_verify_status: submission.proof_verify_status,
+          proof_tier: submission.proof_tier,
+        },
+        evidence_path: 'verification.proof_bundle',
+      });
+    } else {
+      const observedLevel = submissionTrustTierToAssuranceLevel(submission.proof_tier);
+      if (assuranceRequiredLevelRank(observedLevel) < assuranceRequiredLevelRank(requirements.required_assurance_level)) {
+        failures.push({
+          code: 'MKT_ASSURANCE_LEVEL_REQUIREMENT_NOT_MET',
+          field: 'required_assurance_level',
+          message: 'verified assurance tier does not satisfy required_assurance_level',
+          expected: requirements.required_assurance_level,
+          observed: observedLevel,
+          evidence_path: 'verification.proof_bundle.tier',
+        });
+      }
+    }
+  }
+
+  if (requirements.required_privacy_posture) {
+    const proofBackedFailure = buildProofBackedAssuranceFailure(submission, {
+      code_prefix: 'MKT_PRIVACY_POSTURE',
+      field: 'required_privacy_posture',
+      expected: requirements.required_privacy_posture,
+      pending_message: 'proof verification is still pending for privacy posture evidence',
+      missing_message: 'proof bundle evidence is missing for required_privacy_posture',
+      invalid_message: 'proof bundle evidence is invalid for required_privacy_posture',
+    });
+    if (proofBackedFailure) {
+      failures.push(proofBackedFailure);
+    } else if (!privacyEvidence.present) {
+      failures.push({
+        code: 'MKT_PRIVACY_POSTURE_EVIDENCE_MISSING',
+        field: 'required_privacy_posture',
+        message: 'privacy posture evidence is missing',
+        expected: requirements.required_privacy_posture,
+        observed: null,
+        evidence_path: 'agent_pack.privacy_posture.overall_verdict',
+      });
+    } else if (!privacyEvidence.value) {
+      failures.push({
+        code: 'MKT_PRIVACY_POSTURE_EVIDENCE_INVALID',
+        field: 'required_privacy_posture',
+        message: 'privacy posture evidence is invalid',
+        expected: requirements.required_privacy_posture,
+        observed: privacyEvidence.raw,
+        evidence_path: privacyEvidence.source ?? 'agent_pack.privacy_posture.overall_verdict',
+      });
+    } else if (
+      assurancePrivacyPostureRank(privacyEvidence.value)
+      < assurancePrivacyPostureRank(requirements.required_privacy_posture)
+    ) {
+      failures.push({
+        code: 'MKT_PRIVACY_POSTURE_REQUIREMENT_NOT_MET',
+        field: 'required_privacy_posture',
+        message: 'privacy posture does not satisfy required_privacy_posture',
+        expected: requirements.required_privacy_posture,
+        observed: privacyEvidence.value,
+        evidence_path: privacyEvidence.source ?? 'agent_pack.privacy_posture.overall_verdict',
+      });
+    }
+  }
+
+  if (requirements.required_processors && requirements.required_processors.length > 0) {
+    const proofBackedFailure = buildProofBackedAssuranceFailure(submission, {
+      code_prefix: 'MKT_REQUIRED_PROCESSORS',
+      field: 'required_processors',
+      expected: requirements.required_processors,
+      pending_message: 'proof verification is still pending for required processor evidence',
+      missing_message: 'proof bundle evidence is missing for required_processors',
+      invalid_message: 'proof bundle evidence is invalid for required_processors',
+    });
+    if (proofBackedFailure) {
+      failures.push(proofBackedFailure);
+    } else if (!processorEvidence.evidence_present) {
+      failures.push({
+        code: 'MKT_REQUIRED_PROCESSORS_EVIDENCE_MISSING',
+        field: 'required_processors',
+        message: 'processor evidence is missing',
+        expected: requirements.required_processors,
+        observed: null,
+        evidence_path: 'proof_bundle_envelope.payload.metadata.processor_policy.used_processors',
+      });
+    } else if (processorEvidence.processors.length === 0) {
+      failures.push({
+        code: 'MKT_REQUIRED_PROCESSORS_EVIDENCE_INVALID',
+        field: 'required_processors',
+        message: 'processor evidence is present but invalid',
+        expected: requirements.required_processors,
+        observed: {
+          processors: processorEvidence.processors,
+          invalid_entries: processorEvidence.invalid_entries,
+        },
+        evidence_path: processorEvidence.sources.join(' | ') || 'processor evidence',
+      });
+    } else {
+      const missingProcessors = requirements.required_processors
+        .map((entry) => entry.trim().toLowerCase())
+        .filter((entry) => !processorEvidence.processors.includes(entry));
+
+      if (missingProcessors.length > 0) {
+        failures.push({
+          code: 'MKT_REQUIRED_PROCESSORS_REQUIREMENT_NOT_MET',
+          field: 'required_processors',
+          message: 'required processor providers are missing',
+          expected: requirements.required_processors,
+          observed: {
+            processors: processorEvidence.processors,
+            missing: missingProcessors,
+          },
+          evidence_path: processorEvidence.sources.join(' | ') || 'processor evidence',
+        });
+      }
+    }
+  }
+
+  if (requirements.approval_policy === 'human_approval_receipt') {
+    const proofBackedFailure = buildProofBackedAssuranceFailure(submission, {
+      code_prefix: 'MKT_APPROVAL_RECEIPT',
+      field: 'approval_policy',
+      expected: requirements.approval_policy,
+      pending_message: 'proof verification is still pending for human approval receipt evidence',
+      missing_message: 'proof bundle evidence is missing for human approval receipts',
+      invalid_message: 'proof bundle evidence is invalid for human approval receipts',
+    });
+    if (proofBackedFailure) {
+      failures.push(proofBackedFailure);
+    } else if (!approvalEvidence.evidence_present) {
+      failures.push({
+        code: 'MKT_APPROVAL_RECEIPT_EVIDENCE_MISSING',
+        field: 'approval_policy',
+        message: 'human approval receipt evidence is missing',
+        expected: requirements.approval_policy,
+        observed: null,
+        evidence_path: 'proof_bundle_envelope.payload.human_approval_receipts',
+      });
+    } else if (approvalEvidence.explicit_approve_count <= 0) {
+      failures.push({
+        code: 'MKT_APPROVAL_RECEIPT_EVIDENCE_INVALID',
+        field: 'approval_policy',
+        message: 'human approval receipt evidence is present but no explicit approval receipt was found',
+        expected: requirements.approval_policy,
+        observed: {
+          receipt_count: approvalEvidence.receipt_count,
+          explicit_approve_count: approvalEvidence.explicit_approve_count,
+          invalid_entries: approvalEvidence.invalid_entries,
+        },
+        evidence_path: 'proof_bundle_envelope.payload.human_approval_receipts',
+      });
+    }
+  }
+
+  const reason_codes = failures.map((entry) => entry.code);
+  const pendingOnly = failures.length > 0 && failures.every((entry) => ASSURANCE_PENDING_REASON_CODES.has(entry.code));
+  const decision: 'pass' | 'reject' | 'quarantine' =
+    failures.length === 0 ? 'pass' : pendingOnly ? 'quarantine' : 'reject';
+
+  return {
+    decision,
+    reason_codes,
+    view: {
+      status: decision === 'pass' ? 'satisfied' : decision === 'quarantine' ? 'quarantined' : 'rejected',
+      required: requirements,
+      reason_codes,
+      failures,
+      observed: {
+        proof_verify_status: submission.proof_verify_status,
+        proof_tier: submission.proof_tier,
+        privacy_posture: privacyEvidence.value,
+        privacy_posture_source: privacyEvidence.source,
+        processors: processorEvidence.processors,
+        processor_sources: processorEvidence.sources,
+        human_approval_receipt_count: approvalEvidence.receipt_count,
+        explicit_human_approval_receipt_count: approvalEvidence.explicit_approve_count,
+      },
+    },
+  };
+}
+
+function evaluateSubmissionAssuranceForBounty(
+  bounty: BountyV2,
+  submission: SubmissionRecord,
+): { ok: true; evaluation: SubmissionAssuranceEvaluation } | { ok: false; message: string } {
+  const parsed = parseAssuranceRequirementsFromMetadata(bounty.metadata);
+  if (!parsed.ok) {
+    return { ok: false, message: parsed.message };
+  }
+
+  return {
+    ok: true,
+    evaluation: evaluateSubmissionAssuranceRequirements(parsed.value, submission),
+  };
+}
+
+async function reconcileSubmissionAssuranceAfterProofVerification(
+  env: Env,
+  submissionId: string,
+): Promise<void> {
+  const submission = await getSubmissionById(env.BOUNTIES_DB, submissionId);
+  if (!submission || submission.status !== 'invalid') return;
+
+  const bounty = await getBountyById(env.BOUNTIES_DB, submission.bounty_id);
+  if (!bounty) {
+    console.error(`Failed to reconcile submission ${submissionId}: bounty ${submission.bounty_id} not found`);
+    return;
+  }
+
+  const assuranceParsed = parseAssuranceRequirementsFromMetadata(bounty.metadata);
+  if (!assuranceParsed.ok) {
+    console.error(
+      `Failed to reconcile submission ${submissionId}: invalid assurance metadata for bounty ${bounty.bounty_id}: ${assuranceParsed.message}`,
+    );
+    return;
+  }
+
+  if (!assuranceParsed.value) return;
+
+  const assuranceEvaluation = evaluateSubmissionAssuranceRequirements(assuranceParsed.value, submission);
+  const commitEvidenceValid = (submission.commit_proof_verify_status ?? 'valid') === 'valid';
+  if (!commitEvidenceValid || assuranceEvaluation.decision !== 'pass') return;
+
+  const now = new Date().toISOString();
+  try {
+    await updateSubmissionStatus(env.BOUNTIES_DB, submission.submission_id, 'pending_review', now, 'invalid');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Failed to promote quarantined submission ${submission.submission_id}: ${message}`);
+    return;
+  }
+
+  try {
+    await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'pending_review', now, 'accepted');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `Failed to promote bounty ${bounty.bounty_id} to pending_review after submission ${submission.submission_id}: ${message}`,
+    );
+  }
+
+  const reviewRecord: SubmissionRecord = {
+    ...submission,
+    status: 'pending_review',
+    updated_at: now,
+  };
+
+  try {
+    await triggerLiveArenaFromSubmission(env.BOUNTIES_DB, bounty, reviewRecord, now);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error(
+      `Failed to trigger live arena for bounty ${bounty.bounty_id} submission ${submission.submission_id}: ${message}`,
+    );
+
+    try {
+      const failedArenaId = `arena_${bounty.bounty_id}_live_${submission.submission_id}`.slice(0, 120);
+      await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        arena_status: 'failed',
+        arena_id: failedArenaId,
+        arena_task_fingerprint: deriveLiveArenaTaskFingerprint(bounty),
+        arena_winner_contender_id: null,
+        arena_evidence_links: [],
+        arena_updated_at: new Date().toISOString(),
+      });
+    } catch (syncErr) {
+      const syncMessage = syncErr instanceof Error ? syncErr.message : 'Unknown error';
+      console.error(
+        `Failed to persist arena failure lifecycle for bounty ${bounty.bounty_id} submission ${submission.submission_id}: ${syncMessage}`,
+      );
+    }
+  }
+
+  if (bounty.closure_type !== 'test') return;
+
+  try {
+    const autoDecision = await autoApproveTestSubmission(env, bounty, reviewRecord);
+    if (autoDecision.failure) {
+      console.error(
+        `Failed to auto-decide test submission ${submission.submission_id} after assurance reconciliation: ${autoDecision.failure.code}: ${autoDecision.failure.message}`,
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error(
+      `Failed to auto-approve test submission ${submission.submission_id} after assurance reconciliation: ${message}`,
+    );
+  }
 }
 
 function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
@@ -6750,12 +7480,16 @@ function toSubmissionSummaryView(
   record: SubmissionRecord,
   latestTest: TestResultRecord | null,
   arenaReviewFlow: BountyReviewArenaFlowView,
+  assuranceGating: SubmissionAssuranceGatingView | null,
 ): SubmissionSummaryView {
+  const reasonCodes = assuranceGating?.reason_codes ?? [];
   return {
     submission_id: record.submission_id,
     bounty_id: record.bounty_id,
     worker_did: record.worker_did,
     status: record.status,
+    reason_codes: reasonCodes,
+    assurance_gating: assuranceGating,
     proof_verify_status: record.proof_verify_status,
     proof_tier: record.proof_tier,
     commit_proof_verify_status: record.commit_proof_verify_status,
@@ -6779,12 +7513,16 @@ function toSubmissionDetailView(
   record: SubmissionRecord,
   latestTest: TestResultRecord | null,
   arenaReviewFlow: BountyReviewArenaFlowView,
+  assuranceGating: SubmissionAssuranceGatingView | null,
 ): SubmissionDetailView {
+  const reasonCodes = assuranceGating?.reason_codes ?? [];
   return {
     submission_id: record.submission_id,
     bounty_id: record.bounty_id,
     worker_did: record.worker_did,
     status: record.status,
+    reason_codes: reasonCodes,
+    assurance_gating: assuranceGating,
     idempotency_key: record.idempotency_key,
     verification: {
       proof_bundle: {
@@ -7832,6 +8570,14 @@ async function runSubmissionProofVerification(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`Failed to persist proof verification for submission ${params.submission_id}: ${message}`);
+    return;
+  }
+
+  try {
+    await reconcileSubmissionAssuranceAfterProofVerification(env, params.submission_id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Failed to reconcile assurance gating for submission ${params.submission_id}: ${message}`);
   }
 }
 
@@ -13785,9 +14531,17 @@ async function handleSubmitBounty(
             version
           );
         }
+
+        const assuranceEvaluation = evaluateSubmissionAssuranceForBounty(existingBounty, existing.record);
+        if (!assuranceEvaluation.ok) {
+          return errorResponse('BOUNTY_METADATA_INVALID', assuranceEvaluation.message, 500, undefined, version);
+        }
+
+        const response = buildSubmitResponse(existing.record, assuranceEvaluation.evaluation.view);
+        return jsonResponse(response, 200, version);
       }
 
-      const response = buildSubmitResponse(existing.record);
+      const response = buildSubmitResponse(existing.record, null);
       return jsonResponse(response, 200, version);
     }
   } catch (err) {
@@ -13842,6 +14596,12 @@ async function handleSubmitBounty(
       version
     );
   }
+
+  const bountyAssuranceRequirementsParsed = parseAssuranceRequirementsFromMetadata(bounty.metadata);
+  if (!bountyAssuranceRequirementsParsed.ok) {
+    return errorResponse('BOUNTY_METADATA_INVALID', bountyAssuranceRequirementsParsed.message, 500, undefined, version);
+  }
+  const bountyAssuranceRequirements = bountyAssuranceRequirementsParsed.value;
 
   const now = new Date().toISOString();
 
@@ -13975,8 +14735,8 @@ async function handleSubmitBounty(
   const initialProofReason = hasProofBundle ? 'proof verification queued' : 'no proof bundle attached';
   const initialProofTier: SubmissionTrustTier = 'test-pass';
 
-  const isValid = (commitStatus ?? 'valid') === 'valid';
-  const submissionStatus: SubmissionStatus = isValid ? 'pending_review' : 'invalid';
+  const commitEvidenceValid = (commitStatus ?? 'valid') === 'valid';
+  const baseSubmissionStatus: SubmissionStatus = commitEvidenceValid ? 'pending_review' : 'invalid';
 
   const proof_bundle_hash_b64u = proofBundleEnvelope ? d1String(proofBundleEnvelope.payload_hash_b64u) : null;
   const commit_proof_hash_b64u = isRecord(commit_proof_envelope_raw) ? d1String(commit_proof_envelope_raw.payload_hash_b64u) : null;
@@ -14004,11 +14764,11 @@ async function handleSubmitBounty(
     ? { submission_id, ...trustPulseRow }
     : null;
 
-  const record: SubmissionRecord = {
+  const baseRecord: SubmissionRecord = {
     submission_id,
     bounty_id: bounty.bounty_id,
     worker_did,
-    status: submissionStatus,
+    status: baseSubmissionStatus,
     idempotency_key,
     proof_bundle_envelope: proofBundleEnvelope ?? {},
     proof_bundle_hash_b64u: proof_bundle_hash_b64u ? proof_bundle_hash_b64u.trim() : null,
@@ -14031,6 +14791,19 @@ async function handleSubmitBounty(
     created_at: now,
     updated_at: now,
   };
+
+  const assuranceEvaluation = evaluateSubmissionAssuranceRequirements(
+    bountyAssuranceRequirements,
+    baseRecord,
+  );
+
+  const submissionStatus: SubmissionStatus =
+    baseSubmissionStatus === 'pending_review' && assuranceEvaluation.decision === 'pass'
+      ? 'pending_review'
+      : 'invalid';
+  const record: SubmissionRecord = { ...baseRecord, status: submissionStatus };
+  const submissionQuarantined = commitEvidenceValid && assuranceEvaluation.decision === 'quarantine';
+  const submissionAcceptedForReview = submissionStatus === 'pending_review';
 
   try {
     if (storedTrustPulse) {
@@ -14065,7 +14838,11 @@ async function handleSubmitBounty(
           );
         }
 
-        const response = buildSubmitResponse(existing.record);
+        const existingAssuranceEvaluation = evaluateSubmissionAssuranceRequirements(
+          bountyAssuranceRequirements,
+          existing.record,
+        );
+        const response = buildSubmitResponse(existing.record, existingAssuranceEvaluation.view);
         return jsonResponse(response, 200, version);
       }
     } catch (lookupErr) {
@@ -14077,7 +14854,7 @@ async function handleSubmitBounty(
     return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
   }
 
-  if (isValid) {
+  if (submissionAcceptedForReview) {
     try {
       await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'pending_review', now, 'accepted');
     } catch (err) {
@@ -14142,7 +14919,7 @@ async function handleSubmitBounty(
   }
 
   let autoDecision: TestAutoDecisionResult | null = null;
-  if (isValid && bounty.closure_type === 'test') {
+  if (submissionAcceptedForReview && bounty.closure_type === 'test') {
     try {
       autoDecision = await autoApproveTestSubmission(env, bounty, record);
     } catch (err) {
@@ -14191,8 +14968,13 @@ async function handleSubmitBounty(
     }
   }
 
-  const response = buildSubmitResponse(responseRecord);
-  return jsonResponse(response, isValid ? 201 : 422, version);
+  const responseAssuranceEvaluation = evaluateSubmissionAssuranceRequirements(
+    bountyAssuranceRequirements,
+    responseRecord,
+  );
+  const response = buildSubmitResponse(responseRecord, responseAssuranceEvaluation.view);
+  const statusCode = submissionAcceptedForReview ? 201 : submissionQuarantined ? 202 : 422;
+  return jsonResponse(response, statusCode, version);
 }
 
 async function handlePostSubmission(request: Request, env: Env, version: string): Promise<Response> {
@@ -24158,6 +24940,12 @@ async function handleListBountySubmissions(
     return errorResponse('NOT_FOUND', 'Bounty not found', 404, { bounty_id: bountyId }, version);
   }
 
+  const bountyAssuranceRequirementsParsed = parseAssuranceRequirementsFromMetadata(bounty.metadata);
+  if (!bountyAssuranceRequirementsParsed.ok) {
+    return errorResponse('BOUNTY_METADATA_INVALID', bountyAssuranceRequirementsParsed.message, 500, undefined, version);
+  }
+  const bountyAssuranceRequirements = bountyAssuranceRequirementsParsed.value;
+
   const viewer = await resolveSubmissionViewerContext(request, env, version, {
     requester_did_hint: bounty.requester_did,
   });
@@ -24243,7 +25031,8 @@ async function handleListBountySubmissions(
         latestArenaThreadForWinner,
       );
       const arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, record, latestArenaSummary, decisionCapture);
-      views.push(toSubmissionSummaryView(record, latest, arenaReviewFlow));
+      const assuranceEvaluation = evaluateSubmissionAssuranceRequirements(bountyAssuranceRequirements, record);
+      views.push(toSubmissionSummaryView(record, latest, arenaReviewFlow, assuranceEvaluation.view));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
@@ -24297,6 +25086,12 @@ async function handleGetSubmissionDetail(
   if (!bounty) {
     return errorResponse('DATA_INTEGRITY_ERROR', 'Bounty for submission not found', 500, { submission_id: submissionId }, version);
   }
+
+  const bountyAssuranceRequirementsParsed = parseAssuranceRequirementsFromMetadata(bounty.metadata);
+  if (!bountyAssuranceRequirementsParsed.ok) {
+    return errorResponse('BOUNTY_METADATA_INVALID', bountyAssuranceRequirementsParsed.message, 500, undefined, version);
+  }
+  const bountyAssuranceRequirements = bountyAssuranceRequirementsParsed.value;
 
   if (viewer.context.kind === 'worker' && submission.worker_did !== viewer.context.worker.worker_did) {
     return errorResponse('FORBIDDEN', 'Workers may only view their own submissions', 403, undefined, version);
@@ -24380,12 +25175,22 @@ async function handleGetSubmissionDetail(
     return errorResponse('INTERNAL_ERROR', message, 500, undefined, version);
   }
 
-  const view = toSubmissionDetailView(submission, latestTest, arenaReviewFlow);
+  const assuranceEvaluation = evaluateSubmissionAssuranceRequirements(bountyAssuranceRequirements, submission);
+  const view = toSubmissionDetailView(submission, latestTest, arenaReviewFlow, assuranceEvaluation.view);
   if (latestArenaPayload) {
     view.arena = latestArenaPayload;
   }
 
-  return jsonResponse({ submission: view, next_actions: buildSubmissionStatusNextActions(submission) }, 200, version);
+  return jsonResponse(
+    {
+      submission: view,
+      reason_codes: assuranceEvaluation.reason_codes,
+      assurance_gating: assuranceEvaluation.view,
+      next_actions: buildSubmissionStatusNextActions(submission, assuranceEvaluation.view),
+    },
+    200,
+    version,
+  );
 }
 
 async function handleGetSubmissionTrustPulse(
