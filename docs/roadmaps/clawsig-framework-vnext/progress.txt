@@ -17,3 +17,32 @@ Started: 2026-03-20T22:40:00Z
   - Initial execution should stay dependency-aware: fix reliability and establish signed policy/measurement foundations before broad marketplace or transparency productization.
   - Remote attestation is treated here as delivered framework work, not hand-wavy future positioning.
 ---
+
+## 2026-03-20T23:15:15Z - Wave 1 reliability lane merged
+- What was implemented
+  - Closed `AF2-REL-001`..`AF2-REL-004` via PR #484.
+  - Repaired `work-submit` suite debt, made `wrap-sigterm` deterministic, removed unsigned canonical receipt leakage, and added release/test proof-reliability guardrails.
+- Validation
+  - `packages/clawverify-cli`: `npm run test:proof-reliability`
+  - `packages/clawsig-sdk`: `npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck && npm run build`
+- Notes
+  - A post-review CI fix switched the `packages/clawsig-sdk` guardrail install step from `npm ci` to `npm install --ignore-scripts` because the repo does not track that package lockfile.
+---
+
+## 2026-03-20T23:58:45Z - Wave 1 signed-policy lane merged
+- What was implemented
+  - Closed `AF2-POL-001` and `AF2-POL-002` via PR #485.
+  - Added signed policy bundle schemas, deterministic org/project/task/exception policy resolution, proofed-mode policy binding metadata, and offline/service fail-closed verification parity.
+- Validation
+  - `packages/clawsig-sdk`: `npm run typecheck && npm run build`
+  - `packages/clawverify-core`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm test -- test/policy-binding.test.ts test/wrap-policy-binding.test.ts`
+  - `packages/clawverify-cli`: `npm run test:proof-reliability`
+  - `services/clawverify`: `npm run typecheck`
+  - `services/clawverify`: `vitest run test/policy-binding.test.ts`
+- Notes
+  - Reviewer fixes required proofed-mode signed policy bundles, restored explicit effective-policy hash binding, and added service-side enforcement parity.
+  - Post-review CI fixes updated `wrap-quiet` test helpers to provision signed bundles for proofed-mode guardrails and corrected service verifier helper return-shape typing.
+---
