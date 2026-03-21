@@ -17,8 +17,22 @@ function sha256B64uJson(value: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 }
 
+function syncReviewerSignoffReceiptHashes(bundle: Record<string, unknown>): void {
+  const payload = bundle.payload as {
+    metadata?: {
+      reviewer_signoff_receipts?: Array<Record<string, unknown>>;
+    };
+  };
+
+  for (const receipt of payload.metadata?.reviewer_signoff_receipts ?? []) {
+    if (typeof receipt.payload === 'object' && receipt.payload !== null && !Array.isArray(receipt.payload)) {
+      receipt.payload_hash_b64u = sha256B64uJson(receipt.payload);
+    }
+  }
+}
+
 function makeBundle(): Record<string, unknown> {
-  return {
+  const bundle: Record<string, unknown> = {
     envelope_version: '1',
     envelope_type: 'proof_bundle',
     signer_did: 'did:key:zSigner',
@@ -250,9 +264,40 @@ function makeBundle(): Record<string, unknown> {
             },
           ],
         },
+        reviewer_signoff_receipts: [
+          {
+            envelope_version: '1',
+            envelope_type: 'reviewer_signoff_receipt',
+            payload_hash_b64u: 'reviewer_signoff_payload_hash_1',
+            hash_algorithm: 'SHA-256',
+            signature_b64u: 'reviewer_signoff_signature_1',
+            algorithm: 'Ed25519',
+            signer_did: 'did:key:zReviewerA',
+            issued_at: '2026-03-20T19:17:10.000Z',
+            payload: {
+              receipt_version: '1',
+              receipt_id: 'rsr_1',
+              reviewer_did: 'did:key:zReviewerA',
+              decision: 'approve',
+              timestamp: '2026-03-20T19:17:10.000Z',
+              binding: {
+                run_id: 'run_1',
+                bundle_id: 'bundle_test_report',
+                proof_bundle_hash_b64u: 'bundle_hash_12345678',
+                event_hash_b64u: 'event_hash_def123',
+                target_kind: 'run',
+              },
+              dispute: {
+                status: 'none',
+              },
+            },
+          },
+        ],
       },
     },
   };
+  syncReviewerSignoffReceiptHashes(bundle);
+  return bundle;
 }
 
 function makeCleanBundle(): Record<string, unknown> {
@@ -597,6 +642,19 @@ describe('buildProofReport', () => {
     expect(report.privacy_posture.signal_buckets.reviewer_action_required).toContain(
       '1 data-handling receipt required approval and did not satisfy it.',
     );
+    expect(report.reviewer_signoff.present).toBe(true);
+    expect(report.reviewer_signoff.receipt_count).toBe(1);
+    expect(report.reviewer_signoff.structured_receipt_count).toBe(1);
+    expect(report.reviewer_signoff.decision_counts).toEqual({
+      approve: 1,
+      reject: 0,
+      needs_changes: 0,
+    });
+    expect(report.reviewer_signoff.target_counts).toEqual({
+      run: 1,
+      export_pack: 0,
+    });
+    expect(report.reviewer_signoff.dispute_present).toBe(false);
     expect(report.privacy_posture.proven_claims.join(' ')).toContain('signed egress policy receipt');
     expect(report.privacy_posture.not_proven_claims).toContain(
       'This report does not by itself prove legal or regulatory compliance.',
@@ -777,6 +835,132 @@ describe('buildProofReport', () => {
       'Some data-handling entries are present, but not all of them are structurally complete signed receipt envelopes.',
     );
   });
+
+  it('summarizes reviewer signoff receipts and dispute references coherently', () => {
+    const bundle = makeBundle();
+    const payload = bundle.payload as {
+      metadata?: {
+        reviewer_signoff_receipts?: Array<{
+          payload?: {
+            decision?: string;
+            binding?: Record<string, unknown>;
+            dispute?: Record<string, unknown>;
+          };
+        }>;
+      };
+    };
+
+    const first = payload.metadata?.reviewer_signoff_receipts?.[0]?.payload;
+    if (first) {
+      first.decision = 'reject';
+      if (first.binding) {
+        first.binding.target_kind = 'export_pack';
+        first.binding.export_pack_root_hash_b64u = 'export_pack_root_hash_abcdef12';
+      }
+      first.dispute = {
+        status: 'raised',
+        notes: [
+          {
+            note_id: 'dn_1',
+            note: 'Gateway receipt timestamp appears inconsistent with reviewer evidence.',
+            evidence_refs: [
+              {
+                ref_id: 'ev_1',
+                uri: 'https://example.invalid/review/ev_1',
+              },
+            ],
+          },
+        ],
+      };
+    }
+    syncReviewerSignoffReceiptHashes(bundle);
+
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle,
+      runSummary: {
+        status: 'PASS',
+        tier: 'gateway',
+      },
+    });
+
+    expect(report.reviewer_signoff.decision_counts.reject).toBe(1);
+    expect(report.reviewer_signoff.target_counts.export_pack).toBe(1);
+    expect(report.reviewer_signoff.dispute_present).toBe(true);
+    expect(report.reviewer_signoff.dispute_note_count).toBe(1);
+    expect(report.reviewer_signoff.dispute_evidence_refs_count).toBe(1);
+    expect(report.warnings).toContain(
+      '1 reviewer signoff receipt recorded decision=reject.',
+    );
+    expect(report.warnings).toContain(
+      'Reviewer dispute notes are present (1 notes, 1 evidence refs).',
+    );
+  });
+
+  it('does not treat malformed reviewer signoff bindings as structured reviewer evidence', () => {
+    const bundle = makeBundle();
+    const payload = bundle.payload as {
+      metadata?: {
+        reviewer_signoff_receipts?: Array<{
+          payload?: {
+            decision?: string;
+            binding?: Record<string, unknown>;
+            dispute?: Record<string, unknown>;
+          };
+        }>;
+      };
+    };
+
+    const first = payload.metadata?.reviewer_signoff_receipts?.[0]?.payload;
+    if (first?.binding) {
+      first.decision = 'reject';
+      first.binding.target_kind = 'export_pack';
+      delete first.binding.export_pack_root_hash_b64u;
+      first.dispute = {
+        status: 'raised',
+        notes: [
+          {
+            note_id: 'dn_invalid_1',
+            note: 'Export pack root hash was omitted.',
+            evidence_refs: [
+              {
+                uri: 'https://example.invalid/review/ev_invalid_1',
+              },
+            ],
+          },
+        ],
+      };
+    }
+    syncReviewerSignoffReceiptHashes(bundle);
+
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle,
+      runSummary: {
+        status: 'PASS',
+        tier: 'gateway',
+      },
+    });
+
+    expect(report.reviewer_signoff.receipt_count).toBe(1);
+    expect(report.reviewer_signoff.structured_receipt_count).toBe(0);
+    expect(report.reviewer_signoff.decision_counts).toEqual({
+      approve: 0,
+      reject: 0,
+      needs_changes: 0,
+    });
+    expect(report.reviewer_signoff.target_counts).toEqual({
+      run: 0,
+      export_pack: 0,
+    });
+    expect(report.reviewer_signoff.dispute_present).toBe(false);
+    expect(report.warnings).toContain(
+      '1 reviewer signoff receipt failed structural binding checks in the local report summary.',
+    );
+    expect(report.warnings).not.toContain(
+      '1 reviewer signoff receipt recorded decision=reject.',
+    );
+  });
 });
 
 describe('renderProofReportHtml', () => {
@@ -805,6 +989,7 @@ describe('renderProofReportHtml', () => {
     expect(html).toContain('Privacy posture');
     expect(html).toContain('Runner attestation posture');
     expect(html).toContain('Attested-tier reason code');
+    expect(html).toContain('Reviewer signoff/dispute');
     expect(html).toContain('Allowed processors and blocked routes');
     expect(html).toContain('Sensitive classes and actions');
     expect(html).toContain('What Is Not Proven');
@@ -828,6 +1013,8 @@ describe('renderProofReportText', () => {
     expect(text).toContain('Privacy posture:');
     expect(text).toContain('Runner attestation posture');
     expect(text).toContain('Attested-tier reason code');
+    expect(text).toContain('Reviewer signoff receipts');
+    expect(text).toContain('Reviewer decisions');
     expect(text).toContain('Allowed egress destinations:');
     expect(text).toContain('Allowed processors used:');
     expect(text).toContain('Blocked processor attempts:');
@@ -917,6 +1104,7 @@ describe('runProveReport export pack', () => {
           'privacy-evidence/runtime_hygiene.json',
           'privacy-evidence/data_handling.json',
           'privacy-evidence/processor_policy.json',
+          'privacy-evidence/reviewer_signoff_receipts.json',
           'reports/proof-report.html',
           'reports/proof-report.json',
           'reports/proof-report.txt',
@@ -960,6 +1148,7 @@ describe('runProveReport export pack', () => {
       expect(viewerHtml).toContain('Export-pack viewer');
       expect(viewerHtml).toContain('Privacy posture');
       expect(viewerHtml).toContain('Runner attestation posture');
+      expect(viewerHtml).toContain('Reviewer signoff receipts');
       expect(viewerHtml).toContain('../reports/proof-report.json');
       expect(viewerHtml).toContain('../proof-bundle/proof_bundle.json');
       expect(viewerHtml).not.toContain(bundlePath);
@@ -971,6 +1160,7 @@ describe('runProveReport export pack', () => {
         'privacy-evidence/data_handling.json',
         'privacy-evidence/egress_policy_receipt.json',
         'privacy-evidence/processor_policy.json',
+        'privacy-evidence/reviewer_signoff_receipts.json',
         'privacy-evidence/runtime_hygiene.json',
         'privacy-evidence/runtime_profile.json',
         'reports/claims-boundary.md',

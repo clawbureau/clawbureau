@@ -1078,6 +1078,54 @@ export interface RunnerAttestationReceiptEnvelope {
   issued_at: string;
 }
 
+export type ReviewerSignoffDecision = 'approve' | 'reject' | 'needs_changes';
+export type ReviewerSignoffTargetKind = 'run' | 'export_pack';
+export type ReviewerDisputeStatus = 'none' | 'raised' | 'resolved';
+
+export interface ReviewerDisputeEvidenceRef {
+  ref_id?: string;
+  uri?: string;
+  sha256_b64u?: string;
+}
+
+export interface ReviewerDisputeNote {
+  note_id: string;
+  note: string;
+  evidence_refs?: ReviewerDisputeEvidenceRef[];
+}
+
+export interface ReviewerSignoffReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  reviewer_did: string;
+  decision: ReviewerSignoffDecision;
+  timestamp: string;
+  binding: {
+    run_id: string;
+    bundle_id: string;
+    proof_bundle_hash_b64u?: string;
+    event_hash_b64u: string;
+    target_kind: ReviewerSignoffTargetKind;
+    export_pack_root_hash_b64u?: string;
+  };
+  dispute?: {
+    status: ReviewerDisputeStatus;
+    notes?: ReviewerDisputeNote[];
+  };
+}
+
+export interface ReviewerSignoffReceiptEnvelope {
+  envelope_version: '1';
+  envelope_type: 'reviewer_signoff_receipt';
+  payload: ReviewerSignoffReceiptPayload;
+  payload_hash_b64u: string;
+  hash_algorithm: HashAlgorithm;
+  signature_b64u: string;
+  algorithm: Algorithm;
+  signer_did: string;
+  issued_at: string;
+}
+
 /** Proof bundle metadata with optional harness information */
 export interface ProofBundleMetadata {
   /** Harness metadata identifying the runtime that produced this bundle */
@@ -1088,6 +1136,8 @@ export interface ProofBundleMetadata {
   runner_measurement?: RunnerMeasurementBindingMetadata;
   /** AF2-ATT-002 signed runner attestation receipt bound to run/event/policy. */
   runner_attestation_receipt?: RunnerAttestationReceiptEnvelope;
+  /** AF2-REV-003 signed reviewer signoff receipts with dispute-note bindings. */
+  reviewer_signoff_receipts?: ReviewerSignoffReceiptEnvelope[];
   /** Additional metadata (non-normative) */
   [key: string]: unknown;
 }
@@ -1359,6 +1409,24 @@ export interface ProofBundleVerificationResult {
     runner_attestation_valid?: boolean;
     /** AF2-ATT-003: deterministic reason code for attested-tier grant/deny. */
     attested_assurance_reason_code?: AttestedAssuranceReasonCode;
+    /** AF2-REV-003: whether reviewer signoff receipt evidence is present. */
+    reviewer_signoff_present?: boolean;
+    /** AF2-REV-003: whether reviewer signoff/dispute evidence validated successfully. */
+    reviewer_signoff_valid?: boolean;
+    /** AF2-REV-003: total reviewer signoff receipt count. */
+    reviewer_signoff_receipts_count?: number;
+    /** AF2-REV-003: decision counts across reviewer signoff receipts. */
+    reviewer_signoff_decision_counts?: {
+      approve: number;
+      reject: number;
+      needs_changes: number;
+    };
+    /** AF2-REV-003: whether any reviewer signoff carries dispute notes. */
+    reviewer_dispute_present?: boolean;
+    /** AF2-REV-003: total dispute-note count across reviewer signoff receipts. */
+    reviewer_dispute_note_count?: number;
+    /** AF2-REV-003: total dispute evidence-ref count across reviewer signoff receipts. */
+    reviewer_dispute_evidence_refs_count?: number;
     attestations_valid?: boolean;
     receipts_count?: number;
     /** Number of receipts that passed cryptographic verification AND binding checks (when enforced). */
