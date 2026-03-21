@@ -125,3 +125,18 @@ Started: 2026-03-20T22:40:00Z
   - Reviewer fixes forced global matching for custom redact rules so repeated secrets are fully redacted even when the author omits the `g` flag.
   - Wave 3 now unlocks attested trust-tier uplift (`AF2-ATT-003`) as the next dependency-satisfied attestation lane.
 ---
+
+## 2026-03-21T03:03:21Z - Wave 4 attested-tier lane merged
+- What was implemented
+  - Closed `AF2-ATT-003` via PR #495.
+  - Taught verifier surfaces to grant `trust_tier: attested` only when runner attestation is present and valid, with deterministic non-grant reason signaling otherwise.
+- Validation
+  - `packages/clawverify-core`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm test -- test/attested-tier-runner-attestation.test.ts`
+  - `services/clawverify`: `npm ci && npm run typecheck`
+  - `services/clawverify`: `npm test -- test/policy-binding.test.ts test/proof-bundle-attestations.test.ts`
+- Notes
+  - Reviewer fixes ensured malformed runner-measurement / runner-attestation evidence reports `ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION` deterministically even on early fail-closed returns.
+  - Wave 4 unlocks attestation posture UX (`AF2-ATT-004`) and marketplace assurance requirements (`AF2-MKT-001`) as the next dependency-cleared lanes.
+---
