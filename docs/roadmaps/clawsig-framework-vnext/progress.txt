@@ -140,3 +140,31 @@ Started: 2026-03-20T22:40:00Z
   - Reviewer fixes ensured malformed runner-measurement / runner-attestation evidence reports `ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION` deterministically even on early fail-closed returns.
   - Wave 4 unlocks attestation posture UX (`AF2-ATT-004`) and marketplace assurance requirements (`AF2-MKT-001`) as the next dependency-cleared lanes.
 ---
+
+## 2026-03-21T04:00:27Z - Wave 5 attestation posture lane merged
+- What was implemented
+  - Closed `AF2-ATT-004` via PR #497.
+  - Extended `clawsig prove` / export report surfaces to present runner-attestation posture conservatively within the existing proof/privacy posture narrative, including deterministic attested-vs-non-attested reasons and extracted evidence files.
+- Validation
+  - `packages/clawverify-cli`: `npm run typecheck`
+  - `packages/clawverify-cli`: `npm test`
+- Notes
+  - Reviewer fixes tightened runner measurement / attestation parsing so prove/export cannot over-claim attested posture from shallow metadata, and export packs now include extracted attestation evidence files when present.
+---
+
+## 2026-03-21T04:07:14Z - Wave 5 marketplace requirement lane merged
+- What was implemented
+  - Closed `AF2-MKT-001` via PR #498.
+  - Added strict machine-readable bounty/task assurance requirements, surfaced them in worker list/claim flows before acceptance/submission, and made malformed or unsupported requirement sets fail closed in both service and CLI parsing.
+- Validation
+  - `packages/clawverify-cli`: `npm run typecheck`
+  - `packages/clawverify-cli`: `npm run build`
+  - `packages/clawverify-cli`: `npm test`
+  - `services/clawverify`: `npm run typecheck`
+  - `services/clawverify`: `npm test -- test/schema-runtime-contract.test.ts`
+  - `services/clawverify`: `SCHEMA_DRIFT_BASE=main npm run check:schema-runtime-sync`
+- Notes
+  - Reviewer fixes corrected worker-facing list parsing so nested reward/proof-tier contract details and actual processor identifiers remain visible before acceptance.
+  - A post-CI follow-up added `schema-runtime-contract` coverage for the new assurance schemas so the clawverify schema drift gate remains fail-closed when marketplace schema contracts evolve.
+  - Wave 5 unlocks marketplace submission gating (`AF2-MKT-002`) as the next direct dependency-cleared lane.
+---
