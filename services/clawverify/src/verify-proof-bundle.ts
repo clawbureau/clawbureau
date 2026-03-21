@@ -43,6 +43,7 @@ import type {
   RunnerAttestationReceiptPayload,
   ReviewerSignoffReceiptEnvelope,
   ReviewerSignoffReceiptPayload,
+  AssuranceReceiptTransparencyAnchor,
   SignedPolicyBundlePayload,
   SignedPolicyLayer,
   SignedPolicyStatement,
@@ -1213,6 +1214,15 @@ function isIsoDate(value: unknown): value is string {
 
 function isBase64Url(value: unknown): value is string {
   return isValidBase64Url(value);
+}
+
+function isValidUri(value: string): boolean {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 interface ClddMetrics {
@@ -3382,6 +3392,518 @@ function extractReviewerSignoffReceipts(
   return metadataRecord.reviewer_signoff_receipts;
 }
 
+interface AssuranceReceiptTransparencyConsistencyProof {
+  proof_version: '1';
+  log_id: string;
+  from_tree_size: number;
+  to_tree_size: number;
+  from_root_hash_b64u: string;
+  to_root_hash_b64u: string;
+  consistency_path: string[];
+}
+
+interface AssuranceReceiptTransparencyValidationResult {
+  ok: boolean;
+  code?: VerificationError['code'];
+  message?: string;
+  field?: string;
+}
+
+function extractAssuranceReceiptTransparency(args: {
+  payloadRecord: Record<string, unknown>;
+  fieldPrefix: string;
+}):
+  | {
+      ok: true;
+      transparency: AssuranceReceiptTransparencyAnchor | null;
+    }
+  | {
+      ok: false;
+      code: VerificationError['code'];
+      message: string;
+      field: string;
+    } {
+  const transparencyRaw = args.payloadRecord.transparency;
+  if (transparencyRaw === undefined) {
+    return { ok: true, transparency: null };
+  }
+
+  if (!isObjectRecord(transparencyRaw)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency evidence must be an object when present',
+      field: `${args.fieldPrefix}.transparency`,
+    };
+  }
+
+  if (
+    !hasOnlyAllowedKeys(transparencyRaw, [
+      'inclusion_proof',
+      'consistency_proof',
+      'anchor_id',
+      'anchor_uri',
+    ])
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency evidence has unsupported fields',
+      field: `${args.fieldPrefix}.transparency`,
+    };
+  }
+
+  if (transparencyRaw.inclusion_proof === undefined) {
+    return {
+      ok: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'receipt transparency evidence requires inclusion_proof',
+      field: `${args.fieldPrefix}.transparency.inclusion_proof`,
+    };
+  }
+
+  if (
+    transparencyRaw.anchor_id !== undefined &&
+    (!isNonEmptyString(transparencyRaw.anchor_id) ||
+      transparencyRaw.anchor_id.trim().length === 0)
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency anchor_id must be a non-empty string when present',
+      field: `${args.fieldPrefix}.transparency.anchor_id`,
+    };
+  }
+
+  if (
+    transparencyRaw.anchor_uri !== undefined &&
+    (!isNonEmptyString(transparencyRaw.anchor_uri) ||
+      transparencyRaw.anchor_uri.trim().length === 0 ||
+      !isValidUri(transparencyRaw.anchor_uri))
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency anchor_uri must be a valid URI when present',
+      field: `${args.fieldPrefix}.transparency.anchor_uri`,
+    };
+  }
+
+  return {
+    ok: true,
+    transparency: {
+      inclusion_proof: transparencyRaw.inclusion_proof,
+      consistency_proof:
+        transparencyRaw.consistency_proof === undefined
+          ? undefined
+          : (transparencyRaw.consistency_proof as Record<string, unknown>),
+      anchor_id:
+        typeof transparencyRaw.anchor_id === 'string'
+          ? transparencyRaw.anchor_id
+          : undefined,
+      anchor_uri:
+        typeof transparencyRaw.anchor_uri === 'string'
+          ? transparencyRaw.anchor_uri
+          : undefined,
+    },
+  };
+}
+
+function parseAssuranceConsistencyProof(args: {
+  consistencyProof: unknown;
+  inclusionProofRecord: Record<string, unknown> | null;
+  fieldPrefix: string;
+}):
+  | { ok: true; proof: AssuranceReceiptTransparencyConsistencyProof }
+  | {
+      ok: false;
+      code: VerificationError['code'];
+      message: string;
+      field: string;
+    } {
+  if (!isObjectRecord(args.consistencyProof)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency consistency_proof must be an object',
+      field: `${args.fieldPrefix}.consistency_proof`,
+    };
+  }
+
+  if (
+    !hasOnlyAllowedKeys(args.consistencyProof, [
+      'proof_version',
+      'log_id',
+      'from_tree_size',
+      'to_tree_size',
+      'from_root_hash_b64u',
+      'to_root_hash_b64u',
+      'consistency_path',
+      'metadata',
+    ])
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency consistency_proof has unsupported fields',
+      field: `${args.fieldPrefix}.consistency_proof`,
+    };
+  }
+
+  const proof = args.consistencyProof as Record<string, unknown>;
+  if (proof.proof_version !== '1') {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency consistency_proof.proof_version must be "1"',
+      field: `${args.fieldPrefix}.consistency_proof.proof_version`,
+    };
+  }
+
+  if (!isNonEmptyString(proof.log_id)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency consistency_proof.log_id must be non-empty',
+      field: `${args.fieldPrefix}.consistency_proof.log_id`,
+    };
+  }
+
+  if (
+    !Number.isInteger(proof.from_tree_size) ||
+    (proof.from_tree_size as number) <= 0
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'receipt transparency consistency_proof.from_tree_size must be a positive integer',
+      field: `${args.fieldPrefix}.consistency_proof.from_tree_size`,
+    };
+  }
+
+  if (
+    !Number.isInteger(proof.to_tree_size) ||
+    (proof.to_tree_size as number) <= 0
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'receipt transparency consistency_proof.to_tree_size must be a positive integer',
+      field: `${args.fieldPrefix}.consistency_proof.to_tree_size`,
+    };
+  }
+
+  if ((proof.to_tree_size as number) < (proof.from_tree_size as number)) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'receipt transparency consistency_proof.to_tree_size must be >= from_tree_size',
+      field: `${args.fieldPrefix}.consistency_proof.to_tree_size`,
+    };
+  }
+
+  if (
+    !isNonEmptyString(proof.from_root_hash_b64u) ||
+    !isBase64Url(proof.from_root_hash_b64u)
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'receipt transparency consistency_proof.from_root_hash_b64u must be base64url',
+      field: `${args.fieldPrefix}.consistency_proof.from_root_hash_b64u`,
+    };
+  }
+
+  if (
+    !isNonEmptyString(proof.to_root_hash_b64u) ||
+    !isBase64Url(proof.to_root_hash_b64u)
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'receipt transparency consistency_proof.to_root_hash_b64u must be base64url',
+      field: `${args.fieldPrefix}.consistency_proof.to_root_hash_b64u`,
+    };
+  }
+
+  if (proof.metadata !== undefined && !isObjectRecord(proof.metadata)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency consistency_proof.metadata must be an object when present',
+      field: `${args.fieldPrefix}.consistency_proof.metadata`,
+    };
+  }
+
+  if (!Array.isArray(proof.consistency_path)) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'receipt transparency consistency_proof.consistency_path must be an array',
+      field: `${args.fieldPrefix}.consistency_proof.consistency_path`,
+    };
+  }
+  for (let i = 0; i < proof.consistency_path.length; i++) {
+    const entry = proof.consistency_path[i];
+    if (typeof entry !== 'string' || !isBase64Url(entry)) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'receipt transparency consistency_proof.consistency_path entries must be base64url strings',
+        field: `${args.fieldPrefix}.consistency_proof.consistency_path[${i}]`,
+      };
+    }
+  }
+
+  const inclusionLogId =
+    args.inclusionProofRecord && typeof args.inclusionProofRecord.log_id === 'string'
+      ? args.inclusionProofRecord.log_id
+      : null;
+  const inclusionTreeSize =
+    args.inclusionProofRecord && Number.isInteger(args.inclusionProofRecord.tree_size)
+      ? (args.inclusionProofRecord.tree_size as number)
+      : null;
+  const inclusionRoot =
+    args.inclusionProofRecord &&
+    typeof args.inclusionProofRecord.root_hash_b64u === 'string'
+      ? args.inclusionProofRecord.root_hash_b64u
+      : null;
+
+  if (inclusionLogId && proof.log_id !== inclusionLogId) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'receipt transparency consistency_proof.log_id must match inclusion_proof.log_id',
+      field: `${args.fieldPrefix}.consistency_proof.log_id`,
+    };
+  }
+
+  if (inclusionTreeSize !== null && proof.to_tree_size !== inclusionTreeSize) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'receipt transparency consistency_proof.to_tree_size must match inclusion_proof.tree_size',
+      field: `${args.fieldPrefix}.consistency_proof.to_tree_size`,
+    };
+  }
+
+  if (inclusionRoot && proof.to_root_hash_b64u !== inclusionRoot) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'receipt transparency consistency_proof.to_root_hash_b64u must match inclusion_proof.root_hash_b64u',
+      field: `${args.fieldPrefix}.consistency_proof.to_root_hash_b64u`,
+    };
+  }
+
+  if (
+    proof.from_tree_size === proof.to_tree_size &&
+    proof.from_root_hash_b64u !== proof.to_root_hash_b64u
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'receipt transparency consistency_proof.from_root_hash_b64u must equal to_root_hash_b64u when from_tree_size == to_tree_size',
+      field: `${args.fieldPrefix}.consistency_proof.from_root_hash_b64u`,
+    };
+  }
+
+  if (
+    proof.from_tree_size === proof.to_tree_size &&
+    proof.consistency_path.length !== 0
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'receipt transparency consistency_proof.consistency_path must be empty when from_tree_size == to_tree_size',
+      field: `${args.fieldPrefix}.consistency_proof.consistency_path`,
+    };
+  }
+
+  return {
+    ok: true,
+    proof: {
+      proof_version: '1',
+      log_id: proof.log_id,
+      from_tree_size: proof.from_tree_size as number,
+      to_tree_size: proof.to_tree_size as number,
+      from_root_hash_b64u: proof.from_root_hash_b64u,
+      to_root_hash_b64u: proof.to_root_hash_b64u,
+      consistency_path: [...proof.consistency_path] as string[],
+    },
+  };
+}
+
+async function verifyAssuranceReceiptTransparencyAnchor(args: {
+  transparency: AssuranceReceiptTransparencyAnchor;
+  expectedLeafHashB64u: string;
+  fieldPrefix: string;
+}): Promise<AssuranceReceiptTransparencyValidationResult> {
+  const inclusionProof = args.transparency.inclusion_proof;
+
+  const inclusionProofResult = await verifyLogInclusionProof(inclusionProof);
+  if (!inclusionProofResult.valid) {
+    return {
+      ok: false,
+      code: inclusionProofResult.error?.code ?? 'INCLUSION_PROOF_INVALID',
+      message:
+        inclusionProofResult.error?.message ??
+        inclusionProofResult.reason ??
+        'receipt transparency inclusion proof verification failed',
+      field:
+        inclusionProofResult.error?.field !== undefined
+          ? `${args.fieldPrefix}.inclusion_proof.${inclusionProofResult.error.field}`
+          : `${args.fieldPrefix}.inclusion_proof`,
+    };
+  }
+
+  const inclusionProofRecord = isObjectRecord(inclusionProof) ? inclusionProof : null;
+  const inclusionLeafHash =
+    inclusionProofRecord && typeof inclusionProofRecord.leaf_hash_b64u === 'string'
+      ? inclusionProofRecord.leaf_hash_b64u
+      : null;
+
+  if (!inclusionLeafHash || inclusionLeafHash !== args.expectedLeafHashB64u) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'receipt transparency inclusion_proof.leaf_hash_b64u does not match receipt leaf hash',
+      field: `${args.fieldPrefix}.inclusion_proof.leaf_hash_b64u`,
+    };
+  }
+
+  if (args.transparency.consistency_proof !== undefined) {
+    const consistencyResult = parseAssuranceConsistencyProof({
+      consistencyProof: args.transparency.consistency_proof,
+      inclusionProofRecord,
+      fieldPrefix: args.fieldPrefix,
+    });
+    if (!consistencyResult.ok) {
+      return consistencyResult;
+    }
+  }
+
+  return { ok: true };
+}
+
+async function computeEgressPolicyReceiptTransparencyLeafHash(
+  payload: EgressPolicyReceiptPayload
+): Promise<string> {
+  return computeHash(
+    {
+      leaf_version: 'egress_policy_receipt_v1',
+      receipt_version: payload.receipt_version,
+      receipt_id: payload.receipt_id,
+      policy_version: payload.policy_version,
+      policy_hash_b64u: payload.policy_hash_b64u,
+      effective_policy_hash_b64u: payload.effective_policy_hash_b64u ?? null,
+      proofed_mode: payload.proofed_mode,
+      clawproxy_url: payload.clawproxy_url,
+      allowed_proxy_destinations: payload.allowed_proxy_destinations,
+      allowed_child_destinations: payload.allowed_child_destinations,
+      direct_provider_access_blocked: payload.direct_provider_access_blocked,
+      blocked_attempt_count: payload.blocked_attempt_count,
+      blocked_attempts_observed: payload.blocked_attempts_observed,
+      hash_algorithm: payload.hash_algorithm,
+      agent_did: payload.agent_did,
+      timestamp: payload.timestamp,
+      binding: {
+        run_id: payload.binding.run_id,
+        event_hash_b64u: payload.binding.event_hash_b64u,
+      },
+    },
+    'SHA-256'
+  );
+}
+
+async function computeRunnerAttestationReceiptTransparencyLeafHash(
+  payload: RunnerAttestationReceiptPayload
+): Promise<string> {
+  return computeHash(
+    {
+      leaf_version: 'runner_attestation_receipt_v1',
+      receipt_version: payload.receipt_version,
+      receipt_id: payload.receipt_id,
+      hash_algorithm: payload.hash_algorithm,
+      agent_did: payload.agent_did,
+      timestamp: payload.timestamp,
+      binding: {
+        run_id: payload.binding.run_id,
+        event_hash_b64u: payload.binding.event_hash_b64u,
+      },
+      runner_measurement: {
+        manifest_hash_b64u: payload.runner_measurement.manifest_hash_b64u,
+        runtime_hash_b64u: payload.runner_measurement.runtime_hash_b64u,
+        artifacts: {
+          preload_hash_b64u: payload.runner_measurement.artifacts.preload_hash_b64u,
+          node_preload_sentinel_hash_b64u:
+            payload.runner_measurement.artifacts.node_preload_sentinel_hash_b64u,
+          sentinel_shell_hash_b64u:
+            payload.runner_measurement.artifacts.sentinel_shell_hash_b64u,
+          sentinel_shell_policy_hash_b64u:
+            payload.runner_measurement.artifacts.sentinel_shell_policy_hash_b64u,
+          interpose_library_hash_b64u:
+            payload.runner_measurement.artifacts.interpose_library_hash_b64u,
+        },
+      },
+      policy: {
+        effective_policy_hash_b64u: payload.policy.effective_policy_hash_b64u,
+      },
+    },
+    'SHA-256'
+  );
+}
+
+async function computeReviewerSignoffReceiptTransparencyLeafHash(
+  payload: ReviewerSignoffReceiptPayload
+): Promise<string> {
+  return computeHash(
+    {
+      leaf_version: 'reviewer_signoff_receipt_v1',
+      receipt_version: payload.receipt_version,
+      receipt_id: payload.receipt_id,
+      reviewer_did: payload.reviewer_did,
+      decision: payload.decision,
+      timestamp: payload.timestamp,
+      binding: {
+        run_id: payload.binding.run_id,
+        bundle_id: payload.binding.bundle_id,
+        proof_bundle_hash_b64u: payload.binding.proof_bundle_hash_b64u ?? null,
+        event_hash_b64u: payload.binding.event_hash_b64u,
+        target_kind: payload.binding.target_kind,
+        export_pack_root_hash_b64u: payload.binding.export_pack_root_hash_b64u ?? null,
+      },
+      dispute: payload.dispute
+        ? {
+            status: payload.dispute.status,
+            notes: (payload.dispute.notes ?? []).map((note) => ({
+              note_id: note.note_id,
+              note: note.note,
+              evidence_refs: (note.evidence_refs ?? []).map((ref) => ({
+                ref_id: ref.ref_id ?? null,
+                uri: ref.uri ?? null,
+                sha256_b64u: ref.sha256_b64u ?? null,
+              })),
+            })),
+          }
+        : null,
+    },
+    'SHA-256'
+  );
+}
+
 interface EgressPolicyReceiptVerificationOutcome {
   valid: boolean;
   signature_valid: boolean;
@@ -4621,6 +5143,7 @@ async function verifyEgressPolicyReceiptEnvelope(args: {
       'agent_did',
       'timestamp',
       'binding',
+      'transparency',
     ])
   ) {
     return {
@@ -4986,6 +5509,40 @@ async function verifyEgressPolicyReceiptEnvelope(args: {
     };
   }
 
+  const transparencyResult = extractAssuranceReceiptTransparency({
+    payloadRecord: envelope.payload as Record<string, unknown>,
+    fieldPrefix: 'payload.metadata.sentinels.egress_policy_receipt.payload',
+  });
+  if (!transparencyResult.ok) {
+    return {
+      valid: false,
+      signature_valid: true,
+      code: transparencyResult.code,
+      message: transparencyResult.message,
+      field: transparencyResult.field,
+    };
+  }
+
+  if (transparencyResult.transparency) {
+    const expectedLeafHashB64u = await computeEgressPolicyReceiptTransparencyLeafHash(
+      payload
+    );
+    const transparencyVerification = await verifyAssuranceReceiptTransparencyAnchor({
+      transparency: transparencyResult.transparency,
+      expectedLeafHashB64u,
+      fieldPrefix: 'payload.metadata.sentinels.egress_policy_receipt.payload.transparency',
+    });
+    if (!transparencyVerification.ok) {
+      return {
+        valid: false,
+        signature_valid: true,
+        code: transparencyVerification.code,
+        message: transparencyVerification.message,
+        field: transparencyVerification.field,
+      };
+    }
+  }
+
   return { valid: true, signature_valid: true };
 }
 
@@ -5140,6 +5697,7 @@ async function verifyRunnerAttestationReceiptEnvelope(args: {
       'binding',
       'runner_measurement',
       'policy',
+      'transparency',
     ])
   ) {
     return {
@@ -5482,6 +6040,39 @@ async function verifyRunnerAttestationReceiptEnvelope(args: {
     };
   }
 
+  const transparencyResult = extractAssuranceReceiptTransparency({
+    payloadRecord: envelope.payload as Record<string, unknown>,
+    fieldPrefix: 'payload.metadata.runner_attestation_receipt.payload',
+  });
+  if (!transparencyResult.ok) {
+    return {
+      valid: false,
+      signature_valid: true,
+      code: transparencyResult.code,
+      message: transparencyResult.message,
+      field: transparencyResult.field,
+    };
+  }
+
+  if (transparencyResult.transparency) {
+    const expectedLeafHashB64u =
+      await computeRunnerAttestationReceiptTransparencyLeafHash(payload);
+    const transparencyVerification = await verifyAssuranceReceiptTransparencyAnchor({
+      transparency: transparencyResult.transparency,
+      expectedLeafHashB64u,
+      fieldPrefix: 'payload.metadata.runner_attestation_receipt.payload.transparency',
+    });
+    if (!transparencyVerification.ok) {
+      return {
+        valid: false,
+        signature_valid: true,
+        code: transparencyVerification.code,
+        message: transparencyVerification.message,
+        field: transparencyVerification.field,
+      };
+    }
+  }
+
   return { valid: true, signature_valid: true };
 }
 
@@ -5663,6 +6254,7 @@ async function verifyReviewerSignoffReceipts(args: {
         'timestamp',
         'binding',
         'dispute',
+        'transparency',
       ])
     ) {
       return {
@@ -6051,6 +6643,39 @@ async function verifyReviewerSignoffReceipts(args: {
         field: `${fieldPrefix}.signature_b64u`,
         summary,
       };
+    }
+
+    const transparencyResult = extractAssuranceReceiptTransparency({
+      payloadRecord: envelope.payload as Record<string, unknown>,
+      fieldPrefix: `${fieldPrefix}.payload`,
+    });
+    if (!transparencyResult.ok) {
+      return {
+        valid: false,
+        code: transparencyResult.code,
+        message: transparencyResult.message,
+        field: transparencyResult.field,
+        summary,
+      };
+    }
+
+    if (transparencyResult.transparency) {
+      const expectedLeafHashB64u =
+        await computeReviewerSignoffReceiptTransparencyLeafHash(payload);
+      const transparencyVerification = await verifyAssuranceReceiptTransparencyAnchor({
+        transparency: transparencyResult.transparency,
+        expectedLeafHashB64u,
+        fieldPrefix: `${fieldPrefix}.payload.transparency`,
+      });
+      if (!transparencyVerification.ok) {
+        return {
+          valid: false,
+          code: transparencyVerification.code,
+          message: transparencyVerification.message,
+          field: transparencyVerification.field,
+          summary,
+        };
+      }
     }
 
     summary.receipts_count += 1;

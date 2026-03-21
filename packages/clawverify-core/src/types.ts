@@ -1000,6 +1000,24 @@ export interface PolicyBindingMetadata {
   signed_policy_bundle_envelope?: SignedEnvelope<SignedPolicyBundlePayload>;
 }
 
+export interface TransparencyLogConsistencyProof {
+  proof_version: '1';
+  log_id: string;
+  from_tree_size: number;
+  to_tree_size: number;
+  from_root_hash_b64u: string;
+  to_root_hash_b64u: string;
+  consistency_path: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface AssuranceReceiptTransparencyAnchor {
+  inclusion_proof: unknown;
+  consistency_proof?: TransparencyLogConsistencyProof | Record<string, unknown>;
+  anchor_id?: string;
+  anchor_uri?: string;
+}
+
 /** AF2-ATT-001: deterministic hash inputs over runner-critical assets. */
 export interface RunnerMeasurementArtifactHashes {
   preload_hash_b64u: string | null;
@@ -1063,6 +1081,7 @@ export interface RunnerAttestationReceiptPayload {
   policy: {
     effective_policy_hash_b64u: string;
   };
+  transparency?: AssuranceReceiptTransparencyAnchor;
 }
 
 /** AF2-ATT-002: envelope for runner attestation receipts. */
@@ -1112,6 +1131,7 @@ export interface ReviewerSignoffReceiptPayload {
     status: ReviewerDisputeStatus;
     notes?: ReviewerDisputeNote[];
   };
+  transparency?: AssuranceReceiptTransparencyAnchor;
 }
 
 export interface ReviewerSignoffReceiptEnvelope {
