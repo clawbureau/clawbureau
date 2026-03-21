@@ -11,7 +11,7 @@
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import { hashJsonB64u, sha256B64u, base64UrlEncode } from './crypto.js';
+import { hashJsonB64u, sha256B64u, base64UrlEncode, base64UrlDecode } from './crypto.js';
 import type { EphemeralDid } from './ephemeral-did.js';
 import type { SignedEnvelope, GatewayReceiptPayload, ProofBundlePayload, EventChainEntry } from './types.js';
 import { CausalSieve, type LocalPolicy, type PolicyViolation } from './causal-sieve.js';
@@ -60,6 +60,8 @@ export interface ProxyOptions {
   enforceEgressAllowlist?: boolean;
   /** Explicit outbound egress host allowlist (hostnames, optional `*.` wildcard). */
   egressAllowlist?: string[];
+  /** Effective signed-policy hash resolved by wrap for proofed policy-bound controls. */
+  effectivePolicyHashB64u?: string;
 }
 
 /** A running local proxy instance. */
@@ -181,16 +183,42 @@ interface DataHandlingDecision {
   policy: DataHandlingPolicyEvidence | null;
   approval_required: boolean;
   approval_satisfied: boolean;
+  approval_scope_hash_b64u: string | null;
+  approval_receipt_hash_b64u: string | null;
+  approval_receipt_signer_did: string | null;
+  approval_receipt_envelope: SignedEnvelope<HumanApprovalReceiptPayload> | null;
   redaction_applied: boolean;
   outboundBody: Buffer;
   original_payload_hash_b64u: string;
   outbound_payload_hash_b64u: string | null;
 }
 
+interface HumanApprovalReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  approval_type: 'explicit_approve' | 'auto_approve';
+  approver_subject: string;
+  approver_method?: 'ui_click' | 'cli_confirm' | 'api_call' | 'policy_auto';
+  agent_did: string;
+  scope_hash_b64u: string;
+  scope_summary?: string;
+  policy_hash_b64u: string;
+  minted_capability_ttl_seconds: number;
+  hash_algorithm: 'SHA-256';
+  timestamp: string;
+  binding?: {
+    run_id?: string;
+    event_hash_b64u?: string;
+    nonce?: string;
+    policy_hash?: string;
+  };
+}
+
 interface DataHandlingReceiptPayload {
   receipt_version: '1';
   receipt_id: string;
   policy_version: 'prv.dlp.v1';
+  effective_policy_hash_b64u: string;
   policy?: DataHandlingPolicyEvidence;
   run_id: string;
   provider: string;
@@ -200,8 +228,11 @@ interface DataHandlingReceiptPayload {
   approval: {
     required: boolean;
     satisfied: boolean;
-    mechanism: 'header_token';
-    token_hash_b64u: string | null;
+    mechanism: 'signed_receipt';
+    scope_hash_b64u: string | null;
+    receipt_hash_b64u: string | null;
+    receipt_signer_did: string | null;
+    receipt_envelope: SignedEnvelope<HumanApprovalReceiptPayload> | null;
   };
   redaction: {
     applied: boolean;
@@ -624,9 +655,14 @@ function randomUUID(): string {
 
 const DLP_POLICY_VERSION = 'prv.dlp.v1' as const;
 const DLP_TAXONOMY_VERSION = 'prv.dlp.taxonomy.v2' as const;
-const DLP_APPROVAL_HEADER = 'x-clawsig-approval-token';
-const DLP_APPROVAL_TOKEN_ENV = 'CLAWSIG_DLP_APPROVAL_TOKEN';
+const DLP_APPROVAL_HEADER = 'x-clawsig-approval-receipt';
+const DLP_APPROVER_DIDS_ENV = 'CLAWSIG_DLP_APPROVER_DIDS';
+const DLP_APPROVER_DID_ENV = 'CLAWSIG_DLP_APPROVER_DID';
 const DLP_CUSTOM_RULES_ENV = 'CLAWSIG_DLP_CUSTOM_RULES_JSON';
+const DLP_APPROVAL_SCOPE_VERSION = 'prv.dlp.approval_scope.v1';
+
+const BASE58_ALPHABET =
+  '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 interface DataHandlingRuleDefinition {
   class_id: string;
@@ -971,11 +1007,356 @@ function buildDataHandlingReasonCode(decision: DataHandlingDecision): string {
   return 'PRV_DLP_ALLOW';
 }
 
+function parseDidAllowlist(raw: string | undefined): Set<string> {
+  if (!raw || raw.trim().length === 0) return new Set<string>();
+  const dids = new Set<string>();
+  for (const part of raw.split(',')) {
+    const normalized = part.trim();
+    if (normalized.length > 0) dids.add(normalized);
+  }
+  return dids;
+}
+
+function parseHeaderJsonObject(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const decoded = new TextDecoder().decode(base64UrlDecode(trimmed));
+    const parsed = JSON.parse(decoded);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function base58Decode(input: string): Uint8Array {
+  const bytes: number[] = [0];
+  for (const char of input) {
+    const value = BASE58_ALPHABET.indexOf(char);
+    if (value === -1) {
+      throw new Error(`invalid base58 character: ${char}`);
+    }
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] *= 58;
+    }
+    bytes[0] += value;
+    let carry = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] += carry;
+      carry = bytes[i] >> 8;
+      bytes[i] &= 0xff;
+    }
+    while (carry > 0) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+  for (const char of input) {
+    if (char !== '1') break;
+    bytes.push(0);
+  }
+  return new Uint8Array(bytes.reverse());
+}
+
+function decodeDidKeyPublicKey(did: string): Uint8Array | null {
+  if (!did.startsWith('did:key:z')) return null;
+  try {
+    const decoded = base58Decode(did.slice('did:key:z'.length));
+    if (decoded.length < 3) return null;
+    if (decoded[0] !== 0xed || decoded[1] !== 0x01) return null;
+    return decoded.slice(2);
+  } catch {
+    return null;
+  }
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const src = bytes.buffer;
+  if (src instanceof ArrayBuffer) {
+    return src.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+async function verifyEd25519DidKeySignature(args: {
+  signerDid: string;
+  signatureB64u: string;
+  payloadHashB64u: string;
+}): Promise<boolean> {
+  const publicKeyRaw = decodeDidKeyPublicKey(args.signerDid);
+  if (!publicKeyRaw) return false;
+  const verifyKey = await crypto.subtle.importKey(
+    'raw',
+    toArrayBuffer(publicKeyRaw),
+    'Ed25519',
+    false,
+    ['verify'],
+  );
+  return await crypto.subtle.verify(
+    'Ed25519',
+    verifyKey,
+    toArrayBuffer(base64UrlDecode(args.signatureB64u)),
+    toArrayBuffer(new TextEncoder().encode(args.payloadHashB64u)),
+  );
+}
+
+async function computeApprovalScopeHashB64u(args: {
+  provider: string;
+  classes: DataHandlingClassMatch[];
+  effectivePolicyHashB64u: string;
+}): Promise<string> {
+  const approvalClassIds = [...new Set(
+    args.classes
+      .filter((entry) => entry.action === 'require_approval')
+      .map((entry) => entry.class_id),
+  )].sort((a, b) => a.localeCompare(b));
+  const scope = {
+    scope_version: DLP_APPROVAL_SCOPE_VERSION,
+    provider: normalizePolicyModel(args.provider),
+    policy_version: DLP_POLICY_VERSION,
+    effective_policy_hash_b64u: args.effectivePolicyHashB64u,
+    class_ids: approvalClassIds,
+  };
+  const canonical = canonicalizeJson(scope);
+  return await sha256B64u(new TextEncoder().encode(canonical));
+}
+
+function parseApprovalReceiptFromHeader(
+  value: string | undefined,
+): SignedEnvelope<HumanApprovalReceiptPayload> | null {
+  if (!value) return null;
+  const parsed = parseHeaderJsonObject(value);
+  if (!parsed) return null;
+  if (
+    parsed.envelope_version !== '1' ||
+    parsed.envelope_type !== 'human_approval_receipt' ||
+    parsed.hash_algorithm !== 'SHA-256' ||
+    parsed.algorithm !== 'Ed25519' ||
+    typeof parsed.payload_hash_b64u !== 'string' ||
+    typeof parsed.signature_b64u !== 'string' ||
+    typeof parsed.signer_did !== 'string' ||
+    typeof parsed.issued_at !== 'string' ||
+    typeof parsed.payload !== 'object' ||
+    parsed.payload === null ||
+    Array.isArray(parsed.payload)
+  ) {
+    return null;
+  }
+  return parsed as unknown as SignedEnvelope<HumanApprovalReceiptPayload>;
+}
+
+interface ApprovalReceiptValidationResult {
+  valid: boolean;
+  reason?: string;
+  receiptEnvelope: SignedEnvelope<HumanApprovalReceiptPayload> | null;
+  receiptHashB64u: string | null;
+  receiptSignerDid: string | null;
+  scopeHashB64u: string | null;
+}
+
+async function validateApprovalReceipt(args: {
+  approvalReceiptHeader: string | undefined;
+  expectedAgentDid: string;
+  expectedRunId: string;
+  expectedEventHashB64u: string;
+  expectedPolicyHashB64u: string | null;
+  expectedScopeHashB64u: string | null;
+  approverDidAllowlist: Set<string>;
+  decisionTimestampMs: number;
+}): Promise<ApprovalReceiptValidationResult> {
+  const receiptEnvelope = parseApprovalReceiptFromHeader(args.approvalReceiptHeader);
+  if (!receiptEnvelope) {
+    return {
+      valid: false,
+      reason: 'approval_receipt_missing_or_malformed',
+      receiptEnvelope: null,
+      receiptHashB64u: null,
+      receiptSignerDid: null,
+      scopeHashB64u: args.expectedScopeHashB64u,
+    };
+  }
+
+  if (
+    args.approverDidAllowlist.size === 0 ||
+    !args.approverDidAllowlist.has(receiptEnvelope.signer_did)
+  ) {
+    return {
+      valid: false,
+      reason: 'approval_receipt_signer_not_allowlisted',
+      receiptEnvelope: null,
+      receiptHashB64u: null,
+      receiptSignerDid: null,
+      scopeHashB64u: args.expectedScopeHashB64u,
+    };
+  }
+
+  const payload = receiptEnvelope.payload as unknown as Record<string, unknown>;
+  if (
+    payload.receipt_version !== '1' ||
+    (payload.approval_type !== 'explicit_approve' && payload.approval_type !== 'auto_approve') ||
+    typeof payload.approver_subject !== 'string' ||
+    payload.approver_subject.trim().length === 0 ||
+    typeof payload.agent_did !== 'string' ||
+    payload.agent_did !== args.expectedAgentDid ||
+    typeof payload.scope_hash_b64u !== 'string' ||
+    typeof payload.policy_hash_b64u !== 'string' ||
+    typeof payload.timestamp !== 'string' ||
+    typeof payload.minted_capability_ttl_seconds !== 'number' ||
+    !Number.isInteger(payload.minted_capability_ttl_seconds) ||
+    payload.minted_capability_ttl_seconds <= 0 ||
+    payload.hash_algorithm !== 'SHA-256'
+  ) {
+    return {
+      valid: false,
+      reason: 'approval_receipt_payload_invalid',
+      receiptEnvelope: null,
+      receiptHashB64u: null,
+      receiptSignerDid: null,
+      scopeHashB64u: args.expectedScopeHashB64u,
+    };
+  }
+
+  if (
+    !args.expectedPolicyHashB64u ||
+    !args.expectedScopeHashB64u ||
+    payload.policy_hash_b64u !== args.expectedPolicyHashB64u ||
+    payload.scope_hash_b64u !== args.expectedScopeHashB64u
+  ) {
+    return {
+      valid: false,
+      reason: 'approval_receipt_policy_scope_mismatch',
+      receiptEnvelope: null,
+      receiptHashB64u: null,
+      receiptSignerDid: null,
+      scopeHashB64u: args.expectedScopeHashB64u,
+    };
+  }
+
+  const receiptTimestampMs = Date.parse(payload.timestamp);
+  if (!Number.isFinite(receiptTimestampMs)) {
+    return {
+      valid: false,
+      reason: 'approval_receipt_timestamp_invalid',
+      receiptEnvelope: null,
+      receiptHashB64u: null,
+      receiptSignerDid: null,
+      scopeHashB64u: args.expectedScopeHashB64u,
+    };
+  }
+
+  const expiresAtMs =
+    receiptTimestampMs + (payload.minted_capability_ttl_seconds as number) * 1000;
+  if (args.decisionTimestampMs < receiptTimestampMs || args.decisionTimestampMs > expiresAtMs) {
+    return {
+      valid: false,
+      reason: 'approval_receipt_expired_or_not_yet_valid',
+      receiptEnvelope: null,
+      receiptHashB64u: null,
+      receiptSignerDid: null,
+      scopeHashB64u: args.expectedScopeHashB64u,
+    };
+  }
+
+  const binding =
+    typeof payload.binding === 'object' &&
+    payload.binding !== null &&
+    !Array.isArray(payload.binding)
+      ? (payload.binding as Record<string, unknown>)
+      : null;
+  if (binding) {
+    if (
+      binding.run_id !== undefined &&
+      (typeof binding.run_id !== 'string' || binding.run_id !== args.expectedRunId)
+    ) {
+      return {
+        valid: false,
+        reason: 'approval_receipt_run_binding_mismatch',
+        receiptEnvelope: null,
+        receiptHashB64u: null,
+        receiptSignerDid: null,
+        scopeHashB64u: args.expectedScopeHashB64u,
+      };
+    }
+    if (
+      binding.event_hash_b64u !== undefined &&
+      (typeof binding.event_hash_b64u !== 'string' || binding.event_hash_b64u !== args.expectedEventHashB64u)
+    ) {
+      return {
+        valid: false,
+        reason: 'approval_receipt_event_binding_mismatch',
+        receiptEnvelope: null,
+        receiptHashB64u: null,
+        receiptSignerDid: null,
+        scopeHashB64u: args.expectedScopeHashB64u,
+      };
+    }
+  }
+
+  const computedPayloadHash = await hashJsonB64u(receiptEnvelope.payload);
+  if (computedPayloadHash !== receiptEnvelope.payload_hash_b64u) {
+    return {
+      valid: false,
+      reason: 'approval_receipt_payload_hash_mismatch',
+      receiptEnvelope: null,
+      receiptHashB64u: null,
+      receiptSignerDid: null,
+      scopeHashB64u: args.expectedScopeHashB64u,
+    };
+  }
+
+  const signatureValid = await verifyEd25519DidKeySignature({
+    signerDid: receiptEnvelope.signer_did,
+    signatureB64u: receiptEnvelope.signature_b64u,
+    payloadHashB64u: receiptEnvelope.payload_hash_b64u,
+  });
+  if (!signatureValid) {
+    return {
+      valid: false,
+      reason: 'approval_receipt_signature_invalid',
+      receiptEnvelope: null,
+      receiptHashB64u: null,
+      receiptSignerDid: null,
+      scopeHashB64u: args.expectedScopeHashB64u,
+    };
+  }
+
+  return {
+    valid: true,
+    receiptEnvelope,
+    receiptHashB64u: receiptEnvelope.payload_hash_b64u,
+    receiptSignerDid: receiptEnvelope.signer_did,
+    scopeHashB64u: args.expectedScopeHashB64u,
+  };
+}
+
 async function evaluateDataHandlingPolicy(args: {
   bodyBuffer: Buffer;
-  approvalTokenHeader: string | undefined;
-  configuredApprovalToken: string | undefined;
   policyConfig: DataHandlingPolicyConfig;
+  provider: string;
+  runId: string;
+  eventHashB64u: string;
+  agentDid: string;
+  effectivePolicyHashB64u: string | null;
+  approvalReceiptHeader: string | undefined;
+  approverDidAllowlist: Set<string>;
+  decisionTimestampMs: number;
 }): Promise<DataHandlingDecision> {
   const originalText = args.bodyBuffer.toString('utf-8');
   let redactedText = originalText;
@@ -1008,13 +1389,35 @@ async function evaluateDataHandlingPolicy(args: {
   });
 
   const approvalRequired = classes.some((c) => c.action === 'require_approval');
-  const configuredApprovalToken = args.configuredApprovalToken?.trim();
-  const approvalTokenHeader = args.approvalTokenHeader?.trim();
-  const approvalSatisfied =
-    approvalRequired &&
-    !!configuredApprovalToken &&
-    !!approvalTokenHeader &&
-    approvalTokenHeader === configuredApprovalToken;
+  const approvalScopeHashB64u =
+    approvalRequired && args.effectivePolicyHashB64u
+      ? await computeApprovalScopeHashB64u({
+          provider: args.provider,
+          classes,
+          effectivePolicyHashB64u: args.effectivePolicyHashB64u,
+        })
+      : null;
+
+  const approvalReceiptValidation =
+    approvalRequired
+      ? await validateApprovalReceipt({
+          approvalReceiptHeader: args.approvalReceiptHeader,
+          expectedAgentDid: args.agentDid,
+          expectedRunId: args.runId,
+          expectedEventHashB64u: args.eventHashB64u,
+          expectedPolicyHashB64u: args.effectivePolicyHashB64u,
+          expectedScopeHashB64u: approvalScopeHashB64u,
+          approverDidAllowlist: args.approverDidAllowlist,
+          decisionTimestampMs: args.decisionTimestampMs,
+        })
+      : {
+          valid: false,
+          receiptEnvelope: null,
+          receiptHashB64u: null,
+          receiptSignerDid: null,
+          scopeHashB64u: null,
+        };
+  const approvalSatisfied = approvalRequired && approvalReceiptValidation.valid;
 
   let action: DataHandlingAction = 'allow';
   if (classes.some((c) => c.action === 'block')) {
@@ -1048,6 +1451,10 @@ async function evaluateDataHandlingPolicy(args: {
     },
     approval_required: approvalRequired,
     approval_satisfied: approvalSatisfied,
+    approval_scope_hash_b64u: approvalScopeHashB64u,
+    approval_receipt_hash_b64u: approvalReceiptValidation.receiptHashB64u,
+    approval_receipt_signer_did: approvalReceiptValidation.receiptSignerDid,
+    approval_receipt_envelope: approvalReceiptValidation.receiptEnvelope,
     redaction_applied: redactionApplied,
     outboundBody,
     original_payload_hash_b64u: originalHash,
@@ -1535,6 +1942,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     passthrough = false,
     enforceEgressAllowlist = false,
     egressAllowlist = [],
+    effectivePolicyHashB64u,
   } = options;
 
   const normalizedUrl = clawproxyUrl.replace(/\/+$/, '');
@@ -1554,7 +1962,6 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
   const receipts: CollectedReceipt[] = [];
   const dataHandlingReceipts: SignedEnvelope<DataHandlingReceiptPayload>[] = [];
   let plannedPrevHash: string | null = null;
-  const configuredApprovalToken = process.env[DLP_APPROVAL_TOKEN_ENV];
   let dataHandlingPolicyConfig: DataHandlingPolicyConfig | null = null;
   let dataHandlingPolicyConfigError: string | null = null;
   try {
@@ -1564,6 +1971,13 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       err instanceof Error ? err.message : 'unknown error'
     }`;
   }
+  const approverDidAllowlist = parseDidAllowlist(
+    process.env[DLP_APPROVER_DIDS_ENV] ?? process.env[DLP_APPROVER_DID_ENV],
+  );
+  const normalizedEffectivePolicyHash =
+    typeof effectivePolicyHashB64u === 'string' && effectivePolicyHashB64u.trim().length > 0
+      ? effectivePolicyHashB64u.trim()
+      : null;
 
   // RED TEAM FIX #7: Ephemeral run salt for privacy.
   // Generate a 16-byte random salt per run.
@@ -1645,9 +2059,10 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       let outboundBodyBuffer = bodyBuffer;
 
       if (egressPolicy?.enforce) {
-        const approvalTokenHeader = readSingleHeader(reqHeaders, DLP_APPROVAL_HEADER);
+        const approvalReceiptHeader = readSingleHeader(reqHeaders, DLP_APPROVAL_HEADER);
         const contentEncoding = readSingleHeader(reqHeaders, 'content-encoding');
         const classifierTimestamp = new Date().toISOString();
+        const classifierTimestampMs = Date.parse(classifierTimestamp);
 
         try {
           if (
@@ -1670,19 +2085,33 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
 
           const decision = await evaluateDataHandlingPolicy({
             bodyBuffer,
-            approvalTokenHeader,
-            configuredApprovalToken,
             policyConfig: dataHandlingPolicyConfig,
+            provider,
+            runId,
+            eventHashB64u: eventHash,
+            agentDid: agentDid.did,
+            effectivePolicyHashB64u: normalizedEffectivePolicyHash,
+            approvalReceiptHeader,
+            approverDidAllowlist,
+            decisionTimestampMs:
+              Number.isFinite(classifierTimestampMs) ? classifierTimestampMs : Date.now(),
           });
           outboundBodyBuffer = decision.outboundBody;
-          const approvalTokenHash = approvalTokenHeader
-            ? await sha256B64u(new TextEncoder().encode(approvalTokenHeader))
-            : null;
+          if (
+            decision.approval_required &&
+            decision.approval_scope_hash_b64u === null &&
+            decision.action !== 'block'
+          ) {
+            decision.action = 'require_approval';
+            decision.reason_code = 'PRV_DLP_APPROVAL_REQUIRED';
+          }
 
           const receiptPayload: DataHandlingReceiptPayload = {
             receipt_version: '1',
             receipt_id: `dhr_${randomUUID()}`,
             policy_version: DLP_POLICY_VERSION,
+            effective_policy_hash_b64u:
+              normalizedEffectivePolicyHash ?? 'unknown_policy_hash',
             ...(decision.policy ? { policy: decision.policy } : {}),
             run_id: runId,
             provider,
@@ -1692,8 +2121,11 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             approval: {
               required: decision.approval_required,
               satisfied: decision.approval_satisfied,
-              mechanism: 'header_token',
-              token_hash_b64u: approvalTokenHash,
+              mechanism: 'signed_receipt',
+              scope_hash_b64u: decision.approval_scope_hash_b64u,
+              receipt_hash_b64u: decision.approval_receipt_hash_b64u,
+              receipt_signer_did: decision.approval_receipt_signer_did,
+              receipt_envelope: decision.approval_receipt_envelope,
             },
             redaction: {
               applied: decision.redaction_applied,
@@ -1720,7 +2152,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
               message:
                 decision.action === 'block'
                   ? 'Outbound payload blocked by data handling policy.'
-                  : 'Outbound payload requires explicit approval and no valid approval token was provided.',
+                  : 'Outbound payload requires explicit approval and no valid signed approval receipt was provided.',
             }));
             return;
           }
@@ -1729,6 +2161,8 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             receipt_version: '1',
             receipt_id: `dhr_${randomUUID()}`,
             policy_version: DLP_POLICY_VERSION,
+            effective_policy_hash_b64u:
+              normalizedEffectivePolicyHash ?? 'unknown_policy_hash',
             ...(dataHandlingPolicyConfig
               ? {
                   policy: {
@@ -1747,8 +2181,11 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             approval: {
               required: true,
               satisfied: false,
-              mechanism: 'header_token',
-              token_hash_b64u: null,
+              mechanism: 'signed_receipt',
+              scope_hash_b64u: null,
+              receipt_hash_b64u: null,
+              receipt_signer_did: null,
+              receipt_envelope: null,
             },
             redaction: {
               applied: false,
@@ -2068,6 +2505,9 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             : {}),
           ...(dataHandlingPolicyConfigError
             ? { policy_error: dataHandlingPolicyConfigError }
+            : {}),
+          ...(normalizedEffectivePolicyHash
+            ? { effective_policy_hash_b64u: normalizedEffectivePolicyHash }
             : {}),
           receipts: dataHandlingReceipts,
         },

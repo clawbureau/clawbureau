@@ -1009,7 +1009,7 @@ describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
     }
   });
 
-  it('requires approval for credential matches and fails closed without approval token', async () => {
+  it('requires approval for credential matches and fails closed without signed approval receipt', async () => {
     const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-approval-'));
     const mock = await startMockClawproxy();
 
@@ -1032,7 +1032,6 @@ describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
         extraEnv: {
           CLAWSIG_PROOFED: '1',
           CLAWSIG_CLAWPROXY_URL: mock.url,
-          CLAWSIG_DLP_APPROVAL_TOKEN: 'expected-approval-token',
         },
       });
 
@@ -1058,37 +1057,125 @@ describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
   it('forwards approved credential payloads without leaking the approval header upstream', async () => {
     const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-approved-'));
     const mock = await startMockClawproxy();
+    const approverKeyPair = await generateKeyPair();
+    const approverDid = await didFromPublicKey(approverKeyPair.publicKey);
+    const approverPrivateJwk = await crypto.subtle.exportKey('jwk', approverKeyPair.privateKey);
 
     try {
-      const childScript =
-        "(async()=>{" +
-        "const port=process.env.CLAWSIG_PROXY_PORT;" +
-        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
-        "method:'POST'," +
-        "headers:{" +
-        "'content-type':'application/json'," +
-        "'authorization':'Bearer sk-test'," +
-        "'x-clawsig-approval-token':'expected-approval-token'" +
-        "}," +
-        "body:JSON.stringify({model:'gpt-4o-mini',password:'approved-send'})" +
-        "});" +
-        "if(res.status===200){process.exit(0);}"+
-        "console.error(await res.text());process.exit(1);" +
-        "})().catch((err)=>{console.error(err);process.exit(1);});";
+      const childScript = `
+(async () => {
+  const { createHash } = await import('node:crypto');
+  const port = process.env.CLAWSIG_PROXY_PORT;
+  const agentDid = process.env.CLAWSIG_AGENT_DID;
+  const effectivePolicyHash = process.env.CLAWSIG_EFFECTIVE_POLICY_HASH_B64U;
+  const approverDid = process.env.CLAWSIG_TEST_APPROVER_DID;
+  const approverPrivateJwkRaw = process.env.CLAWSIG_TEST_APPROVER_PRIVATE_JWK;
+  if (!port || !agentDid || !effectivePolicyHash || !approverDid || !approverPrivateJwkRaw) {
+    throw new Error('missing approval receipt env context');
+  }
+
+  const canonicalize = (value) => {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return '[' + value.map((entry) => canonicalize(entry)).join(',') + ']';
+    if (typeof value === 'string') return JSON.stringify(value);
+    if (typeof value === 'number') return JSON.stringify(value);
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (typeof value === 'object') {
+      const keys = Object.keys(value).sort((a, b) => a.localeCompare(b));
+      return '{' + keys.map((key) => JSON.stringify(key) + ':' + canonicalize(value[key])).join(',') + '}';
+    }
+    throw new Error('unsupported json type');
+  };
+
+  const hashJsonB64u = (value) =>
+    createHash('sha256').update(JSON.stringify(value)).digest('base64url');
+  const hashCanonicalB64u = (value) =>
+    createHash('sha256').update(canonicalize(value)).digest('base64url');
+
+  const scope = {
+    scope_version: 'prv.dlp.approval_scope.v1',
+    provider: 'openai',
+    policy_version: 'prv.dlp.v1',
+    effective_policy_hash_b64u: effectivePolicyHash,
+    class_ids: ['credential.password'],
+  };
+  const scopeHash = hashCanonicalB64u(scope);
+  const timestamp = new Date().toISOString();
+  const payload = {
+    receipt_version: '1',
+    receipt_id: 'hap_test_approved_send',
+    approval_type: 'explicit_approve',
+    approver_subject: 'test-approver',
+    approver_method: 'cli_confirm',
+    agent_did: agentDid,
+    scope_hash_b64u: scopeHash,
+    scope_summary: 'approve credential forwarding for test',
+    policy_hash_b64u: effectivePolicyHash,
+    minted_capability_ttl_seconds: 600,
+    hash_algorithm: 'SHA-256',
+    timestamp,
+  };
+
+  const payloadHash = hashJsonB64u(payload);
+  const approverKey = await crypto.subtle.importKey(
+    'jwk',
+    JSON.parse(approverPrivateJwkRaw),
+    'Ed25519',
+    false,
+    ['sign'],
+  );
+  const signature = new Uint8Array(
+    await crypto.subtle.sign('Ed25519', approverKey, new TextEncoder().encode(payloadHash)),
+  );
+  const receiptEnvelope = {
+    envelope_version: '1',
+    envelope_type: 'human_approval_receipt',
+    payload,
+    payload_hash_b64u: payloadHash,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: Buffer.from(signature).toString('base64url'),
+    algorithm: 'Ed25519',
+    signer_did: approverDid,
+    issued_at: timestamp,
+  };
+
+  const res = await fetch('http://127.0.0.1:' + port + '/v1/proxy/openai', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: 'Bearer sk-test',
+      'x-clawsig-approval-receipt': JSON.stringify(receiptEnvelope),
+    },
+    body: JSON.stringify({ model: 'gpt-4o-mini', password: 'approved-send' }),
+  });
+
+  if (res.status === 200) {
+    process.exit(0);
+  }
+
+  console.error(await res.text());
+  process.exit(1);
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+`;
 
       const result = await runWrapRaw(workdir, {
         childArgs: [process.execPath, '-e', childScript],
         extraEnv: {
           CLAWSIG_PROOFED: '1',
           CLAWSIG_CLAWPROXY_URL: mock.url,
-          CLAWSIG_DLP_APPROVAL_TOKEN: 'expected-approval-token',
+          CLAWSIG_DLP_APPROVER_DIDS: approverDid,
+          CLAWSIG_TEST_APPROVER_DID: approverDid,
+          CLAWSIG_TEST_APPROVER_PRIVATE_JWK: JSON.stringify(approverPrivateJwk),
         },
       });
 
       expect(result.exitCode).toBe(0);
       expect(mock.requests).toHaveLength(1);
       expect(mock.requests[0]?.body).toContain('"password":"approved-send"');
-      expect(mock.requests[0]?.headers['x-clawsig-approval-token']).toBeUndefined();
+      expect(mock.requests[0]?.headers['x-clawsig-approval-receipt']).toBeUndefined();
 
       const bundleRaw = await readFile(result.bundlePath, 'utf-8');
       const bundle = JSON.parse(bundleRaw) as {

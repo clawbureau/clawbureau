@@ -66,6 +66,50 @@ async function buildSignedPolicyBundleEnvelope(
   };
 }
 
+async function buildSignedApprovalReceiptEnvelope(args: {
+  did: string;
+  sign: (message: Uint8Array) => Promise<string>;
+  agentDid: string;
+  runId: string;
+  eventHashB64u: string;
+  effectivePolicyHashB64u: string;
+  approvalScopeHashB64u: string;
+}): Promise<Record<string, unknown>> {
+  const payload = {
+    receipt_version: '1',
+    receipt_id: 'har_policy_binding_1',
+    approval_type: 'explicit_approve',
+    approver_subject: 'policy-reviewer',
+    approver_method: 'cli_confirm',
+    agent_did: args.agentDid,
+    scope_hash_b64u: args.approvalScopeHashB64u,
+    scope_summary: 'approve credential forwarding',
+    policy_hash_b64u: args.effectivePolicyHashB64u,
+    minted_capability_ttl_seconds: 600,
+    hash_algorithm: 'SHA-256',
+    timestamp: '2026-03-20T00:00:02.000Z',
+    binding: {
+      run_id: args.runId,
+      event_hash_b64u: args.eventHashB64u,
+      policy_hash: args.effectivePolicyHashB64u,
+    },
+  };
+
+  const payloadHash = await computeHash(payload, 'SHA-256');
+  const signature = await args.sign(new TextEncoder().encode(payloadHash));
+  return {
+    envelope_version: '1',
+    envelope_type: 'human_approval_receipt',
+    payload,
+    payload_hash_b64u: payloadHash,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: signature,
+    algorithm: 'Ed25519',
+    signer_did: args.did,
+    issued_at: payload.timestamp,
+  };
+}
+
 describe('AF2-POL deterministic effective policy resolution', () => {
   it('resolves org/project/task/exception layers deterministically regardless of input layer order', async () => {
     const keyPair = await generateKeyPair();
@@ -326,7 +370,7 @@ describe('AF2-POL verifier policy binding fail-closed behavior', () => {
     const verification = await verifyProofBundle(envelope);
 
     expect(verification.result.status).toBe('INVALID');
-    expect(verification.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
+    expect(verification.error?.code).toBe('RECEIPT_BINDING_MISMATCH');
     expect(verification.error?.field).toBe(
       'payload.metadata.sentinels.egress_policy_receipt.payload.effective_policy_hash_b64u',
     );
@@ -450,6 +494,462 @@ describe('AF2-POL verifier policy binding fail-closed behavior', () => {
     expect(verification.result.status).toBe('INVALID');
     expect(verification.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
     expect(verification.error?.field).toBeTruthy();
+  });
+
+  it('rejects approval-required data handling evidence when signed approval receipt proof is missing', async () => {
+    const keyPair = await generateKeyPair();
+    const did = await didFromPublicKey(keyPair.publicKey);
+    const sign = (message: Uint8Array) => signEd25519(keyPair.privateKey, message);
+
+    const eventHeader = {
+      event_id: 'evt_policy_approval_1',
+      run_id: 'run_policy_approval_1',
+      event_type: 'llm_call',
+      timestamp: '2026-03-20T00:00:01.000Z',
+      payload_hash_b64u: 'evt_payload_hash_policy_approval_1',
+      prev_hash_b64u: null,
+    };
+    const eventHash = await computeHash(eventHeader, 'SHA-256');
+
+    const policySnapshot = {
+      snapshot_version: '1',
+      resolver_version: 'org_project_task_exception.v1',
+      context: { org_id: 'acme' },
+      source_bundle: {
+        bundle_id: 'bundle_signed_policy_approval_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.000Z',
+      },
+      applied_layers: [
+        {
+          layer_id: 'org',
+          scope_type: 'org',
+          org_id: 'acme',
+          priority: 0,
+          apply_mode: 'merge',
+          policy_hash_b64u: 'org_hash_approval_1',
+        },
+      ],
+      effective_policy: {
+        statements: [
+          { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+        ],
+      },
+    };
+
+    const signedPolicyBundleEnvelope = await buildSignedPolicyBundleEnvelope(
+      {
+        policy_bundle_version: '1',
+        bundle_id: 'bundle_signed_policy_approval_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.000Z',
+        hash_algorithm: 'SHA-256',
+        layers: [
+          {
+            layer_id: 'org',
+            scope: { scope_type: 'org', org_id: 'acme' },
+            apply_mode: 'merge',
+            policy: {
+              statements: [
+                { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+              ],
+            },
+          },
+        ],
+      },
+      did,
+      sign,
+    );
+    policySnapshot.applied_layers[0]!.policy_hash_b64u = (
+      signedPolicyBundleEnvelope.payload as { layers: Array<{ policy_hash_b64u: string }> }
+    ).layers[0]!.policy_hash_b64u;
+    const boundEffectivePolicyHash = await computeHash(canonicalize(policySnapshot), 'SHA-256');
+
+    const approvalScope = {
+      scope_version: 'prv.dlp.approval_scope.v1',
+      provider: 'openai',
+      policy_version: 'prv.dlp.v1',
+      effective_policy_hash_b64u: boundEffectivePolicyHash,
+      class_ids: ['credential.password'],
+    };
+    const approvalScopeHash = await computeHash(canonicalize(approvalScope), 'SHA-256');
+    const originalPayloadHash = await computeHash(
+      { password: 'approved-send' },
+      'SHA-256',
+    );
+
+    const dataHandlingPayload = {
+      receipt_version: '1',
+      receipt_id: 'dhr_policy_approval_1',
+      policy_version: 'prv.dlp.v1',
+      effective_policy_hash_b64u: boundEffectivePolicyHash,
+      run_id: 'run_policy_approval_1',
+      provider: 'openai',
+      action: 'allow',
+      reason_code: 'PRV_DLP_APPROVAL_GRANTED',
+      classes: [
+        {
+          class_id: 'credential.password',
+          rule_id: 'prv.dlp.credential.password.inline.v1',
+          action: 'require_approval',
+          match_count: 1,
+        },
+      ],
+      approval: {
+        required: true,
+        satisfied: true,
+        mechanism: 'signed_receipt',
+        scope_hash_b64u: approvalScopeHash,
+        receipt_hash_b64u: null,
+        receipt_signer_did: null,
+        receipt_envelope: null,
+      },
+      redaction: {
+        applied: false,
+        original_payload_hash_b64u: originalPayloadHash,
+        outbound_payload_hash_b64u: originalPayloadHash,
+      },
+      timestamp: '2026-03-20T00:00:02.000Z',
+    };
+    const dataHandlingPayloadHash = await computeHash(dataHandlingPayload, 'SHA-256');
+    const dataHandlingSignature = await sign(new TextEncoder().encode(dataHandlingPayloadHash));
+    const dataHandlingReceipt = {
+      envelope_version: '1',
+      envelope_type: 'data_handling_receipt',
+      payload: dataHandlingPayload,
+      payload_hash_b64u: dataHandlingPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: dataHandlingSignature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:02.000Z',
+    };
+
+    const egressCanonicalPolicy = {
+      policy_version: '1',
+      proofed_mode: true,
+      clawproxy_url: 'https://clawproxy.example',
+      allowed_proxy_destinations: ['clawproxy.example'],
+      allowed_child_destinations: ['127.0.0.1', 'localhost'],
+      direct_provider_access_blocked: true,
+    };
+    const egressPolicyHash = await computeHash(egressCanonicalPolicy, 'SHA-256');
+    const egressPayload = {
+      receipt_version: '1',
+      receipt_id: 'epr_policy_approval_1',
+      policy_version: '1',
+      policy_hash_b64u: egressPolicyHash,
+      effective_policy_hash_b64u: boundEffectivePolicyHash,
+      proofed_mode: true,
+      clawproxy_url: 'https://clawproxy.example',
+      allowed_proxy_destinations: ['clawproxy.example'],
+      allowed_child_destinations: ['127.0.0.1', 'localhost'],
+      direct_provider_access_blocked: true,
+      blocked_attempt_count: 0,
+      blocked_attempts_observed: false,
+      hash_algorithm: 'SHA-256',
+      agent_did: did,
+      timestamp: '2026-03-20T00:00:02.000Z',
+      binding: {
+        run_id: 'run_policy_approval_1',
+        event_hash_b64u: eventHash,
+      },
+    };
+    const egressPayloadHash = await computeHash(egressPayload, 'SHA-256');
+    const egressSignature = await sign(new TextEncoder().encode(egressPayloadHash));
+    const egressPolicyReceipt = {
+      envelope_version: '1',
+      envelope_type: 'egress_policy_receipt',
+      payload: egressPayload,
+      payload_hash_b64u: egressPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: egressSignature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:02.000Z',
+    };
+
+    const payload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_policy_binding_fail_missing_approval_receipt',
+      agent_did: did,
+      event_chain: [
+        {
+          ...eventHeader,
+          event_hash_b64u: eventHash,
+        },
+      ],
+      metadata: {
+        policy_binding: {
+          binding_version: '1',
+          effective_policy_hash_b64u: boundEffectivePolicyHash,
+          effective_policy_snapshot: policySnapshot,
+          signed_policy_bundle_envelope: signedPolicyBundleEnvelope,
+        },
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: egressPolicyReceipt,
+        },
+        data_handling: {
+          policy_version: 'prv.dlp.v1',
+          effective_policy_hash_b64u: boundEffectivePolicyHash,
+          receipts: [dataHandlingReceipt],
+        },
+      },
+    };
+
+    const payloadHash = await computeHash(payload, 'SHA-256');
+    const signature = await sign(new TextEncoder().encode(payloadHash));
+    const envelope = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:03.000Z',
+    };
+
+    const verification = await verifyProofBundle(envelope);
+    expect(verification.result.status).toBe('INVALID');
+    expect(verification.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(verification.error?.field).toBe(
+      'payload.metadata.data_handling.receipts[0].payload.approval.receipt_hash_b64u',
+    );
+  });
+
+  it('rejects approval receipts whose event binding is not part of the proof bundle event chain', async () => {
+    const keyPair = await generateKeyPair();
+    const did = await didFromPublicKey(keyPair.publicKey);
+    const sign = (message: Uint8Array) => signEd25519(keyPair.privateKey, message);
+
+    const eventHeader = {
+      event_id: 'evt_policy_approval_binding_1',
+      run_id: 'run_policy_approval_binding_1',
+      event_type: 'llm_call',
+      timestamp: '2026-03-20T00:00:01.000Z',
+      payload_hash_b64u: 'evt_payload_hash_policy_approval_binding_1',
+      prev_hash_b64u: null,
+    };
+    const eventHash = await computeHash(eventHeader, 'SHA-256');
+
+    const policySnapshot = {
+      snapshot_version: '1',
+      resolver_version: 'org_project_task_exception.v1',
+      context: { org_id: 'acme' },
+      source_bundle: {
+        bundle_id: 'bundle_signed_policy_approval_binding_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.000Z',
+      },
+      applied_layers: [
+        {
+          layer_id: 'org',
+          scope_type: 'org',
+          org_id: 'acme',
+          priority: 0,
+          apply_mode: 'merge',
+          policy_hash_b64u: 'org_hash_approval_binding_1',
+        },
+      ],
+      effective_policy: {
+        statements: [
+          { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+        ],
+      },
+    };
+
+    const signedPolicyBundleEnvelope = await buildSignedPolicyBundleEnvelope(
+      {
+        policy_bundle_version: '1',
+        bundle_id: 'bundle_signed_policy_approval_binding_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.000Z',
+        hash_algorithm: 'SHA-256',
+        layers: [
+          {
+            layer_id: 'org',
+            scope: { scope_type: 'org', org_id: 'acme' },
+            apply_mode: 'merge',
+            policy: {
+              statements: [
+                { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+              ],
+            },
+          },
+        ],
+      },
+      did,
+      sign,
+    );
+    policySnapshot.applied_layers[0]!.policy_hash_b64u = (
+      signedPolicyBundleEnvelope.payload as { layers: Array<{ policy_hash_b64u: string }> }
+    ).layers[0]!.policy_hash_b64u;
+    const boundEffectivePolicyHash = await computeHash(canonicalize(policySnapshot), 'SHA-256');
+
+    const approvalScopeHash = await computeHash(
+      canonicalize({
+        scope_version: 'prv.dlp.approval_scope.v1',
+        provider: 'openai',
+        policy_version: 'prv.dlp.v1',
+        effective_policy_hash_b64u: boundEffectivePolicyHash,
+        class_ids: ['credential.password'],
+      }),
+      'SHA-256',
+    );
+    const approvalReceiptEnvelope = await buildSignedApprovalReceiptEnvelope({
+      did,
+      sign,
+      agentDid: did,
+      runId: 'run_policy_approval_binding_1',
+      eventHashB64u: await computeHash({ wrong: 'event' }, 'SHA-256'),
+      effectivePolicyHashB64u: boundEffectivePolicyHash,
+      approvalScopeHashB64u: approvalScopeHash,
+    });
+    const originalPayloadHash = await computeHash({ password: 'approved-send' }, 'SHA-256');
+
+    const dataHandlingPayload = {
+      receipt_version: '1',
+      receipt_id: 'dhr_policy_approval_binding_1',
+      policy_version: 'prv.dlp.v1',
+      effective_policy_hash_b64u: boundEffectivePolicyHash,
+      run_id: 'run_policy_approval_binding_1',
+      provider: 'openai',
+      action: 'allow',
+      reason_code: 'PRV_DLP_APPROVAL_GRANTED',
+      classes: [
+        {
+          class_id: 'credential.password',
+          rule_id: 'prv.dlp.credential.password.inline.v1',
+          action: 'require_approval',
+          match_count: 1,
+        },
+      ],
+      approval: {
+        required: true,
+        satisfied: true,
+        mechanism: 'signed_receipt',
+        scope_hash_b64u: approvalScopeHash,
+        receipt_hash_b64u: approvalReceiptEnvelope.payload_hash_b64u,
+        receipt_signer_did: did,
+        receipt_envelope: approvalReceiptEnvelope,
+      },
+      redaction: {
+        applied: false,
+        original_payload_hash_b64u: originalPayloadHash,
+        outbound_payload_hash_b64u: originalPayloadHash,
+      },
+      timestamp: '2026-03-20T00:00:02.000Z',
+    };
+    const dataHandlingPayloadHash = await computeHash(dataHandlingPayload, 'SHA-256');
+    const dataHandlingSignature = await sign(new TextEncoder().encode(dataHandlingPayloadHash));
+    const dataHandlingReceipt = {
+      envelope_version: '1',
+      envelope_type: 'data_handling_receipt',
+      payload: dataHandlingPayload,
+      payload_hash_b64u: dataHandlingPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: dataHandlingSignature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:02.000Z',
+    };
+
+    const egressCanonicalPolicy = {
+      policy_version: '1',
+      proofed_mode: true,
+      clawproxy_url: 'https://clawproxy.example',
+      allowed_proxy_destinations: ['clawproxy.example'],
+      allowed_child_destinations: ['127.0.0.1', 'localhost'],
+      direct_provider_access_blocked: true,
+    };
+    const egressPolicyHash = await computeHash(egressCanonicalPolicy, 'SHA-256');
+    const egressPayload = {
+      receipt_version: '1',
+      receipt_id: 'epr_policy_approval_binding_1',
+      policy_version: '1',
+      policy_hash_b64u: egressPolicyHash,
+      effective_policy_hash_b64u: boundEffectivePolicyHash,
+      proofed_mode: true,
+      clawproxy_url: 'https://clawproxy.example',
+      allowed_proxy_destinations: ['clawproxy.example'],
+      allowed_child_destinations: ['127.0.0.1', 'localhost'],
+      direct_provider_access_blocked: true,
+      blocked_attempt_count: 0,
+      blocked_attempts_observed: false,
+      hash_algorithm: 'SHA-256',
+      agent_did: did,
+      timestamp: '2026-03-20T00:00:02.000Z',
+      binding: {
+        run_id: 'run_policy_approval_binding_1',
+        event_hash_b64u: eventHash,
+      },
+    };
+    const egressPayloadHash = await computeHash(egressPayload, 'SHA-256');
+    const egressSignature = await sign(new TextEncoder().encode(egressPayloadHash));
+    const egressPolicyReceipt = {
+      envelope_version: '1',
+      envelope_type: 'egress_policy_receipt',
+      payload: egressPayload,
+      payload_hash_b64u: egressPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: egressSignature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:02.000Z',
+    };
+
+    const payload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_policy_binding_fail_approval_event_binding',
+      agent_did: did,
+      event_chain: [
+        {
+          ...eventHeader,
+          event_hash_b64u: eventHash,
+        },
+      ],
+      metadata: {
+        policy_binding: {
+          binding_version: '1',
+          effective_policy_hash_b64u: boundEffectivePolicyHash,
+          effective_policy_snapshot: policySnapshot,
+          signed_policy_bundle_envelope: signedPolicyBundleEnvelope,
+        },
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: egressPolicyReceipt,
+        },
+        data_handling: {
+          policy_version: 'prv.dlp.v1',
+          effective_policy_hash_b64u: boundEffectivePolicyHash,
+          receipts: [dataHandlingReceipt],
+        },
+      },
+    };
+
+    const payloadHash = await computeHash(payload, 'SHA-256');
+    const signature = await sign(new TextEncoder().encode(payloadHash));
+    const envelope = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:03.000Z',
+    };
+
+    const verification = await verifyProofBundle(envelope);
+    expect(verification.result.status).toBe('INVALID');
+    expect(verification.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(verification.error?.field).toBe(
+      'payload.metadata.data_handling.receipts[0].payload.approval.receipt_envelope.payload.binding.event_hash_b64u',
+    );
   });
 });
 

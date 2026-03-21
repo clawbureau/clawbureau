@@ -509,6 +509,11 @@
                       "pattern": "^[A-Za-z0-9_-]+$",
                       "minLength": 8
                     },
+                    "effective_policy_hash_b64u": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "minLength": 8
+                    },
                     "proofed_mode": { "const": true },
                     "clawproxy_url": {
                       "type": "string",
