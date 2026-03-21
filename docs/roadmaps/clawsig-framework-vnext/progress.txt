@@ -168,3 +168,27 @@ Started: 2026-03-20T22:40:00Z
   - A post-CI follow-up added `schema-runtime-contract` coverage for the new assurance schemas so the clawverify schema drift gate remains fail-closed when marketplace schema contracts evolve.
   - Wave 5 unlocks marketplace submission gating (`AF2-MKT-002`) as the next direct dependency-cleared lane.
 ---
+
+## 2026-03-21T04:26:01Z - Wave 6 reviewer viewer lane merged
+- What was implemented
+  - Closed `AF2-REV-001` via PR #500.
+  - Extended `clawsig prove --export-pack` to emit a portable local/hosted reviewer surface (`viewer/index.html`) plus pre-rendered report HTML while reusing the existing proof/privacy/attestation posture narrative.
+- Validation
+  - `packages/clawverify-cli`: `npm run typecheck`
+  - `packages/clawverify-cli`: `npm run build`
+  - `packages/clawverify-cli`: `npm test`
+- Notes
+  - Reviewer fixes hardened export-pack path validation so manifest entries, file writes, and viewer artifact links all fail closed on unsafe paths and remain deterministic.
+---
+
+## 2026-03-21T04:38:44Z - Wave 6 marketplace submission-gating lane merged
+- What was implemented
+  - Closed `AF2-MKT-002` via PR #501.
+  - Enforced bounty/task assurance requirements at submission time, added deterministic reject/quarantine reason codes and reviewer-visible structured gating details, and reconciled quarantined submissions after proof verification completes.
+- Validation
+  - `services/_archived/clawbounties`: `npm run typecheck`
+  - `git diff --check`
+- Notes
+  - Reviewer fixes made proof-backed privacy/processor/approval gates fail closed while proof verification is still pending and added automatic reconciliation so quarantined submissions can advance into review once verified evidence satisfies the contract.
+  - Wave 6 unlocks payout/review routing by assurance tier (`AF2-MKT-003`) and side-by-side review flows (`AF2-REV-002`, `AF2-REV-003`) as the next dependency-cleared lanes.
+---
