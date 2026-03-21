@@ -119,6 +119,28 @@ function extractRequesterDid(claim: AcceptBountyResponse): string | undefined {
   return requesterDid;
 }
 
+function formatAssuranceSummary(claim: AcceptBountyResponse): string | null {
+  const requirements = claim.assurance_requirements;
+  if (!requirements) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (requirements.required_assurance_level) {
+    parts.push(`tier=${requirements.required_assurance_level}`);
+  }
+  if (requirements.required_privacy_posture) {
+    parts.push(`privacy=${requirements.required_privacy_posture}`);
+  }
+  if (requirements.required_processors && requirements.required_processors.length > 0) {
+    parts.push(`processors=${requirements.required_processors.join(',')}`);
+  }
+  if (requirements.approval_policy) {
+    parts.push(`approval=${requirements.approval_policy}`);
+  }
+  return parts.length > 0 ? parts.join(' | ') : null;
+}
+
 function emitError(
   jsonMode: boolean,
   code: string,
@@ -426,6 +448,10 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
     process.stdout.write(`  Worker DID: ${workerDid}\n`);
     process.stdout.write(`  Marketplace: ${marketplace}\n`);
     process.stdout.write(`  Status: ${claim.status}\n`);
+    const assuranceSummary = formatAssuranceSummary(claim);
+    if (assuranceSummary) {
+      process.stdout.write(`  Assurance requirements: ${assuranceSummary}\n`);
+    }
     process.stdout.write(`  Saved context: ${savedConfigPath}\n`);
     process.stdout.write('\nNext actions:\n');
     for (const action of nextActions) {

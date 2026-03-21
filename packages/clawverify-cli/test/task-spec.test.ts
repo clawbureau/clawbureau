@@ -16,6 +16,13 @@ const validTaskSpec = {
     max_files_changed: 20,
     forbidden_patterns: ['rm -rf'],
     required_proof_tier: 'gateway',
+    assurance_requirements: {
+      version: '1',
+      required_assurance_level: 'gateway',
+      required_privacy_posture: 'caution',
+      required_processors: ['openai', 'anthropic'],
+      approval_policy: 'human_approval_receipt',
+    },
   },
   deliverables: ['proof_bundle', 'did_signature'],
 } as const;
@@ -70,6 +77,36 @@ describe('parseTaskSpecV1', () => {
       {
         path: 'task_spec.constraints.forbidden_patterns[0]',
         message: 'must be at most 256 characters',
+      },
+    ]));
+  });
+
+  it('rejects unsupported assurance requirement sets', () => {
+    const result = parseTaskSpecV1({
+      ...validTaskSpec,
+      constraints: {
+        ...validTaskSpec.constraints,
+        assurance_requirements: {
+          version: '1',
+          required_processors: ['OpenAI'],
+          unsupported: true,
+        },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error('Expected invalid task spec');
+    }
+
+    expect(result.issues).toEqual(expect.arrayContaining([
+      {
+        path: 'task_spec.constraints.assurance_requirements',
+        message: 'unexpected property: unsupported',
+      },
+      {
+        path: 'task_spec.constraints.assurance_requirements.required_processors[0]',
+        message: 'must match ^[a-z0-9][a-z0-9._:-]{0,119}$',
       },
     ]));
   });

@@ -394,6 +394,66 @@ describe('DCP-003: bounty schema minimum_proof_tier', () => {
   });
 });
 
+describe('AF2-MKT-001: assurance requirement schema contract', () => {
+  it('bounty and task schemas expose strict assurance requirement contracts', async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+
+    const bountySchema = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../packages/schema/bounties/bounty.v2.json'), 'utf8')
+    );
+    const postSchema = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../packages/schema/bounties/post_bounty_request.v2.json'), 'utf8')
+    );
+    const taskSpecSchema = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../packages/schema/bounties/task_spec.v1.json'), 'utf8')
+    );
+
+    const topLevelContracts = [
+      bountySchema.properties?.assurance_requirements,
+      postSchema.properties?.assurance_requirements,
+    ];
+
+    for (const contract of topLevelContracts) {
+      expect(contract?.required).toEqual(expect.arrayContaining(['version']));
+      expect(contract?.additionalProperties).toBe(false);
+      expect(contract?.anyOf).toHaveLength(4);
+      expect(contract?.properties?.required_assurance_level?.enum).toEqual([
+        'none',
+        'gateway',
+        'sandbox',
+      ]);
+      expect(contract?.properties?.required_privacy_posture?.enum).toEqual([
+        'good',
+        'caution',
+        'action',
+      ]);
+      expect(contract?.properties?.approval_policy?.enum).toEqual([
+        'none',
+        'human_approval_receipt',
+      ]);
+      expect(contract?.properties?.required_processors?.items?.pattern).toBe(
+        '^[a-z0-9][a-z0-9._:-]{0,119}$'
+      );
+    }
+
+    const taskContract =
+      taskSpecSchema.properties?.constraints?.properties?.assurance_requirements;
+    expect(taskContract?.required).toEqual(expect.arrayContaining(['version']));
+    expect(taskContract?.additionalProperties).toBe(false);
+    expect(taskContract?.anyOf).toHaveLength(4);
+    expect(taskContract?.properties?.required_assurance_level?.enum).toEqual([
+      'none',
+      'gateway',
+      'sandbox',
+    ]);
+    expect(taskContract?.properties?.approval_policy?.enum).toEqual([
+      'none',
+      'human_approval_receipt',
+    ]);
+  });
+});
+
 // SKL-004: RunSummary schema type addition
 describe('SKL-004: RunSummary schema type', () => {
   it('packages/schema exports RunSummary type definition', async () => {

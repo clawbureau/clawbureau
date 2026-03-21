@@ -1,4 +1,8 @@
 import type {
+  AssuranceApprovalPolicy,
+  AssurancePrivacyPosture,
+  AssuranceRequiredLevel,
+  AssuranceRequirementsV1,
   RequiredProofTier,
   TaskDeliverable,
   TaskSpecV1,
@@ -12,8 +16,14 @@ const MAX_COMMAND_LENGTH = 512;
 const MAX_TIMEOUT_SECONDS = 86_400;
 const MAX_FILES_CHANGED = 100_000;
 const MAX_FORBIDDEN_PATTERN_LENGTH = 256;
+const MAX_REQUIRED_PROCESSORS = 32;
+const MAX_REQUIRED_PROCESSOR_LENGTH = 120;
 const REQUIRED_PROOF_TIERS: ReadonlySet<RequiredProofTier> = new Set(['self', 'gateway', 'sandbox']);
 const DELIVERABLES: ReadonlySet<TaskDeliverable> = new Set(['pr', 'proof_bundle', 'did_signature']);
+const ASSURANCE_REQUIRED_LEVELS: ReadonlySet<AssuranceRequiredLevel> = new Set(['none', 'gateway', 'sandbox']);
+const ASSURANCE_PRIVACY_POSTURES: ReadonlySet<AssurancePrivacyPosture> = new Set(['good', 'caution', 'action']);
+const ASSURANCE_APPROVAL_POLICIES: ReadonlySet<AssuranceApprovalPolicy> = new Set(['none', 'human_approval_receipt']);
+const ASSURANCE_REQUIRED_PROCESSOR_RE = /^[a-z0-9][a-z0-9._:-]{0,119}$/;
 
 export interface TaskSpecValidationIssue {
   path: string;
@@ -135,6 +145,144 @@ function parsePositiveInteger(
   return parsed;
 }
 
+function parseAssuranceRequirementsV1(
+  value: unknown,
+  path: string,
+  issues: TaskSpecValidationIssue[],
+): AssuranceRequirementsV1 | undefined {
+  if (!isRecord(value)) {
+    pushIssue(issues, path, 'must be an object');
+    return undefined;
+  }
+
+  rejectUnknownKeys(
+    issues,
+    value,
+    new Set([
+      'version',
+      'required_assurance_level',
+      'required_privacy_posture',
+      'required_processors',
+      'approval_policy',
+    ]),
+    path,
+  );
+
+  if (value.version !== '1') {
+    pushIssue(issues, `${path}.version`, 'must be "1"');
+  }
+
+  let requiredAssuranceLevel: AssuranceRequiredLevel | undefined;
+  if (value.required_assurance_level !== undefined) {
+    const levelRaw = value.required_assurance_level;
+    if (typeof levelRaw !== 'string') {
+      pushIssue(issues, `${path}.required_assurance_level`, 'must be a string');
+    } else if (!ASSURANCE_REQUIRED_LEVELS.has(levelRaw as AssuranceRequiredLevel)) {
+      pushIssue(issues, `${path}.required_assurance_level`, 'must be one of: none, gateway, sandbox');
+    } else {
+      requiredAssuranceLevel = levelRaw as AssuranceRequiredLevel;
+    }
+  }
+
+  let requiredPrivacyPosture: AssurancePrivacyPosture | undefined;
+  if (value.required_privacy_posture !== undefined) {
+    const postureRaw = value.required_privacy_posture;
+    if (typeof postureRaw !== 'string') {
+      pushIssue(issues, `${path}.required_privacy_posture`, 'must be a string');
+    } else if (!ASSURANCE_PRIVACY_POSTURES.has(postureRaw as AssurancePrivacyPosture)) {
+      pushIssue(issues, `${path}.required_privacy_posture`, 'must be one of: good, caution, action');
+    } else {
+      requiredPrivacyPosture = postureRaw as AssurancePrivacyPosture;
+    }
+  }
+
+  let requiredProcessors: string[] | undefined;
+  if (value.required_processors !== undefined) {
+    if (!Array.isArray(value.required_processors)) {
+      pushIssue(issues, `${path}.required_processors`, 'must be an array');
+    } else {
+      if (value.required_processors.length === 0) {
+        pushIssue(issues, `${path}.required_processors`, 'must have at least 1 item');
+      }
+      if (value.required_processors.length > MAX_REQUIRED_PROCESSORS) {
+        pushIssue(
+          issues,
+          `${path}.required_processors`,
+          `must have at most ${MAX_REQUIRED_PROCESSORS} items`,
+        );
+      }
+
+      const parsed: string[] = [];
+      const seen = new Set<string>();
+      for (let i = 0; i < value.required_processors.length; i += 1) {
+        const itemPath = `${path}.required_processors[${i}]`;
+        const raw = value.required_processors[i];
+        if (typeof raw !== 'string') {
+          pushIssue(issues, itemPath, 'must be a string');
+          continue;
+        }
+
+        const trimmed = raw.trim();
+        if (!trimmed) {
+          pushIssue(issues, itemPath, 'must not be empty');
+          continue;
+        }
+        if (trimmed.length > MAX_REQUIRED_PROCESSOR_LENGTH) {
+          pushIssue(issues, itemPath, `must be at most ${MAX_REQUIRED_PROCESSOR_LENGTH} characters`);
+          continue;
+        }
+        if (!ASSURANCE_REQUIRED_PROCESSOR_RE.test(trimmed)) {
+          pushIssue(issues, itemPath, 'must match ^[a-z0-9][a-z0-9._:-]{0,119}$');
+          continue;
+        }
+        if (seen.has(trimmed)) {
+          pushIssue(issues, itemPath, `duplicate processor: ${trimmed}`);
+          continue;
+        }
+        seen.add(trimmed);
+        parsed.push(trimmed);
+      }
+
+      requiredProcessors = parsed;
+    }
+  }
+
+  let approvalPolicy: AssuranceApprovalPolicy | undefined;
+  if (value.approval_policy !== undefined) {
+    const policyRaw = value.approval_policy;
+    if (typeof policyRaw !== 'string') {
+      pushIssue(issues, `${path}.approval_policy`, 'must be a string');
+    } else if (!ASSURANCE_APPROVAL_POLICIES.has(policyRaw as AssuranceApprovalPolicy)) {
+      pushIssue(issues, `${path}.approval_policy`, 'must be one of: none, human_approval_receipt');
+    } else {
+      approvalPolicy = policyRaw as AssuranceApprovalPolicy;
+    }
+  }
+
+  if (
+    requiredAssuranceLevel === undefined
+    && requiredPrivacyPosture === undefined
+    && requiredProcessors === undefined
+    && approvalPolicy === undefined
+  ) {
+    pushIssue(
+      issues,
+      path,
+      'must declare at least one requirement: required_assurance_level, required_privacy_posture, required_processors, approval_policy',
+    );
+  }
+
+  if (issues.length > 0) return undefined;
+
+  return {
+    version: '1',
+    ...(requiredAssuranceLevel ? { required_assurance_level: requiredAssuranceLevel } : {}),
+    ...(requiredPrivacyPosture ? { required_privacy_posture: requiredPrivacyPosture } : {}),
+    ...(requiredProcessors ? { required_processors: requiredProcessors } : {}),
+    ...(approvalPolicy ? { approval_policy: approvalPolicy } : {}),
+  };
+}
+
 export function parseTaskSpecV1(input: unknown): TaskSpecValidationResult {
   const issues: TaskSpecValidationIssue[] = [];
   if (!isRecord(input)) {
@@ -217,13 +365,14 @@ export function parseTaskSpecV1(input: unknown): TaskSpecValidationResult {
   let maxFilesChanged: number | undefined;
   let forbiddenPatterns: string[] = [];
   let requiredProofTier: RequiredProofTier | undefined;
+  let assuranceRequirements: AssuranceRequirementsV1 | undefined;
   if (!isRecord(input.constraints)) {
     pushIssue(issues, 'task_spec.constraints', 'must be an object');
   } else {
     rejectUnknownKeys(
       issues,
       input.constraints,
-      new Set(['max_files_changed', 'forbidden_patterns', 'required_proof_tier']),
+      new Set(['max_files_changed', 'forbidden_patterns', 'required_proof_tier', 'assurance_requirements']),
       'task_spec.constraints',
     );
 
@@ -252,6 +401,14 @@ export function parseTaskSpecV1(input: unknown): TaskSpecValidationResult {
       );
     } else {
       requiredProofTier = proofTierRaw as RequiredProofTier;
+    }
+
+    if (input.constraints.assurance_requirements !== undefined) {
+      assuranceRequirements = parseAssuranceRequirementsV1(
+        input.constraints.assurance_requirements,
+        'task_spec.constraints.assurance_requirements',
+        issues,
+      );
     }
   }
 
@@ -317,6 +474,7 @@ export function parseTaskSpecV1(input: unknown): TaskSpecValidationResult {
         max_files_changed: maxFilesChanged,
         forbidden_patterns: forbiddenPatterns,
         required_proof_tier: requiredProofTier,
+        ...(assuranceRequirements ? { assurance_requirements: assuranceRequirements } : {}),
       },
       deliverables,
     },

@@ -7,7 +7,7 @@
  */
 
 import type { WorkerRegistration } from './work-config.js';
-import type { TaskSpecV1 } from './task-spec.generated.js';
+import type { AssuranceRequirementsV1, TaskSpecV1 } from './task-spec.generated.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +31,7 @@ export interface Bounty {
   currency?: string;
   status?: string;
   created_at?: string;
+  assurance_requirements?: AssuranceRequirementsV1;
   /** Catch-all for extra marketplace fields. */
   [key: string]: unknown;
 }
@@ -58,6 +59,7 @@ export interface AcceptBountyResponse {
     currency?: string;
     [key: string]: unknown;
   };
+  assurance_requirements?: AssuranceRequirementsV1;
   task_spec?: TaskSpecV1;
   [key: string]: unknown;
 }
@@ -150,6 +152,170 @@ export function __setFetch(fn: FetchFn): () => void {
 
 function toRecord(input: unknown): Record<string, unknown> | null {
   return input && typeof input === 'object' ? (input as Record<string, unknown>) : null;
+}
+
+const ASSURANCE_REQUIRED_LEVELS = new Set(['none', 'gateway', 'sandbox']);
+const ASSURANCE_PRIVACY_POSTURES = new Set(['good', 'caution', 'action']);
+const ASSURANCE_APPROVAL_POLICIES = new Set(['none', 'human_approval_receipt']);
+const ASSURANCE_REQUIRED_PROCESSOR_RE = /^[a-z0-9][a-z0-9._:-]{0,119}$/;
+
+function normalizeAssuranceRequirements(
+  input: unknown,
+): { ok: true; value: AssuranceRequirementsV1 } | { ok: false; message: string } {
+  const raw = toRecord(input);
+  if (!raw) {
+    return { ok: false, message: 'must be an object' };
+  }
+
+  const allowedKeys = new Set([
+    'version',
+    'required_assurance_level',
+    'required_privacy_posture',
+    'required_processors',
+    'approval_policy',
+  ]);
+  for (const key of Object.keys(raw)) {
+    if (!allowedKeys.has(key)) {
+      return { ok: false, message: `unexpected property: ${key}` };
+    }
+  }
+
+  if (raw.version !== '1') {
+    return { ok: false, message: 'version must be "1"' };
+  }
+
+  let requiredAssuranceLevel: AssuranceRequirementsV1['required_assurance_level'];
+  if (raw.required_assurance_level !== undefined) {
+    if (typeof raw.required_assurance_level !== 'string') {
+      return { ok: false, message: 'required_assurance_level must be a string' };
+    }
+    if (!ASSURANCE_REQUIRED_LEVELS.has(raw.required_assurance_level)) {
+      return { ok: false, message: 'required_assurance_level must be one of: none, gateway, sandbox' };
+    }
+    requiredAssuranceLevel = raw.required_assurance_level as AssuranceRequirementsV1['required_assurance_level'];
+  }
+
+  let requiredPrivacyPosture: AssuranceRequirementsV1['required_privacy_posture'];
+  if (raw.required_privacy_posture !== undefined) {
+    if (typeof raw.required_privacy_posture !== 'string') {
+      return { ok: false, message: 'required_privacy_posture must be a string' };
+    }
+    if (!ASSURANCE_PRIVACY_POSTURES.has(raw.required_privacy_posture)) {
+      return { ok: false, message: 'required_privacy_posture must be one of: good, caution, action' };
+    }
+    requiredPrivacyPosture = raw.required_privacy_posture as AssuranceRequirementsV1['required_privacy_posture'];
+  }
+
+  let requiredProcessors: string[] | undefined;
+  if (raw.required_processors !== undefined) {
+    if (!Array.isArray(raw.required_processors)) {
+      return { ok: false, message: 'required_processors must be an array' };
+    }
+    if (raw.required_processors.length === 0) {
+      return { ok: false, message: 'required_processors must have at least 1 item' };
+    }
+    if (raw.required_processors.length > 32) {
+      return { ok: false, message: 'required_processors must have at most 32 items' };
+    }
+
+    const seen = new Set<string>();
+    const parsed: string[] = [];
+    for (const entry of raw.required_processors) {
+      if (typeof entry !== 'string') {
+        return { ok: false, message: 'required_processors entries must be strings' };
+      }
+      const trimmed = entry.trim();
+      if (!trimmed) {
+        return { ok: false, message: 'required_processors entries must be non-empty strings' };
+      }
+      if (!ASSURANCE_REQUIRED_PROCESSOR_RE.test(trimmed)) {
+        return {
+          ok: false,
+          message: `required_processors entry "${trimmed}" must match ^[a-z0-9][a-z0-9._:-]{0,119}$`,
+        };
+      }
+      if (seen.has(trimmed)) {
+        return { ok: false, message: `required_processors contains duplicate entry "${trimmed}"` };
+      }
+      seen.add(trimmed);
+      parsed.push(trimmed);
+    }
+    requiredProcessors = parsed;
+  }
+
+  let approvalPolicy: AssuranceRequirementsV1['approval_policy'];
+  if (raw.approval_policy !== undefined) {
+    if (typeof raw.approval_policy !== 'string') {
+      return { ok: false, message: 'approval_policy must be a string' };
+    }
+    if (!ASSURANCE_APPROVAL_POLICIES.has(raw.approval_policy)) {
+      return { ok: false, message: 'approval_policy must be one of: none, human_approval_receipt' };
+    }
+    approvalPolicy = raw.approval_policy as AssuranceRequirementsV1['approval_policy'];
+  }
+
+  if (
+    requiredAssuranceLevel === undefined
+    && requiredPrivacyPosture === undefined
+    && requiredProcessors === undefined
+    && approvalPolicy === undefined
+  ) {
+    return {
+      ok: false,
+      message:
+        'must declare at least one requirement: required_assurance_level, required_privacy_posture, required_processors, approval_policy',
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      version: '1',
+      ...(requiredAssuranceLevel ? { required_assurance_level: requiredAssuranceLevel } : {}),
+      ...(requiredPrivacyPosture ? { required_privacy_posture: requiredPrivacyPosture } : {}),
+      ...(requiredProcessors ? { required_processors: requiredProcessors } : {}),
+      ...(approvalPolicy ? { approval_policy: approvalPolicy } : {}),
+    },
+  };
+}
+
+function extractAssuranceRequirements(
+  body: Record<string, unknown>,
+): { ok: true; value?: AssuranceRequirementsV1 } | { ok: false; message: string } {
+  const fromRoot = body.assurance_requirements;
+  const fromMetadata = toRecord(body.metadata)?.assurance_requirements;
+  const source = fromRoot !== undefined ? fromRoot : fromMetadata;
+  if (source === undefined || source === null) {
+    return { ok: true };
+  }
+  const normalized = normalizeAssuranceRequirements(source);
+  if (!normalized.ok) {
+    return normalized;
+  }
+  return { ok: true, value: normalized.value };
+}
+
+function extractReward(
+  body: Record<string, unknown>,
+): { budget?: number; currency?: string } {
+  const reward = toRecord(body.reward);
+  const amountMinor =
+    typeof body.amount_minor === 'string'
+      ? body.amount_minor
+      : typeof reward?.amount_minor === 'string'
+        ? reward.amount_minor
+        : undefined;
+  const currency =
+    typeof body.currency === 'string'
+      ? body.currency
+      : typeof reward?.currency === 'string'
+        ? reward.currency
+        : undefined;
+
+  return {
+    ...(amountMinor && /^\d+$/.test(amountMinor) ? { budget: Number(amountMinor) } : {}),
+    ...(currency ? { currency } : {}),
+  };
 }
 
 function normalizeRegistrationAuth(input: unknown): { mode: string; token: string } | null {
@@ -275,9 +441,24 @@ export async function listBounties(
         ? (body as Record<string, unknown>).bounties as unknown[]
         : [];
 
-    const bounties: Bounty[] = raw.map((item) => {
+    const bounties: Bounty[] = [];
+    for (const item of raw) {
       const r = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
-      return {
+      const assurance = extractAssuranceRequirements(r);
+      if (!assurance.ok) {
+        const bountyId = typeof r.bounty_id === 'string'
+          ? r.bounty_id
+          : typeof r.id === 'string'
+            ? r.id
+            : '(unknown)';
+        return {
+          ok: false,
+          code: 'UNSUPPORTED_ASSURANCE_REQUIREMENTS',
+          message: `Bounty ${bountyId} returned unsupported assurance_requirements: ${assurance.message}`,
+        };
+      }
+
+      bounties.push({
         id: typeof r.id === 'string'
           ? r.id
           : typeof r.bounty_id === 'string'
@@ -286,16 +467,14 @@ export async function listBounties(
         title: typeof r.title === 'string' ? r.title : '',
         ...(typeof r.repo === 'string' ? { repo: r.repo } : {}),
         ...(Array.isArray(r.skills) ? { skills: r.skills.filter((s: unknown) => typeof s === 'string') as string[] } : {}),
-        ...(typeof r.budget === 'number'
-          ? { budget: r.budget }
-          : typeof r.amount_minor === 'string' && /^\d+$/.test(r.amount_minor)
-            ? { budget: Number(r.amount_minor) }
-            : {}),
-        ...(typeof r.currency === 'string' ? { currency: r.currency } : {}),
+        ...(typeof r.budget === 'number' ? { budget: r.budget } : extractReward(r)),
         ...(typeof r.status === 'string' ? { status: r.status } : {}),
         ...(typeof r.created_at === 'string' ? { created_at: r.created_at } : {}),
-      } satisfies Bounty;
-    });
+        ...(typeof r.min_proof_tier === 'string' ? { min_proof_tier: r.min_proof_tier } : {}),
+        ...(typeof r.minimum_proof_tier === 'string' ? { minimum_proof_tier: r.minimum_proof_tier } : {}),
+        ...(assurance.value ? { assurance_requirements: assurance.value } : {}),
+      } satisfies Bounty);
+    }
 
     return { ok: true, bounties };
   } catch {
@@ -444,6 +623,15 @@ export async function acceptBounty(
 
   try {
     const bodyRaw = (await response.json()) as Record<string, unknown>;
+    const assurance = extractAssuranceRequirements(bodyRaw);
+    if (!assurance.ok) {
+      return {
+        ok: false,
+        code: 'UNSUPPORTED_ASSURANCE_REQUIREMENTS',
+        message: `Claim response returned unsupported assurance_requirements: ${assurance.message}`,
+      };
+    }
+
     const claim: AcceptBountyResponse = {
       bounty_id: typeof bodyRaw.bounty_id === 'string' ? bodyRaw.bounty_id : bountyId,
       escrow_id: typeof bodyRaw.escrow_id === 'string' ? bodyRaw.escrow_id : '',
@@ -452,6 +640,7 @@ export async function acceptBounty(
       accepted_at: typeof bodyRaw.accepted_at === 'string' ? bodyRaw.accepted_at : new Date().toISOString(),
       ...(typeof bodyRaw.fee_policy_version === 'string' ? { fee_policy_version: bodyRaw.fee_policy_version } : {}),
       ...(toRecord(bodyRaw.payout) ? { payout: bodyRaw.payout as AcceptBountyResponse['payout'] } : {}),
+      ...(assurance.value ? { assurance_requirements: assurance.value } : {}),
     };
 
     for (const [k, v] of Object.entries(bodyRaw)) {

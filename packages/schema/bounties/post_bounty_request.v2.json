@@ -65,6 +65,50 @@
       "default": "none",
       "description": "Optional requester floor for proof-tier uplift. Submissions without qualifying proof remain at test-pass."
     },
+    "assurance_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "const": "1",
+          "description": "Assurance requirement schema version."
+        },
+        "required_assurance_level": {
+          "type": "string",
+          "enum": ["none", "gateway", "sandbox"],
+          "description": "Minimum marketplace assurance level required by this bounty contract."
+        },
+        "required_privacy_posture": {
+          "type": "string",
+          "enum": ["good", "caution", "action"],
+          "description": "Minimum privacy-posture verdict expected from reviewer-facing prove/export evidence."
+        },
+        "required_processors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,119}$"
+          },
+          "description": "Allowed processor/provider route identifiers (for example: openai, anthropic, google)."
+        },
+        "approval_policy": {
+          "type": "string",
+          "enum": ["none", "human_approval_receipt"],
+          "description": "Approval evidence posture required by this contract."
+        }
+      },
+      "anyOf": [
+        { "required": ["required_assurance_level"] },
+        { "required": ["required_privacy_posture"] },
+        { "required": ["required_processors"] },
+        { "required": ["approval_policy"] }
+      ],
+      "description": "Optional machine-readable assurance/privacy/processor/approval requirements for this bounty."
+    },
     "min_poh_tier": {
       "type": "integer",
       "minimum": 0,
