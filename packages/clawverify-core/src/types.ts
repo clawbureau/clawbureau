@@ -999,12 +999,58 @@ export interface PolicyBindingMetadata {
   signed_policy_bundle_envelope?: SignedEnvelope<SignedPolicyBundlePayload>;
 }
 
+/** AF2-ATT-001: deterministic hash inputs over runner-critical assets. */
+export interface RunnerMeasurementArtifactHashes {
+  preload_hash_b64u: string | null;
+  node_preload_sentinel_hash_b64u: string | null;
+  sentinel_shell_hash_b64u: string | null;
+  sentinel_shell_policy_hash_b64u: string | null;
+  interpose_library_hash_b64u: string | null;
+}
+
+/** AF2-ATT-001: deterministic runner measurement manifest for proofed runs. */
+export interface RunnerMeasurementManifest {
+  manifest_version: '1';
+  runtime: {
+    platform: string;
+    arch: string;
+    node_version: string;
+  };
+  proofed: {
+    proofed_mode: true;
+    clawproxy_url: string;
+    allowed_proxy_destinations: string[];
+    allowed_child_destinations: string[];
+    sentinels: {
+      shell_enabled: boolean;
+      interpose_enabled: boolean;
+      preload_enabled: boolean;
+      fs_enabled: boolean;
+      net_enabled: boolean;
+    };
+  };
+  policy: {
+    effective_policy_hash_b64u?: string;
+  };
+  artifacts: RunnerMeasurementArtifactHashes;
+}
+
+/** AF2-ATT-001: metadata binding for runner measurement manifest + hash. */
+export interface RunnerMeasurementBindingMetadata {
+  binding_version: '1';
+  hash_algorithm: 'SHA-256';
+  manifest_hash_b64u: string;
+  manifest: RunnerMeasurementManifest;
+}
+
 /** Proof bundle metadata with optional harness information */
 export interface ProofBundleMetadata {
   /** Harness metadata identifying the runtime that produced this bundle */
   harness?: HarnessMetadata;
   /** AF2-POL-001/002 policy binding metadata for proofed runs. */
   policy_binding?: PolicyBindingMetadata;
+  /** AF2-ATT-001 deterministic runner measurement foundation for proofed runs. */
+  runner_measurement?: RunnerMeasurementBindingMetadata;
   /** Additional metadata (non-normative) */
   [key: string]: unknown;
 }

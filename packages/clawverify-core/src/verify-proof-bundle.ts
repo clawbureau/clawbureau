@@ -36,6 +36,7 @@ import type {
   CoSignaturePayload,
   RateLimitClaim,
   PolicyBindingMetadata,
+  RunnerMeasurementBindingMetadata,
   SignedPolicyBundlePayload,
   SignedPolicyLayer,
   SignedPolicyStatement,
@@ -455,6 +456,24 @@ interface PolicyBindingValidationFailure {
 
 interface PolicyBindingValidationSuccess {
   ok: true;
+}
+
+function isCanonicalHostList(value: unknown): value is string[] {
+  if (!Array.isArray(value)) return false;
+  let previous: string | null = null;
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    if (typeof entry !== 'string') return false;
+    const normalized = entry.trim().toLowerCase();
+    if (normalized.length === 0 || normalized !== entry) return false;
+    if (seen.has(normalized)) return false;
+    if (previous !== null && normalized.localeCompare(previous) <= 0) return false;
+    seen.add(normalized);
+    previous = normalized;
+  }
+
+  return true;
 }
 
 function canonicalizeForHash(value: unknown): unknown {
@@ -1222,6 +1241,277 @@ async function validatePolicyBindingMetadata(args: {
         field: 'payload.metadata.sentinels.egress_policy_receipt.payload.binding.event_hash_b64u',
       };
     }
+  }
+
+  return { ok: true };
+}
+
+async function validateRunnerMeasurementMetadata(args: {
+  metadataRecord: Record<string, unknown> | null;
+}): Promise<PolicyBindingValidationSuccess | PolicyBindingValidationFailure> {
+  const bindingRaw = args.metadataRecord?.runner_measurement;
+  if (bindingRaw === undefined) {
+    return { ok: true };
+  }
+  if (!isObjectRecord(bindingRaw)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement must be an object when present',
+      field: 'payload.metadata.runner_measurement',
+    };
+  }
+
+  const binding = bindingRaw as unknown as RunnerMeasurementBindingMetadata;
+  if (binding.binding_version !== '1') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement.binding_version must be "1"',
+      field: 'payload.metadata.runner_measurement.binding_version',
+    };
+  }
+  if (binding.hash_algorithm !== 'SHA-256') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement.hash_algorithm must be SHA-256',
+      field: 'payload.metadata.runner_measurement.hash_algorithm',
+    };
+  }
+  if (
+    typeof binding.manifest_hash_b64u !== 'string' ||
+    !isValidBase64Url(binding.manifest_hash_b64u)
+  ) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement.manifest_hash_b64u must be base64url',
+      field: 'payload.metadata.runner_measurement.manifest_hash_b64u',
+    };
+  }
+  if (!isObjectRecord(binding.manifest)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement.manifest must be an object',
+      field: 'payload.metadata.runner_measurement.manifest',
+    };
+  }
+
+  const manifest = binding.manifest;
+  if (manifest.manifest_version !== '1') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement.manifest.manifest_version must be "1"',
+      field: 'payload.metadata.runner_measurement.manifest.manifest_version',
+    };
+  }
+  if (
+    !isObjectRecord(manifest.runtime) ||
+    !isNonEmptyString(manifest.runtime.platform) ||
+    !isNonEmptyString(manifest.runtime.arch) ||
+    !isNonEmptyString(manifest.runtime.node_version)
+  ) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.runner_measurement.manifest.runtime must include non-empty platform/arch/node_version',
+      field: 'payload.metadata.runner_measurement.manifest.runtime',
+    };
+  }
+  if (!isObjectRecord(manifest.proofed)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement.manifest.proofed must be an object',
+      field: 'payload.metadata.runner_measurement.manifest.proofed',
+    };
+  }
+  if (manifest.proofed.proofed_mode !== true) {
+    return {
+      ok: false,
+      code: 'RECEIPT_BINDING_MISMATCH',
+      message: 'payload.metadata.runner_measurement.manifest.proofed.proofed_mode must be true',
+      field: 'payload.metadata.runner_measurement.manifest.proofed.proofed_mode',
+    };
+  }
+  if (
+    typeof manifest.proofed.clawproxy_url !== 'string' ||
+    manifest.proofed.clawproxy_url.length === 0
+  ) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.runner_measurement.manifest.proofed.clawproxy_url must be non-empty',
+      field: 'payload.metadata.runner_measurement.manifest.proofed.clawproxy_url',
+    };
+  }
+  try {
+    const parsedUrl = new URL(manifest.proofed.clawproxy_url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.metadata.runner_measurement.manifest.proofed.clawproxy_url must use http/https',
+        field: 'payload.metadata.runner_measurement.manifest.proofed.clawproxy_url',
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.runner_measurement.manifest.proofed.clawproxy_url must be an absolute URL',
+      field: 'payload.metadata.runner_measurement.manifest.proofed.clawproxy_url',
+    };
+  }
+  if (!isCanonicalHostList(manifest.proofed.allowed_proxy_destinations)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.runner_measurement.manifest.proofed.allowed_proxy_destinations must be a lowercase sorted unique host list',
+      field: 'payload.metadata.runner_measurement.manifest.proofed.allowed_proxy_destinations',
+    };
+  }
+  if (!isCanonicalHostList(manifest.proofed.allowed_child_destinations)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.runner_measurement.manifest.proofed.allowed_child_destinations must be a lowercase sorted unique host list',
+      field: 'payload.metadata.runner_measurement.manifest.proofed.allowed_child_destinations',
+    };
+  }
+  if (
+    !isObjectRecord(manifest.proofed.sentinels) ||
+    typeof manifest.proofed.sentinels.shell_enabled !== 'boolean' ||
+    typeof manifest.proofed.sentinels.interpose_enabled !== 'boolean' ||
+    typeof manifest.proofed.sentinels.preload_enabled !== 'boolean' ||
+    typeof manifest.proofed.sentinels.fs_enabled !== 'boolean' ||
+    typeof manifest.proofed.sentinels.net_enabled !== 'boolean'
+  ) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.runner_measurement.manifest.proofed.sentinels must include boolean sentinel flags',
+      field: 'payload.metadata.runner_measurement.manifest.proofed.sentinels',
+    };
+  }
+  if (!isObjectRecord(manifest.policy)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement.manifest.policy must be an object',
+      field: 'payload.metadata.runner_measurement.manifest.policy',
+    };
+  }
+  if (
+    manifest.policy.effective_policy_hash_b64u !== undefined &&
+    (typeof manifest.policy.effective_policy_hash_b64u !== 'string' ||
+      !isValidBase64Url(manifest.policy.effective_policy_hash_b64u))
+  ) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.metadata.runner_measurement.manifest.policy.effective_policy_hash_b64u must be base64url when present',
+      field: 'payload.metadata.runner_measurement.manifest.policy.effective_policy_hash_b64u',
+    };
+  }
+  if (!isObjectRecord(manifest.artifacts)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.metadata.runner_measurement.manifest.artifacts must be an object',
+      field: 'payload.metadata.runner_measurement.manifest.artifacts',
+    };
+  }
+
+  const artifactFields = [
+    'preload_hash_b64u',
+    'node_preload_sentinel_hash_b64u',
+    'sentinel_shell_hash_b64u',
+    'sentinel_shell_policy_hash_b64u',
+    'interpose_library_hash_b64u',
+  ] as const;
+  for (const field of artifactFields) {
+    const value = manifest.artifacts[field];
+    if (value !== null && (typeof value !== 'string' || !isValidBase64Url(value))) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `payload.metadata.runner_measurement.manifest.artifacts.${field} must be base64url or null`,
+        field: `payload.metadata.runner_measurement.manifest.artifacts.${field}`,
+      };
+    }
+  }
+  if (
+    manifest.proofed.sentinels.preload_enabled &&
+    (!manifest.artifacts.preload_hash_b64u || !manifest.artifacts.node_preload_sentinel_hash_b64u)
+  ) {
+    return {
+      ok: false,
+      code: 'RECEIPT_BINDING_MISMATCH',
+      message:
+        'runner measurement preload-enabled manifests must include preload and node-preload artifact hashes',
+      field: 'payload.metadata.runner_measurement.manifest.artifacts.preload_hash_b64u',
+    };
+  }
+  if (
+    manifest.proofed.sentinels.shell_enabled &&
+    (!manifest.artifacts.sentinel_shell_hash_b64u ||
+      !manifest.artifacts.sentinel_shell_policy_hash_b64u)
+  ) {
+    return {
+      ok: false,
+      code: 'RECEIPT_BINDING_MISMATCH',
+      message:
+        'runner measurement shell-enabled manifests must include sentinel shell artifact hashes',
+      field: 'payload.metadata.runner_measurement.manifest.artifacts.sentinel_shell_hash_b64u',
+    };
+  }
+  if (
+    manifest.proofed.sentinels.interpose_enabled &&
+    !manifest.artifacts.interpose_library_hash_b64u
+  ) {
+    return {
+      ok: false,
+      code: 'RECEIPT_BINDING_MISMATCH',
+      message:
+        'runner measurement interpose-enabled manifests must include interpose library hash',
+      field: 'payload.metadata.runner_measurement.manifest.artifacts.interpose_library_hash_b64u',
+    };
+  }
+
+  const policyBinding = args.metadataRecord?.policy_binding;
+  if (isObjectRecord(policyBinding) && isNonEmptyString(policyBinding.effective_policy_hash_b64u)) {
+    if (manifest.policy.effective_policy_hash_b64u !== policyBinding.effective_policy_hash_b64u) {
+      return {
+        ok: false,
+        code: 'RECEIPT_BINDING_MISMATCH',
+        message:
+          'runner measurement policy hash must match payload.metadata.policy_binding.effective_policy_hash_b64u',
+        field: 'payload.metadata.runner_measurement.manifest.policy.effective_policy_hash_b64u',
+      };
+    }
+  }
+
+  const computedManifestHash = await computeHash(manifest, 'SHA-256');
+  if (computedManifestHash !== binding.manifest_hash_b64u) {
+    return {
+      ok: false,
+      code: 'HASH_MISMATCH',
+      message:
+        'payload.metadata.runner_measurement.manifest_hash_b64u does not match manifest',
+      field: 'payload.metadata.runner_measurement.manifest_hash_b64u',
+    };
   }
 
   return { ok: true };
@@ -4198,6 +4488,24 @@ export async function verifyProofBundle(
         code: policyBindingValidation.code,
         message: policyBindingValidation.message,
         field: policyBindingValidation.field,
+      },
+    };
+  }
+
+  const runnerMeasurementValidation = await validateRunnerMeasurementMetadata({
+    metadataRecord: mdRecord,
+  });
+  if (!runnerMeasurementValidation.ok) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: runnerMeasurementValidation.message,
+        verified_at: now,
+      },
+      error: {
+        code: runnerMeasurementValidation.code,
+        message: runnerMeasurementValidation.message,
+        field: runnerMeasurementValidation.field,
       },
     };
   }

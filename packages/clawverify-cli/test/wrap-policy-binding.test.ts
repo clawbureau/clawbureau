@@ -11,6 +11,7 @@ import {
   computeSignedPolicyLayerHashB64u,
 } from '../../clawsig-sdk/src/policy-resolution.js';
 import {
+  hashJsonB64u,
   didFromPublicKey,
   generateKeyPair,
   signEd25519,
@@ -140,12 +141,40 @@ describe('AF2-POL wrap policy binding surface', () => {
                 };
               };
             };
+            runner_measurement?: {
+              binding_version?: string;
+              hash_algorithm?: string;
+              manifest_hash_b64u?: string;
+              manifest?: {
+                proofed?: {
+                  proofed_mode?: boolean;
+                  sentinels?: {
+                    shell_enabled?: boolean;
+                    interpose_enabled?: boolean;
+                  };
+                };
+                policy?: {
+                  effective_policy_hash_b64u?: string;
+                };
+                artifacts?: {
+                  preload_hash_b64u?: string | null;
+                  node_preload_sentinel_hash_b64u?: string | null;
+                  sentinel_shell_hash_b64u?: string | null;
+                  sentinel_shell_policy_hash_b64u?: string | null;
+                  interpose_library_hash_b64u?: string | null;
+                };
+              };
+            };
           };
         };
       };
 
       const binding = proofBundle.payload.metadata?.policy_binding;
       const egress = proofBundle.payload.metadata?.sentinels?.egress_policy_receipt?.payload;
+      const runnerMeasurement = proofBundle.payload.metadata?.runner_measurement;
+      const runnerManifestHash = runnerMeasurement?.manifest
+        ? await hashJsonB64u(runnerMeasurement.manifest)
+        : null;
 
       expect(binding?.binding_version).toBe('1');
       expect(binding?.effective_policy_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -156,6 +185,64 @@ describe('AF2-POL wrap policy binding surface', () => {
       expect(egress?.policy_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
       expect(egress?.effective_policy_hash_b64u).toBe(binding?.effective_policy_hash_b64u);
       expect(egress?.policy_hash_b64u).not.toBe(binding?.effective_policy_hash_b64u);
+      expect(runnerMeasurement?.binding_version).toBe('1');
+      expect(runnerMeasurement?.hash_algorithm).toBe('SHA-256');
+      expect(runnerMeasurement?.manifest?.proofed?.proofed_mode).toBe(true);
+      expect(runnerMeasurement?.manifest?.policy?.effective_policy_hash_b64u)
+        .toBe(binding?.effective_policy_hash_b64u);
+      expect(runnerMeasurement?.manifest_hash_b64u).toBe(runnerManifestHash);
+      expect(runnerMeasurement?.manifest?.artifacts?.preload_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(runnerMeasurement?.manifest?.artifacts?.node_preload_sentinel_hash_b64u)
+        .toMatch(/^[A-Za-z0-9_-]+$/);
+      if (runnerMeasurement?.manifest?.proofed?.sentinels?.shell_enabled) {
+        expect(runnerMeasurement?.manifest?.artifacts?.sentinel_shell_hash_b64u)
+          .toMatch(/^[A-Za-z0-9_-]+$/);
+        expect(runnerMeasurement?.manifest?.artifacts?.sentinel_shell_policy_hash_b64u)
+          .toMatch(/^[A-Za-z0-9_-]+$/);
+      }
+      if (!runnerMeasurement?.manifest?.proofed?.sentinels?.interpose_enabled) {
+        expect(runnerMeasurement?.manifest?.artifacts?.interpose_library_hash_b64u).toBeNull();
+      }
+
+      await execFileAsync(
+        process.execPath,
+        [
+          CLI_PATH,
+          'wrap',
+          '--no-publish',
+          '--',
+          process.execPath,
+          '-e',
+          "console.log('policy-binding-wrap-test')",
+        ],
+        {
+          cwd: workdir,
+          env: {
+            ...process.env,
+            CLAWSIG_DISABLE_INTERPOSE: '1',
+            CLAWSIG_PROOFED: '1',
+            CLAWSIG_POLICY_ORG_ID: 'acme',
+            CLAWSIG_POLICY_PROJECT_ID: 'proj-a',
+            CLAWSIG_POLICY_TASK_ID: 'task-9',
+          },
+          timeout: 60_000,
+        },
+      );
+
+      const secondBundle = JSON.parse(
+        await readFile(join(clawsigDir, 'proof_bundle.json'), 'utf-8')
+      ) as {
+        payload?: {
+          metadata?: {
+            runner_measurement?: {
+              manifest_hash_b64u?: string;
+            };
+          };
+        };
+      };
+
+      expect(secondBundle.payload?.metadata?.runner_measurement?.manifest_hash_b64u)
+        .toBe(runnerMeasurement?.manifest_hash_b64u);
     } finally {
       await rm(workdir, { recursive: true, force: true });
     }
