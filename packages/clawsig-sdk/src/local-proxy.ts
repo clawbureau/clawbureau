@@ -146,17 +146,24 @@ interface ProcessorPolicyState {
 
 type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
 
-type DataHandlingClassId =
-  | 'secret'
-  | 'credential'
-  | 'pii_email'
-  | 'customer_restricted';
+type DataHandlingClassId = string;
+type DataHandlingRuleSource = 'builtin' | 'custom';
+
+interface DataHandlingPolicyEvidence {
+  taxonomy_version: 'prv.dlp.taxonomy.v2';
+  ruleset_hash_b64u: string;
+  built_in_rule_count: number;
+  custom_rule_count: number;
+}
 
 interface DataHandlingRule {
+  source: DataHandlingRuleSource;
   class_id: DataHandlingClassId;
   rule_id: string;
   action: DataHandlingAction;
   pattern: RegExp;
+  pattern_source: string;
+  pattern_flags: string;
   redaction_token?: string;
 }
 
@@ -171,6 +178,7 @@ interface DataHandlingDecision {
   action: DataHandlingAction;
   reason_code: string;
   classes: DataHandlingClassMatch[];
+  policy: DataHandlingPolicyEvidence | null;
   approval_required: boolean;
   approval_satisfied: boolean;
   redaction_applied: boolean;
@@ -183,6 +191,7 @@ interface DataHandlingReceiptPayload {
   receipt_version: '1';
   receipt_id: string;
   policy_version: 'prv.dlp.v1';
+  policy?: DataHandlingPolicyEvidence;
   run_id: string;
   provider: string;
   action: DataHandlingAction;
@@ -614,36 +623,328 @@ function randomUUID(): string {
 }
 
 const DLP_POLICY_VERSION = 'prv.dlp.v1' as const;
+const DLP_TAXONOMY_VERSION = 'prv.dlp.taxonomy.v2' as const;
 const DLP_APPROVAL_HEADER = 'x-clawsig-approval-token';
 const DLP_APPROVAL_TOKEN_ENV = 'CLAWSIG_DLP_APPROVAL_TOKEN';
+const DLP_CUSTOM_RULES_ENV = 'CLAWSIG_DLP_CUSTOM_RULES_JSON';
 
-const DLP_RULES: readonly DataHandlingRule[] = [
+interface DataHandlingRuleDefinition {
+  class_id: string;
+  rule_id: string;
+  action: DataHandlingAction;
+  pattern: string;
+  flags: string;
+  redaction_token?: string;
+}
+
+interface DataHandlingCustomRuleInput {
+  class_id: string;
+  action: DataHandlingAction;
+  pattern: string;
+  flags?: string;
+  redaction_token?: string;
+  rule_id?: string;
+}
+
+interface DataHandlingPolicyConfig extends DataHandlingPolicyEvidence {
+  policy_version: typeof DLP_POLICY_VERSION;
+  rules: readonly DataHandlingRule[];
+}
+
+function isDataHandlingAction(value: unknown): value is DataHandlingAction {
+  return (
+    value === 'allow' ||
+    value === 'redact' ||
+    value === 'block' ||
+    value === 'require_approval'
+  );
+}
+
+const DLP_CLASS_ID_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+const DLP_CUSTOM_RULE_ID_PATTERN = /^prv\.dlp\.custom\.[a-z0-9._-]+\.[A-Za-z0-9_-]{8,}\.v[0-9]+$/;
+const DLP_RULE_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
+const DLP_ALLOWED_REGEX_FLAGS = ['g', 'i', 'm', 's', 'u', 'y'] as const;
+
+const DLP_BUILTIN_RULE_DEFINITIONS: readonly DataHandlingRuleDefinition[] = [
   {
-    class_id: 'secret',
+    class_id: 'secret.api_key',
     rule_id: 'prv.dlp.secret.api_key.v1',
     action: 'redact',
-    pattern: /\b(sk-(?:proj-)?[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,})\b/g,
+    pattern: '\\b(sk-(?:proj-)?[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,})\\b',
+    flags: 'g',
     redaction_token: '[REDACTED_SECRET]',
   },
   {
-    class_id: 'credential',
-    rule_id: 'prv.dlp.credential.inline.v1',
-    action: 'require_approval',
-    pattern: /"(password|passwd|pwd|api[_-]?key|token|secret)"\s*:\s*"[^"]+"/gi,
+    class_id: 'secret.private_key',
+    rule_id: 'prv.dlp.secret.private_key.v1',
+    action: 'block',
+    pattern: '-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----',
+    flags: 'g',
   },
   {
-    class_id: 'pii_email',
+    class_id: 'credential.password',
+    rule_id: 'prv.dlp.credential.password.inline.v1',
+    action: 'require_approval',
+    pattern: '"(password|passwd|pwd|api[_-]?key|token|secret)"\\s*:\\s*"[^"]+"',
+    flags: 'gi',
+  },
+  {
+    class_id: 'credential.session_token',
+    rule_id: 'prv.dlp.credential.session_token.v1',
+    action: 'require_approval',
+    pattern:
+      '"(session[_-]?token|access[_-]?token|refresh[_-]?token|auth[_-]?token|session[_-]?id)"\\s*:\\s*"[^"]+"',
+    flags: 'gi',
+  },
+  {
+    class_id: 'pii.email',
     rule_id: 'prv.dlp.pii.email.v1',
     action: 'allow',
-    pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+    pattern: '\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b',
+    flags: 'gi',
   },
   {
-    class_id: 'customer_restricted',
+    class_id: 'pii.phone',
+    rule_id: 'prv.dlp.pii.phone.v1',
+    action: 'allow',
+    pattern:
+      '\\b(?:\\+?[1-9][0-9]{0,2}[ -]?)?(?:\\([0-9]{3}\\)|[0-9]{3})[ -]?[0-9]{3}[ -]?[0-9]{4}\\b',
+    flags: 'g',
+  },
+  {
+    class_id: 'financial.card_pan',
+    rule_id: 'prv.dlp.financial.card_pan.v1',
+    action: 'redact',
+    pattern: '\\b(?:\\d[ -]*?){13,19}\\b',
+    flags: 'g',
+    redaction_token: '[REDACTED_CARD_PAN]',
+  },
+  {
+    class_id: 'customer.restricted',
     rule_id: 'prv.dlp.customer.restricted.v1',
     action: 'block',
-    pattern: /\b(customer[_-]restricted|customer[_-]confidential|nda[_-]?restricted)\b/gi,
+    pattern: '\\b(customer[_-]restricted|customer[_-]confidential|nda[_-]?restricted)\\b',
+    flags: 'gi',
   },
 ] as const;
+
+function normalizeDataHandlingClassId(raw: string, fieldPath: string): string {
+  const normalized = raw.trim().toLowerCase();
+  if (!DLP_CLASS_ID_PATTERN.test(normalized)) {
+    throw new Error(`${fieldPath} must match ${DLP_CLASS_ID_PATTERN.source}.`);
+  }
+  return normalized;
+}
+
+function normalizeRegexFlags(rawFlags: string | undefined, fieldPath: string): string {
+  const source = (rawFlags ?? '').trim();
+  const seen = new Set<string>();
+  for (const flag of source) {
+    if (!DLP_ALLOWED_REGEX_FLAGS.includes(flag as (typeof DLP_ALLOWED_REGEX_FLAGS)[number])) {
+      throw new Error(`${fieldPath} includes unsupported regex flag "${flag}".`);
+    }
+    seen.add(flag);
+  }
+  seen.add('g');
+  return DLP_ALLOWED_REGEX_FLAGS.filter((flag) => seen.has(flag)).join('');
+}
+
+function buildDataHandlingRule(args: {
+  source: DataHandlingRuleSource;
+  class_id: string;
+  rule_id: string;
+  action: DataHandlingAction;
+  pattern: string;
+  flags: string;
+  redaction_token?: string;
+}): DataHandlingRule {
+  const classId = normalizeDataHandlingClassId(args.class_id, `${args.source}.class_id`);
+  const ruleId = args.rule_id.trim();
+  if (!DLP_RULE_ID_PATTERN.test(ruleId)) {
+    throw new Error(`${args.source}.rule_id contains unsupported characters.`);
+  }
+  const flags = normalizeRegexFlags(args.flags, `${args.source}.flags`);
+
+  let regex: RegExp;
+  try {
+    regex = new RegExp(args.pattern, flags);
+  } catch (err) {
+    throw new Error(
+      `${args.source}.pattern failed to compile: ${
+        err instanceof Error ? err.message : 'unknown error'
+      }`,
+    );
+  }
+
+  return {
+    source: args.source,
+    class_id: classId,
+    rule_id: ruleId,
+    action: args.action,
+    pattern: regex,
+    pattern_source: args.pattern,
+    pattern_flags: flags,
+    ...(args.redaction_token ? { redaction_token: args.redaction_token } : {}),
+  };
+}
+
+async function computeDeterministicCustomRuleId(args: {
+  class_id: string;
+  action: DataHandlingAction;
+  pattern: string;
+  flags: string;
+  redaction_token?: string;
+}): Promise<string> {
+  const canonical = canonicalizeJson({
+    class_id: args.class_id,
+    action: args.action,
+    pattern: args.pattern,
+    flags: args.flags,
+    redaction_token: args.redaction_token ?? null,
+  });
+  const digest = await sha256B64u(new TextEncoder().encode(canonical));
+  return `prv.dlp.custom.${args.class_id}.${digest.slice(0, 16)}.v1`;
+}
+
+async function parseCustomDataHandlingRules(raw: string | undefined): Promise<DataHandlingRule[]> {
+  if (!raw || raw.trim().length === 0) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `${DLP_CUSTOM_RULES_ENV} must be valid JSON: ${
+        err instanceof Error ? err.message : 'unknown error'
+      }`,
+    );
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${DLP_CUSTOM_RULES_ENV} must be a JSON array of custom rules.`);
+  }
+
+  const customRules: DataHandlingRule[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const item = parsed[i];
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      throw new Error(`${DLP_CUSTOM_RULES_ENV}[${i}] must be an object.`);
+    }
+
+    const candidate = item as Partial<DataHandlingCustomRuleInput>;
+    if (typeof candidate.class_id !== 'string' || candidate.class_id.trim().length === 0) {
+      throw new Error(`${DLP_CUSTOM_RULES_ENV}[${i}].class_id must be a non-empty string.`);
+    }
+    if (!isDataHandlingAction(candidate.action)) {
+      throw new Error(`${DLP_CUSTOM_RULES_ENV}[${i}].action is invalid.`);
+    }
+    if (typeof candidate.pattern !== 'string' || candidate.pattern.length === 0) {
+      throw new Error(`${DLP_CUSTOM_RULES_ENV}[${i}].pattern must be a non-empty string.`);
+    }
+
+    const classId = normalizeDataHandlingClassId(
+      candidate.class_id,
+      `${DLP_CUSTOM_RULES_ENV}[${i}].class_id`,
+    );
+    const flags = normalizeRegexFlags(
+      candidate.flags,
+      `${DLP_CUSTOM_RULES_ENV}[${i}].flags`,
+    );
+    const deterministicRuleId = await computeDeterministicCustomRuleId({
+      class_id: classId,
+      action: candidate.action,
+      pattern: candidate.pattern,
+      flags,
+      redaction_token: candidate.redaction_token,
+    });
+    if (!DLP_CUSTOM_RULE_ID_PATTERN.test(deterministicRuleId)) {
+      throw new Error(
+        `${DLP_CUSTOM_RULES_ENV}[${i}] computed deterministic rule id is invalid: ${deterministicRuleId}.`,
+      );
+    }
+
+    if (candidate.rule_id !== undefined) {
+      const providedRuleId = candidate.rule_id.trim();
+      if (!DLP_RULE_ID_PATTERN.test(providedRuleId)) {
+        throw new Error(`${DLP_CUSTOM_RULES_ENV}[${i}].rule_id contains unsupported characters.`);
+      }
+      if (providedRuleId !== deterministicRuleId) {
+        throw new Error(
+          `${DLP_CUSTOM_RULES_ENV}[${i}].rule_id must equal deterministic id ${deterministicRuleId}.`,
+        );
+      }
+    }
+
+    customRules.push(
+      buildDataHandlingRule({
+        source: 'custom',
+        class_id: classId,
+        rule_id: deterministicRuleId,
+        action: candidate.action,
+        pattern: candidate.pattern,
+        flags,
+        redaction_token: candidate.redaction_token,
+      }),
+    );
+  }
+
+  customRules.sort((a, b) => a.rule_id.localeCompare(b.rule_id));
+  const duplicateRuleIds = new Set<string>();
+  for (const rule of customRules) {
+    if (duplicateRuleIds.has(rule.rule_id)) {
+      throw new Error(
+        `${DLP_CUSTOM_RULES_ENV} includes duplicate deterministic rule_id: ${rule.rule_id}.`,
+      );
+    }
+    duplicateRuleIds.add(rule.rule_id);
+  }
+
+  return customRules;
+}
+
+async function computeDataHandlingRulesetHash(rules: readonly DataHandlingRule[]): Promise<string> {
+  const canonical = canonicalizeJson(
+    [...rules]
+      .map((rule) => ({
+        source: rule.source,
+        class_id: rule.class_id,
+        rule_id: rule.rule_id,
+        action: rule.action,
+        pattern: rule.pattern_source,
+        flags: rule.pattern_flags,
+        redaction_token: rule.redaction_token ?? null,
+      }))
+      .sort((a, b) => a.rule_id.localeCompare(b.rule_id)),
+  );
+  return sha256B64u(new TextEncoder().encode(canonical));
+}
+
+async function resolveDataHandlingPolicyConfig(): Promise<DataHandlingPolicyConfig> {
+  const builtinRules = DLP_BUILTIN_RULE_DEFINITIONS.map((rule) =>
+    buildDataHandlingRule({
+      source: 'builtin',
+      class_id: rule.class_id,
+      rule_id: rule.rule_id,
+      action: rule.action,
+      pattern: rule.pattern,
+      flags: rule.flags,
+      redaction_token: rule.redaction_token,
+    }),
+  );
+
+  const customRules = await parseCustomDataHandlingRules(process.env[DLP_CUSTOM_RULES_ENV]);
+  const rules = [...builtinRules, ...customRules];
+  const rulesetHash = await computeDataHandlingRulesetHash(rules);
+
+  return {
+    policy_version: DLP_POLICY_VERSION,
+    taxonomy_version: DLP_TAXONOMY_VERSION,
+    ruleset_hash_b64u: rulesetHash,
+    built_in_rule_count: builtinRules.length,
+    custom_rule_count: customRules.length,
+    rules,
+  };
+}
 
 function cloneRegex(regex: RegExp): RegExp {
   return new RegExp(regex.source, regex.flags);
@@ -674,12 +975,13 @@ async function evaluateDataHandlingPolicy(args: {
   bodyBuffer: Buffer;
   approvalTokenHeader: string | undefined;
   configuredApprovalToken: string | undefined;
+  policyConfig: DataHandlingPolicyConfig;
 }): Promise<DataHandlingDecision> {
   const originalText = args.bodyBuffer.toString('utf-8');
   let redactedText = originalText;
   const classes: DataHandlingClassMatch[] = [];
 
-  for (const rule of DLP_RULES) {
+  for (const rule of args.policyConfig.rules) {
     const matcher = cloneRegex(rule.pattern);
     const matches = originalText.match(matcher);
     const matchCount = matches?.length ?? 0;
@@ -698,6 +1000,12 @@ async function evaluateDataHandlingPolicy(args: {
       redactedText = redactedText.replace(redactor, replacement);
     }
   }
+
+  classes.sort((a, b) => {
+    const classOrder = a.class_id.localeCompare(b.class_id);
+    if (classOrder !== 0) return classOrder;
+    return a.rule_id.localeCompare(b.rule_id);
+  });
 
   const approvalRequired = classes.some((c) => c.action === 'require_approval');
   const configuredApprovalToken = args.configuredApprovalToken?.trim();
@@ -732,6 +1040,12 @@ async function evaluateDataHandlingPolicy(args: {
     action,
     reason_code: 'PRV_DLP_ALLOW',
     classes,
+    policy: {
+      taxonomy_version: args.policyConfig.taxonomy_version,
+      ruleset_hash_b64u: args.policyConfig.ruleset_hash_b64u,
+      built_in_rule_count: args.policyConfig.built_in_rule_count,
+      custom_rule_count: args.policyConfig.custom_rule_count,
+    },
     approval_required: approvalRequired,
     approval_satisfied: approvalSatisfied,
     redaction_applied: redactionApplied,
@@ -1241,6 +1555,15 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
   const dataHandlingReceipts: SignedEnvelope<DataHandlingReceiptPayload>[] = [];
   let plannedPrevHash: string | null = null;
   const configuredApprovalToken = process.env[DLP_APPROVAL_TOKEN_ENV];
+  let dataHandlingPolicyConfig: DataHandlingPolicyConfig | null = null;
+  let dataHandlingPolicyConfigError: string | null = null;
+  try {
+    dataHandlingPolicyConfig = await resolveDataHandlingPolicyConfig();
+  } catch (err) {
+    dataHandlingPolicyConfigError = `Data handling policy config invalid: ${
+      err instanceof Error ? err.message : 'unknown error'
+    }`;
+  }
 
   // RED TEAM FIX #7: Ephemeral run salt for privacy.
   // Generate a 16-byte random salt per run.
@@ -1338,10 +1661,18 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             );
           }
 
+          if (dataHandlingPolicyConfigError) {
+            throw new Error(dataHandlingPolicyConfigError);
+          }
+          if (!dataHandlingPolicyConfig) {
+            throw new Error('Data handling policy config unavailable.');
+          }
+
           const decision = await evaluateDataHandlingPolicy({
             bodyBuffer,
             approvalTokenHeader,
             configuredApprovalToken,
+            policyConfig: dataHandlingPolicyConfig,
           });
           outboundBodyBuffer = decision.outboundBody;
           const approvalTokenHash = approvalTokenHeader
@@ -1352,6 +1683,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             receipt_version: '1',
             receipt_id: `dhr_${randomUUID()}`,
             policy_version: DLP_POLICY_VERSION,
+            ...(decision.policy ? { policy: decision.policy } : {}),
             run_id: runId,
             provider,
             action: decision.action,
@@ -1397,6 +1729,16 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             receipt_version: '1',
             receipt_id: `dhr_${randomUUID()}`,
             policy_version: DLP_POLICY_VERSION,
+            ...(dataHandlingPolicyConfig
+              ? {
+                  policy: {
+                    taxonomy_version: dataHandlingPolicyConfig.taxonomy_version,
+                    ruleset_hash_b64u: dataHandlingPolicyConfig.ruleset_hash_b64u,
+                    built_in_rule_count: dataHandlingPolicyConfig.built_in_rule_count,
+                    custom_rule_count: dataHandlingPolicyConfig.custom_rule_count,
+                  },
+                }
+              : {}),
             run_id: runId,
             provider,
             action: 'require_approval',
@@ -1716,6 +2058,17 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         ...payload.metadata,
         data_handling: {
           policy_version: DLP_POLICY_VERSION,
+          ...(dataHandlingPolicyConfig
+            ? {
+                taxonomy_version: dataHandlingPolicyConfig.taxonomy_version,
+                ruleset_hash_b64u: dataHandlingPolicyConfig.ruleset_hash_b64u,
+                built_in_rule_count: dataHandlingPolicyConfig.built_in_rule_count,
+                custom_rule_count: dataHandlingPolicyConfig.custom_rule_count,
+              }
+            : {}),
+          ...(dataHandlingPolicyConfigError
+            ? { policy_error: dataHandlingPolicyConfigError }
+            : {}),
           receipts: dataHandlingReceipts,
         },
       };
