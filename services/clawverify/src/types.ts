@@ -1469,6 +1469,13 @@ export interface ProofBundlePayload {
 /** Trust tiers computed from proof bundle contents (verifier-internal). */
 export type TrustTier = 'unknown' | 'basic' | 'verified' | 'attested' | 'full';
 
+/** AF2-ATT-003: deterministic attested-tier grant/deny signaling. */
+export type AttestedAssuranceReasonCode =
+  | 'ATTESTED_TIER_GRANTED'
+  | 'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION'
+  | 'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED'
+  | 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
+
 /**
  * Canonical proof tiers (marketplace-facing) derived from verified components.
  *
@@ -1535,6 +1542,12 @@ export interface ProofBundleVerificationResult {
     system_prompt_report_valid?: boolean;
 
     receipts_valid?: boolean;
+    /** AF2-ATT-003: whether runner attestation evidence was present in bundle metadata. */
+    runner_attestation_present?: boolean;
+    /** AF2-ATT-003: whether runner attestation evidence validated successfully. */
+    runner_attestation_valid?: boolean;
+    /** AF2-ATT-003: deterministic reason code for attested-tier grant/deny. */
+    attested_assurance_reason_code?: AttestedAssuranceReasonCode;
     /** PRV-EGR-003 signed egress policy receipt presence. */
     egress_policy_receipt_present?: boolean;
     /** PRV-EGR-003 signature/hash verification status for egress policy receipt. */

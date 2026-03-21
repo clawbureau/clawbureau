@@ -5314,15 +5314,15 @@ function validateToolReceiptBinding(
  * - unknown: No valid components
  * - basic: Valid envelope signature only
  * - verified: Valid event chain or receipts
- * - attested: Valid allowlisted signature-verified attestations
- * - full: All components valid (URM + events + receipts + attestations)
+ * - attested: Valid runner attestation evidence (AF2-ATT-003)
+ * - full: All components valid (URM + events + receipts + runner attestation)
  */
 function computeTrustTier(components: {
   envelope_valid: boolean;
   urm_valid?: boolean;
   event_chain_valid?: boolean;
   receipts_valid?: boolean;
-  attestations_valid?: boolean;
+  runner_attestation_valid?: boolean;
 }): TrustTier {
   if (!components.envelope_valid) {
     return 'unknown';
@@ -5333,13 +5333,13 @@ function computeTrustTier(components: {
     components.urm_valid &&
     components.event_chain_valid &&
     components.receipts_valid &&
-    components.attestations_valid
+    components.runner_attestation_valid
   ) {
     return 'full';
   }
 
-  // Attested: has valid attestations
-  if (components.attestations_valid) {
+  // AF2-ATT-003: attested tier requires valid runner attestation evidence.
+  if (components.runner_attestation_valid) {
     return 'attested';
   }
 
@@ -5946,6 +5946,10 @@ export async function verifyProofBundle(
   const payload = p;
   const componentResults: NonNullable<ProofBundleVerificationResult['component_results']> = {
     envelope_valid: true,
+    runner_attestation_present: false,
+    runner_attestation_valid: false,
+    attested_assurance_reason_code:
+      'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION',
     causal_policy_profile: resolvedCausalPolicy.profile,
     causal_policy_snapshot: {
       profile: resolvedCausalPolicy.profile,
@@ -6078,6 +6082,13 @@ export async function verifyProofBundle(
   const mdRecord = md && typeof md === 'object' && md !== null && !Array.isArray(md)
     ? (md as Record<string, unknown>)
     : null;
+  const runnerAttestationPresent = mdRecord
+    ? mdRecord.runner_attestation_receipt !== undefined
+    : false;
+  const runnerAttestationEvidencePresent = runnerAttestationPresent || Boolean(
+    mdRecord && mdRecord.runner_measurement !== undefined
+  );
+  componentResults.runner_attestation_present = runnerAttestationPresent;
 
   const policyBindingValidation = await validatePolicyBindingMetadata({
     payload,
@@ -6085,11 +6096,16 @@ export async function verifyProofBundle(
     eventChainValid: componentResults.event_chain_valid === true,
   });
   if (!policyBindingValidation.ok) {
+    if (runnerAttestationEvidencePresent) {
+      componentResults.attested_assurance_reason_code =
+        'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
+    }
     return {
       result: {
         status: 'INVALID',
         reason: policyBindingValidation.message,
         verified_at: now,
+        component_results: componentResults,
       },
       error: {
         code: policyBindingValidation.code,
@@ -6140,11 +6156,16 @@ export async function verifyProofBundle(
     metadataRecord: mdRecord,
   });
   if (!runnerMeasurementValidation.ok) {
+    if (runnerAttestationEvidencePresent) {
+      componentResults.attested_assurance_reason_code =
+        'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
+    }
     return {
       result: {
         status: 'INVALID',
         reason: runnerMeasurementValidation.message,
         verified_at: now,
+        component_results: componentResults,
       },
       error: {
         code: runnerMeasurementValidation.code,
@@ -6159,11 +6180,14 @@ export async function verifyProofBundle(
     metadataRecord: mdRecord,
   });
   if (!runnerAttestationValidation.ok) {
+    componentResults.attested_assurance_reason_code =
+      'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
     return {
       result: {
         status: 'INVALID',
         reason: runnerAttestationValidation.message,
         verified_at: now,
+        component_results: componentResults,
       },
       error: {
         code: runnerAttestationValidation.code,
@@ -6171,6 +6195,10 @@ export async function verifyProofBundle(
         field: runnerAttestationValidation.field,
       },
     };
+  }
+  if (runnerAttestationPresent) {
+    componentResults.runner_attestation_valid = true;
+    componentResults.attested_assurance_reason_code = 'ATTESTED_TIER_GRANTED';
   }
 
   const promptPackRaw = mdRecord ? mdRecord.prompt_pack : undefined;
@@ -7102,6 +7130,14 @@ export async function verifyProofBundle(
   // 16. Compute tiers based on validated components
   const trustTier = computeTrustTier(componentResults);
   const proofTier = computeProofTier(componentResults);
+  if (
+    componentResults.runner_attestation_valid &&
+    trustTier !== 'attested' &&
+    trustTier !== 'full'
+  ) {
+    componentResults.attested_assurance_reason_code =
+      'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED';
+  }
 
   // 17. Return success with computed tiers
   return {

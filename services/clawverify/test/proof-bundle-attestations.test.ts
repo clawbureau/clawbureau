@@ -132,6 +132,9 @@ describe('verifyProofBundle: CVF-US-023 attestation signatures + allowlist', () 
     expect(out.result.status).toBe('VALID');
     expect(out.result.trust_tier).toBe('verified');
     expect(out.result.proof_tier).toBe('self');
+    expect(out.result.component_results?.attested_assurance_reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION',
+    );
 
     expect(out.result.component_results?.attestations_count).toBe(1);
     expect(out.result.component_results?.attestations_signature_verified_count).toBe(0);
@@ -139,7 +142,7 @@ describe('verifyProofBundle: CVF-US-023 attestation signatures + allowlist', () 
     expect(out.result.component_results?.attestations_valid).toBe(false);
   });
 
-  it('uplifts to attested when attestation signature verifies and attester is allowlisted', async () => {
+  it('does not uplift to attested without runner attestation evidence even when attestation signature verifies', async () => {
     const agent = await makeDidKeyEd25519();
     const attester = await makeDidKeyEd25519();
 
@@ -196,8 +199,11 @@ describe('verifyProofBundle: CVF-US-023 attestation signatures + allowlist', () 
     });
 
     expect(out.result.status).toBe('VALID');
-    expect(out.result.trust_tier).toBe('attested');
+    expect(out.result.trust_tier).toBe('verified');
     expect(out.result.proof_tier).toBe('sandbox');
+    expect(out.result.component_results?.attested_assurance_reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION',
+    );
 
     expect(out.result.component_results?.attestations_count).toBe(1);
     expect(out.result.component_results?.attestations_signature_verified_count).toBe(1);
@@ -264,6 +270,9 @@ describe('verifyProofBundle: CVF-US-023 attestation signatures + allowlist', () 
     expect(out.result.status).toBe('VALID');
     expect(out.result.trust_tier).toBe('verified');
     expect(out.result.proof_tier).toBe('self');
+    expect(out.result.component_results?.attested_assurance_reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION',
+    );
 
     expect(out.result.component_results?.attestations_signature_verified_count).toBe(1);
     expect(out.result.component_results?.attestations_verified_count).toBe(0);
