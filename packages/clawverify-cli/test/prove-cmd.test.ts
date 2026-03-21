@@ -13,6 +13,52 @@ import {
 } from '../src/prove-cmd.js';
 import { renderProofReportText as renderProofReportTextFromIndex } from '../src/index.js';
 
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const REVIEWER_TEST_KEYPAIR = crypto.generateKeyPairSync('ed25519');
+const REVIEWER_TEST_DID = (() => {
+  const publicJwk = REVIEWER_TEST_KEYPAIR.publicKey.export({ format: 'jwk' }) as JsonWebKey & {
+    x?: string;
+  };
+  if (!publicJwk.x) {
+    throw new Error('failed to export reviewer test public key as JWK');
+  }
+
+  const multicodec = Buffer.concat([
+    Buffer.from([0xed, 0x01]),
+    Buffer.from(publicJwk.x, 'base64url'),
+  ]);
+  return `did:key:z${base58Encode(multicodec)}`;
+})();
+
+function base58Encode(bytes: Uint8Array): string {
+  if (bytes.length === 0) {
+    return '';
+  }
+
+  const digits: number[] = [0];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let index = 0; index < digits.length; index++) {
+      const value = digits[index]! * 256 + carry;
+      digits[index] = value % 58;
+      carry = Math.floor(value / 58);
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = Math.floor(carry / 58);
+    }
+  }
+
+  for (let index = 0; index < bytes.length && bytes[index] === 0; index++) {
+    digits.push(0);
+  }
+
+  return digits
+    .reverse()
+    .map((digit) => BASE58_ALPHABET[digit]!)
+    .join('');
+}
+
 function sha256B64uJson(value: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 }
@@ -26,7 +72,13 @@ function syncReviewerSignoffReceiptHashes(bundle: Record<string, unknown>): void
 
   for (const receipt of payload.metadata?.reviewer_signoff_receipts ?? []) {
     if (typeof receipt.payload === 'object' && receipt.payload !== null && !Array.isArray(receipt.payload)) {
-      receipt.payload_hash_b64u = sha256B64uJson(receipt.payload);
+      const payloadHash = sha256B64uJson(receipt.payload);
+      receipt.payload_hash_b64u = payloadHash;
+      if (receipt.signer_did === REVIEWER_TEST_DID) {
+        receipt.signature_b64u = crypto
+          .sign(null, Buffer.from(payloadHash), REVIEWER_TEST_KEYPAIR.privateKey)
+          .toString('base64url');
+      }
     }
   }
 }
@@ -272,12 +324,12 @@ function makeBundle(): Record<string, unknown> {
             hash_algorithm: 'SHA-256',
             signature_b64u: 'reviewer_signoff_signature_1',
             algorithm: 'Ed25519',
-            signer_did: 'did:key:zReviewerA',
+            signer_did: REVIEWER_TEST_DID,
             issued_at: '2026-03-20T19:17:10.000Z',
             payload: {
               receipt_version: '1',
               receipt_id: 'rsr_1',
-              reviewer_did: 'did:key:zReviewerA',
+              reviewer_did: REVIEWER_TEST_DID,
               decision: 'approve',
               timestamp: '2026-03-20T19:17:10.000Z',
               binding: {
@@ -955,10 +1007,40 @@ describe('buildProofReport', () => {
     });
     expect(report.reviewer_signoff.dispute_present).toBe(false);
     expect(report.warnings).toContain(
-      '1 reviewer signoff receipt failed structural binding checks in the local report summary.',
+      '1 reviewer signoff receipt failed local integrity or binding checks in the report summary.',
     );
     expect(report.warnings).not.toContain(
       '1 reviewer signoff receipt recorded decision=reject.',
+    );
+  });
+
+  it('does not surface reviewer disputes from receipts with invalid reviewer signatures', () => {
+    const bundle = makeBundle();
+    const payload = bundle.payload as {
+      metadata?: {
+        reviewer_signoff_receipts?: Array<Record<string, unknown>>;
+      };
+    };
+
+    const first = payload.metadata?.reviewer_signoff_receipts?.[0];
+    if (first) {
+      first.signature_b64u = 'a'.repeat(86);
+    }
+
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle,
+      runSummary: {
+        status: 'PASS',
+        tier: 'gateway',
+      },
+    });
+
+    expect(report.reviewer_signoff.receipt_count).toBe(1);
+    expect(report.reviewer_signoff.structured_receipt_count).toBe(0);
+    expect(report.reviewer_signoff.dispute_present).toBe(false);
+    expect(report.warnings).toContain(
+      '1 reviewer signoff receipt failed local integrity or binding checks in the report summary.',
     );
   });
 });
