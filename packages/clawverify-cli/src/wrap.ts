@@ -46,6 +46,8 @@ import type {
   GatewayReceiptPayload,
   EgressPolicyReceiptPayload,
   EffectivePolicyBindingMetadata,
+  RunnerMeasurementBindingMetadata,
+  RunnerMeasurementManifest,
   LocalPolicy,
   CommandAnalysis,
   FsEvent,
@@ -214,6 +216,33 @@ function toBase64Url(bytes: Uint8Array): string {
 async function sha256TextB64u(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return toBase64Url(new Uint8Array(digest));
+}
+
+async function sha256BytesB64u(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
+  return toBase64Url(new Uint8Array(digest));
+}
+
+function resolveLocalFilePathFromImportSpecifier(specifier: string): string | null {
+  if (specifier.startsWith('file://')) {
+    try {
+      return fileURLToPath(specifier);
+    } catch {
+      return null;
+    }
+  }
+  if (specifier.startsWith('/')) return specifier;
+  return null;
+}
+
+async function sha256FileB64u(path: string | null): Promise<string | null> {
+  if (!path) return null;
+  try {
+    const fileBytes = await readFile(path);
+    return sha256BytesB64u(new Uint8Array(fileBytes));
+  } catch {
+    return null;
+  }
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -455,6 +484,102 @@ function normalizeCanonicalHostList(entries: readonly string[]): string[] {
     if (normalized) unique.add(normalized);
   }
   return [...unique].sort((a, b) => a.localeCompare(b));
+}
+
+async function buildRunnerMeasurementBinding(args: {
+  clawproxyUrl: string;
+  allowedProxyDestinations: string[];
+  allowedChildDestinations: string[];
+  effectivePolicyHashB64u?: string;
+  shellSentinelEnabled: boolean;
+  interposeEnabled: boolean;
+  interposeLibraryPath: string | null;
+}): Promise<RunnerMeasurementBindingMetadata> {
+  const preloadPath = resolveLocalFilePathFromImportSpecifier(resolvePreloadPath());
+  const nodePreloadSentinelPath =
+    resolveLocalFilePathFromImportSpecifier(resolveNodePreloadSentinelPath());
+  const sentinelShellSourcePath = args.shellSentinelEnabled ? resolveSentinelShellPath() : null;
+  const sentinelShellPolicyPath = sentinelShellSourcePath
+    ? join(dirname(sentinelShellSourcePath), 'sentinel-shell-policy.sh')
+    : null;
+
+  const [
+    preloadHash,
+    nodePreloadSentinelHash,
+    sentinelShellHash,
+    sentinelShellPolicyHash,
+    interposeLibraryHash,
+  ] = await Promise.all([
+    sha256FileB64u(preloadPath),
+    sha256FileB64u(nodePreloadSentinelPath),
+    sha256FileB64u(sentinelShellSourcePath),
+    sha256FileB64u(sentinelShellPolicyPath),
+    sha256FileB64u(args.interposeEnabled ? args.interposeLibraryPath : null),
+  ]);
+
+  if (!preloadHash) {
+    throw new Error(
+      'PRV_RUNNER_MEASUREMENT_INCOMPLETE: failed to hash @clawbureau/clawsig-sdk/preload',
+    );
+  }
+  if (!nodePreloadSentinelHash) {
+    throw new Error(
+      'PRV_RUNNER_MEASUREMENT_INCOMPLETE: failed to hash @clawbureau/clawsig-sdk/node-preload-sentinel',
+    );
+  }
+  if (args.shellSentinelEnabled && (!sentinelShellHash || !sentinelShellPolicyHash)) {
+    throw new Error(
+      'PRV_RUNNER_MEASUREMENT_INCOMPLETE: failed to hash sentinel shell assets while shell sentinel is enabled',
+    );
+  }
+  if (args.interposeEnabled && !interposeLibraryHash) {
+    throw new Error(
+      'PRV_RUNNER_MEASUREMENT_INCOMPLETE: failed to hash interpose library while interpose is enabled',
+    );
+  }
+
+  const manifest: RunnerMeasurementManifest = {
+    manifest_version: '1',
+    runtime: {
+      platform: process.platform,
+      arch: process.arch,
+      node_version: process.version,
+    },
+    proofed: {
+      proofed_mode: true,
+      clawproxy_url: args.clawproxyUrl,
+      allowed_proxy_destinations: [...args.allowedProxyDestinations].sort((a, b) => a.localeCompare(b)),
+      allowed_child_destinations: [...args.allowedChildDestinations].sort((a, b) => a.localeCompare(b)),
+      sentinels: {
+        shell_enabled: args.shellSentinelEnabled,
+        interpose_enabled: args.interposeEnabled,
+        preload_enabled: true,
+        fs_enabled: true,
+        net_enabled: true,
+      },
+    },
+    policy: {
+      ...(args.effectivePolicyHashB64u
+        ? { effective_policy_hash_b64u: args.effectivePolicyHashB64u }
+        : {}),
+    },
+    artifacts: {
+      preload_hash_b64u: preloadHash,
+      node_preload_sentinel_hash_b64u: nodePreloadSentinelHash,
+      sentinel_shell_hash_b64u: sentinelShellHash,
+      sentinel_shell_policy_hash_b64u: sentinelShellPolicyHash,
+      interpose_library_hash_b64u: interposeLibraryHash,
+    },
+  };
+
+  const manifestHashB64u = await hashJsonB64u(manifest);
+
+  return {
+    binding_version: '1',
+    hash_algorithm: 'SHA-256',
+    manifest_hash_b64u: manifestHashB64u,
+    manifest,
+  };
 }
 
 async function captureRuntimeBaselineSnapshot(): Promise<RuntimeBaselineSnapshot> {
@@ -1441,10 +1566,26 @@ export async function wrap(
   });
 
   const effectivePolicyBinding = loadedPolicy.policyBinding;
+  let runnerMeasurementBinding: RunnerMeasurementBindingMetadata | undefined;
   let egressPolicyReceiptEnvelope: SignedEnvelope<EgressPolicyReceiptPayload> | undefined;
   if (proofedMode && parsedProofedClawproxyUrl) {
     const allowedProxyDestinations = normalizeCanonicalHostList(proofedEgressAllowlist);
     const allowedChildDestinations = normalizeCanonicalHostList(proofedChildEgressAllowlist);
+    try {
+      runnerMeasurementBinding = await buildRunnerMeasurementBinding({
+        clawproxyUrl: parsedProofedClawproxyUrl.toString(),
+        allowedProxyDestinations,
+        allowedChildDestinations,
+        effectivePolicyHashB64u: effectivePolicyBinding?.effective_policy_hash_b64u,
+        shellSentinelEnabled: !!sentinelShellPath,
+        interposeEnabled: !!interposeLib,
+        interposeLibraryPath: interposeLib?.path ?? null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`\x1b[31m[clawsig]\x1b[0m ${message}\n`);
+      return 2;
+    }
     const policyDescriptor = {
       policy_version: '1' as const,
       proofed_mode: true,
@@ -1509,9 +1650,16 @@ export async function wrap(
     };
   }
 
+  if (runnerMeasurementBinding) {
+    diag(
+      `\x1b[36m[clawsig]\x1b[0m Runner measurement hash: ${runnerMeasurementBinding.manifest_hash_b64u}\n`,
+    );
+  }
+
   bundle.payload.metadata = {
     ...bundle.payload.metadata,
     ...(effectivePolicyBinding ? { policy_binding: effectivePolicyBinding } : {}),
+    ...(runnerMeasurementBinding ? { runner_measurement: runnerMeasurementBinding } : {}),
     sentinels: {
       ...(sentinelsMetadata as NonNullable<NonNullable<ProofBundlePayload['metadata']>['sentinels']>),
       ...(egressPolicyReceiptEnvelope

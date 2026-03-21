@@ -6,6 +6,7 @@ import {
   resolveEffectivePolicyFromSignedBundle,
 } from '../../clawsig-sdk/src/policy-resolution.js';
 import {
+  hashJsonB64u,
   didFromPublicKey,
   generateKeyPair,
   signEd25519,
@@ -449,5 +450,100 @@ describe('AF2-POL verifier policy binding fail-closed behavior', () => {
     expect(verification.result.status).toBe('INVALID');
     expect(verification.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
     expect(verification.error?.field).toBeTruthy();
+  });
+});
+
+describe('AF2-ATT verifier runner measurement fail-closed behavior', () => {
+  it('rejects proof bundles when runner_measurement.manifest_hash_b64u does not match manifest', async () => {
+    const keyPair = await generateKeyPair();
+    const did = await didFromPublicKey(keyPair.publicKey);
+    const eventHeader = {
+      event_id: 'evt_runner_measurement_1',
+      run_id: 'run_runner_measurement_1',
+      event_type: 'llm_call',
+      timestamp: '2026-03-20T00:00:01.000Z',
+      payload_hash_b64u: 'evt_payload_hash_runner_1',
+      prev_hash_b64u: null,
+    };
+    const eventHash = await computeHash(eventHeader, 'SHA-256');
+
+    const manifest = {
+      manifest_version: '1' as const,
+      runtime: {
+        platform: process.platform,
+        arch: process.arch,
+        node_version: process.version,
+      },
+      proofed: {
+        proofed_mode: true as const,
+        clawproxy_url: 'https://clawproxy.example',
+        allowed_proxy_destinations: ['clawproxy.example'],
+        allowed_child_destinations: ['127.0.0.1'],
+        sentinels: {
+          shell_enabled: false,
+          interpose_enabled: false,
+          preload_enabled: true,
+          fs_enabled: true,
+          net_enabled: true,
+        },
+      },
+      policy: {},
+      artifacts: {
+        preload_hash_b64u: 'a'.repeat(43),
+        node_preload_sentinel_hash_b64u: 'b'.repeat(43),
+        sentinel_shell_hash_b64u: null,
+        sentinel_shell_policy_hash_b64u: null,
+        interpose_library_hash_b64u: null,
+      },
+    };
+
+    const payload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_runner_measurement_fail_1',
+      agent_did: did,
+      event_chain: [
+        {
+          ...eventHeader,
+          event_hash_b64u: eventHash,
+        },
+      ],
+      metadata: {
+        runner_measurement: {
+          binding_version: '1',
+          hash_algorithm: 'SHA-256',
+          manifest_hash_b64u: await hashJsonB64u({
+            ...manifest,
+            runtime: { ...manifest.runtime, node_version: `${manifest.runtime.node_version}-tampered` },
+          }),
+          manifest,
+        },
+      },
+    };
+
+    const payloadHash = await computeHash(payload, 'SHA-256');
+    const signature = await signEd25519(
+      keyPair.privateKey,
+      new TextEncoder().encode(payloadHash),
+    );
+
+    const envelope = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:03.000Z',
+    };
+
+    const verification = await verifyProofBundle(envelope);
+
+    expect(verification.result.status).toBe('INVALID');
+    expect(verification.error?.code).toBe('HASH_MISMATCH');
+    expect(verification.error?.field).toBe(
+      'payload.metadata.runner_measurement.manifest_hash_b64u',
+    );
   });
 });
