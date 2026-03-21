@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  base64UrlDecode,
+  base64UrlEncode,
   didFromPublicKey,
   generateKeyPair,
   signEd25519,
@@ -8,10 +10,121 @@ import {
 import { computeHash } from '../src/crypto';
 import { verifyProofBundle } from '../src/verify-proof-bundle';
 
+function mutateB64u(value: string): string {
+  if (value.length === 0) return value;
+  return `${value.slice(0, -1)}${value.endsWith('A') ? 'B' : 'A'}`;
+}
+
+function mutateCanonicalB64u(value: string): string {
+  const bytes = base64UrlDecode(value);
+  if (bytes.length === 0) return value;
+  bytes[bytes.length - 1] ^= 0x01;
+  const mutated = base64UrlEncode(bytes);
+  if (mutated !== value) return mutated;
+  bytes[bytes.length - 1] ^= 0x02;
+  return base64UrlEncode(bytes);
+}
+
+async function buildSingleLeafInclusionProof(args: {
+  leafHashB64u: string;
+  logId: string;
+  signerDid: string;
+  signerPrivateKey: CryptoKey;
+}) {
+  const sig = await signEd25519(
+    args.signerPrivateKey,
+    new TextEncoder().encode(args.leafHashB64u),
+  );
+
+  return {
+    proof_version: '1' as const,
+    log_id: args.logId,
+    tree_size: 1,
+    leaf_hash_b64u: args.leafHashB64u,
+    root_hash_b64u: args.leafHashB64u,
+    audit_path: [] as string[],
+    root_published_at: '2026-03-21T05:31:00.000Z',
+    root_signature: {
+      signer_did: args.signerDid,
+      sig_b64u: sig,
+    },
+    metadata: {
+      leaf_index: 0,
+    },
+  };
+}
+
+async function computeReviewerSignoffTransparencyLeafHash(
+  payload: Record<string, unknown>,
+) {
+  const binding = payload.binding as Record<string, unknown>;
+  const dispute = payload.dispute as
+    | {
+        status?: string;
+        notes?: Array<{
+          note_id: string;
+          note: string;
+          evidence_refs?: Array<{
+            ref_id?: string;
+            uri?: string;
+            sha256_b64u?: string;
+          }>;
+        }>;
+      }
+    | undefined;
+
+  return computeHash(
+    {
+      leaf_version: 'reviewer_signoff_receipt_v1',
+      receipt_version: payload.receipt_version,
+      receipt_id: payload.receipt_id,
+      reviewer_did: payload.reviewer_did,
+      decision: payload.decision,
+      timestamp: payload.timestamp,
+      binding: {
+        run_id: binding.run_id,
+        bundle_id: binding.bundle_id,
+        proof_bundle_hash_b64u:
+          typeof binding.proof_bundle_hash_b64u === 'string'
+            ? binding.proof_bundle_hash_b64u
+            : null,
+        event_hash_b64u: binding.event_hash_b64u,
+        target_kind: binding.target_kind,
+        export_pack_root_hash_b64u:
+          typeof binding.export_pack_root_hash_b64u === 'string'
+            ? binding.export_pack_root_hash_b64u
+            : null,
+      },
+      dispute: dispute
+        ? {
+            status: dispute.status,
+            notes: (dispute.notes ?? []).map((note) => ({
+              note_id: note.note_id,
+              note: note.note,
+              evidence_refs: (note.evidence_refs ?? []).map((ref) => ({
+                ref_id: ref.ref_id ?? null,
+                uri: ref.uri ?? null,
+                sha256_b64u: ref.sha256_b64u ?? null,
+              })),
+            })),
+          }
+        : null,
+    },
+    'SHA-256',
+  );
+}
+
 async function buildEnvelope(options?: {
   dispute?: boolean;
   tamperEventHash?: boolean;
   tamperSignature?: boolean;
+  transparencyMode?:
+    | 'none'
+    | 'valid'
+    | 'tamper_leaf'
+    | 'bad_consistency'
+    | 'bad_prior_root';
+  anchorUri?: string;
 }) {
   const agentKey = await generateKeyPair();
   const reviewerKey = await generateKeyPair();
@@ -56,6 +169,45 @@ async function buildEnvelope(options?: {
           ],
         },
       ],
+    };
+  }
+
+  const transparencyMode = options?.transparencyMode ?? 'none';
+  if (transparencyMode !== 'none') {
+    const expectedLeafHash = await computeReviewerSignoffTransparencyLeafHash(
+      signoffPayload,
+    );
+    const inclusionProof = await buildSingleLeafInclusionProof({
+      leafHashB64u:
+        transparencyMode === 'tamper_leaf'
+          ? mutateCanonicalB64u(expectedLeafHash)
+          : expectedLeafHash,
+      logId: 'reviewer-signoff-log',
+      signerDid: reviewerDid,
+      signerPrivateKey: reviewerKey.privateKey,
+    });
+
+    const consistencyProof = {
+      proof_version: '1' as const,
+      log_id: 'reviewer-signoff-log',
+      from_tree_size: 1,
+      to_tree_size: 1,
+      from_root_hash_b64u:
+        transparencyMode === 'bad_prior_root'
+          ? mutateB64u(expectedLeafHash)
+          : expectedLeafHash,
+      to_root_hash_b64u:
+        transparencyMode === 'bad_consistency'
+          ? mutateB64u(expectedLeafHash)
+          : expectedLeafHash,
+      consistency_path: [] as string[],
+    };
+
+    signoffPayload.transparency = {
+      inclusion_proof: inclusionProof,
+      consistency_proof: consistencyProof,
+      anchor_id: 'anchor-reviewer-1',
+      anchor_uri: options?.anchorUri,
     };
   }
 
@@ -146,6 +298,61 @@ describe('AF2-REV-003 service verifier reviewer signoff/dispute binding', () => 
     expect(out.error?.code).toBe('SIGNATURE_INVALID');
     expect(out.error?.field).toBe(
       'payload.metadata.reviewer_signoff_receipts[0].signature_b64u',
+    );
+  });
+
+  it('verifies reviewer signoff transparency inclusion + consistency evidence when present', async () => {
+    const envelope = await buildEnvelope({ transparencyMode: 'valid' });
+    const out = await verifyProofBundle(envelope);
+
+    expect(out.result.status).toBe('VALID');
+    expect(out.result.component_results?.reviewer_signoff_valid).toBe(true);
+  });
+
+  it('fails closed when reviewer signoff transparency inclusion leaf hash mismatches receipt leaf', async () => {
+    const envelope = await buildEnvelope({ transparencyMode: 'tamper_leaf' });
+    const out = await verifyProofBundle(envelope);
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe(
+      'payload.metadata.reviewer_signoff_receipts[0].payload.transparency.inclusion_proof.leaf_hash_b64u',
+    );
+  });
+
+  it('fails closed when reviewer signoff transparency consistency evidence is inconsistent', async () => {
+    const envelope = await buildEnvelope({ transparencyMode: 'bad_consistency' });
+    const out = await verifyProofBundle(envelope);
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe(
+      'payload.metadata.reviewer_signoff_receipts[0].payload.transparency.consistency_proof.to_root_hash_b64u',
+    );
+  });
+
+  it('fails closed when reviewer signoff transparency prior root mismatches for an unchanged tree size', async () => {
+    const envelope = await buildEnvelope({ transparencyMode: 'bad_prior_root' });
+    const out = await verifyProofBundle(envelope);
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe(
+      'payload.metadata.reviewer_signoff_receipts[0].payload.transparency.consistency_proof.from_root_hash_b64u',
+    );
+  });
+
+  it('fails closed when reviewer signoff transparency anchor_uri is malformed', async () => {
+    const envelope = await buildEnvelope({
+      transparencyMode: 'valid',
+      anchorUri: 'not-a-uri',
+    });
+    const out = await verifyProofBundle(envelope);
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('MALFORMED_ENVELOPE');
+    expect(out.error?.field).toBe(
+      'payload.metadata.reviewer_signoff_receipts[0].payload.transparency.anchor_uri',
     );
   });
 });

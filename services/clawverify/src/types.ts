@@ -263,6 +263,24 @@ export interface GatewayReceiptPayload {
   metadata?: GatewayReceiptMetadata;
 }
 
+export interface TransparencyLogConsistencyProof {
+  proof_version: '1';
+  log_id: string;
+  from_tree_size: number;
+  to_tree_size: number;
+  from_root_hash_b64u: string;
+  to_root_hash_b64u: string;
+  consistency_path: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface AssuranceReceiptTransparencyAnchor {
+  inclusion_proof: unknown;
+  consistency_proof?: TransparencyLogConsistencyProof | Record<string, unknown>;
+  anchor_id?: string;
+  anchor_uri?: string;
+}
+
 /** PRV-EGR-003: signed egress policy receipt payload embedded in bundle metadata.sentinels. */
 export interface EgressPolicyReceiptPayload {
   receipt_version: '1';
@@ -284,6 +302,7 @@ export interface EgressPolicyReceiptPayload {
     run_id: string;
     event_hash_b64u: string;
   };
+  transparency?: AssuranceReceiptTransparencyAnchor;
 }
 
 /** PRV-EGR-003: signed egress policy receipt envelope. */
@@ -1263,6 +1282,7 @@ export interface RunnerAttestationReceiptPayload {
   policy: {
     effective_policy_hash_b64u: string;
   };
+  transparency?: AssuranceReceiptTransparencyAnchor;
 }
 
 /** AF2-ATT-002: envelope for runner attestation receipts. */
@@ -1422,6 +1442,7 @@ export interface ReviewerSignoffReceiptPayload {
     status: ReviewerDisputeStatus;
     notes?: ReviewerDisputeNote[];
   };
+  transparency?: AssuranceReceiptTransparencyAnchor;
 }
 
 export interface ReviewerSignoffReceiptEnvelope {

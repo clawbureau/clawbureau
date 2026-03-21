@@ -568,6 +568,60 @@
                           "minLength": 8
                         }
                       }
+                    },
+                    "transparency": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["inclusion_proof"],
+                      "properties": {
+                        "inclusion_proof": {
+                          "$ref": "https://schemas.clawbureau.org/claw.poh.log_inclusion_proof.v1.json"
+                        },
+                        "consistency_proof": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "proof_version",
+                            "log_id",
+                            "from_tree_size",
+                            "to_tree_size",
+                            "from_root_hash_b64u",
+                            "to_root_hash_b64u",
+                            "consistency_path"
+                          ],
+                          "properties": {
+                            "proof_version": { "const": "1" },
+                            "log_id": { "type": "string", "minLength": 1 },
+                            "from_tree_size": { "type": "integer", "minimum": 1 },
+                            "to_tree_size": { "type": "integer", "minimum": 1 },
+                            "from_root_hash_b64u": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_-]+$",
+                              "minLength": 8
+                            },
+                            "to_root_hash_b64u": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9_-]+$",
+                              "minLength": 8
+                            },
+                            "consistency_path": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]+$",
+                                "minLength": 8
+                              }
+                            },
+                            "metadata": { "type": "object" }
+                          }
+                        },
+                        "anchor_id": { "type": "string", "minLength": 1 },
+                        "anchor_uri": {
+                          "type": "string",
+                          "format": "uri",
+                          "minLength": 1
+                        }
+                      }
                     }
                   }
                 },
