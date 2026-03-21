@@ -957,6 +957,7 @@ interface SubmissionSummaryView {
   status: SubmissionStatus;
   reason_codes: string[];
   assurance_gating: SubmissionAssuranceGatingView | null;
+  payout_review_policy: SubmissionPayoutReviewPolicyView;
   proof_verify_status: ProofVerifyStatus;
   proof_tier: SubmissionTrustTier | null;
   commit_proof_verify_status: 'valid' | 'invalid' | null;
@@ -980,6 +981,7 @@ interface SubmissionDetailView {
   status: SubmissionStatus;
   reason_codes: string[];
   assurance_gating: SubmissionAssuranceGatingView | null;
+  payout_review_policy: SubmissionPayoutReviewPolicyView;
   idempotency_key: string | null;
   verification: {
     proof_bundle: {
@@ -1065,6 +1067,40 @@ interface SubmissionAssuranceEvaluation {
   view: SubmissionAssuranceGatingView | null;
 }
 
+type SubmissionReviewRoutingMode =
+  | 'assurance_hold'
+  | 'requester_manual_review'
+  | 'test_auto_decision'
+  | 'not_reviewable';
+
+type SubmissionPayoutBlockedReasonSource =
+  | 'assurance_gating'
+  | 'submission_status'
+  | 'proof_verification'
+  | 'commit_proof';
+
+interface SubmissionPayoutBlockedReasonView {
+  code: string;
+  message: string;
+  source: SubmissionPayoutBlockedReasonSource;
+}
+
+interface SubmissionPayoutReadinessView {
+  ready: boolean;
+  blocked_reason_codes: string[];
+  blocked_reasons: SubmissionPayoutBlockedReasonView[];
+}
+
+interface SubmissionReviewRoutingView {
+  mode: SubmissionReviewRoutingMode;
+  reason_codes: string[];
+}
+
+interface SubmissionPayoutReviewPolicyView {
+  payout_readiness: SubmissionPayoutReadinessView;
+  review_routing: SubmissionReviewRoutingView;
+}
+
 type SubmissionViewerContext =
   | { kind: 'admin' }
   | { kind: 'worker'; worker: WorkerRecordV1 }
@@ -1125,6 +1161,7 @@ interface SubmitBountyResponseV1 {
   proof_status?: 'pending' | 'valid' | 'invalid';
   reason_codes?: string[];
   assurance_gating?: SubmissionAssuranceGatingView;
+  payout_review_policy?: SubmissionPayoutReviewPolicyView;
   verification: {
     proof_bundle: {
       status: ProofVerifyStatus;
@@ -4878,24 +4915,189 @@ function trustTierFromProofTier(tier: ProofTier | null): SubmissionTrustTier {
   return 'test-pass';
 }
 
-function getSubmissionApprovalBlockReason(bounty: BountyV2, submission: SubmissionRecord): string | null {
+interface SubmissionPayoutPolicyEvaluation {
+  payout_ready: boolean;
+  blocked_reason_codes: string[];
+  blocked_reasons: SubmissionPayoutBlockedReasonView[];
+  review_routing_mode: SubmissionReviewRoutingMode;
+  route_reason_codes: string[];
+  view: SubmissionPayoutReviewPolicyView;
+}
+
+function evaluateSubmissionPayoutPolicy(
+  bounty: BountyV2,
+  submission: SubmissionRecord,
+  assuranceGating: SubmissionAssuranceGatingView | null,
+): SubmissionPayoutPolicyEvaluation {
+  const blockedReasonByCode = new Map<string, SubmissionPayoutBlockedReasonView>();
+
+  const addBlockedReason = (
+    code: string,
+    message: string,
+    source: SubmissionPayoutBlockedReasonSource,
+  ): void => {
+    if (blockedReasonByCode.has(code)) return;
+    blockedReasonByCode.set(code, { code, message, source });
+  };
+
+  if (assuranceGating?.status === 'quarantined') {
+    addBlockedReason(
+      'MKT_PAYOUT_GATED_ASSURANCE_QUARANTINED',
+      'Submission is quarantined pending required assurance evidence verification',
+      'assurance_gating',
+    );
+  } else if (assuranceGating?.status === 'rejected') {
+    addBlockedReason(
+      'MKT_PAYOUT_GATED_ASSURANCE_REJECTED',
+      'Submission failed required assurance evidence checks',
+      'assurance_gating',
+    );
+  }
+
+  for (const failure of assuranceGating?.failures ?? []) {
+    addBlockedReason(failure.code, failure.message, 'assurance_gating');
+  }
+
+  const assuranceCoversRequiredTier = Boolean(
+    assuranceGating?.required.required_assurance_level
+    && assuranceGating.required.required_assurance_level !== 'none',
+  );
+  if (!assuranceCoversRequiredTier && bounty.minimum_proof_tier !== 'none') {
+    if (submission.proof_verify_status === 'pending') {
+      addBlockedReason(
+        'MKT_PAYOUT_GATED_MINIMUM_PROOF_TIER_PENDING',
+        `Submission proof verification is still pending for minimum_proof_tier '${bounty.minimum_proof_tier}'`,
+        'proof_verification',
+      );
+    } else if (submission.proof_verify_status === 'not_provided') {
+      addBlockedReason(
+        'MKT_PAYOUT_GATED_MINIMUM_PROOF_TIER_REQUIRED',
+        `Submission proof bundle is required for minimum_proof_tier '${bounty.minimum_proof_tier}'`,
+        'proof_verification',
+      );
+    } else if (submission.proof_verify_status !== 'valid') {
+      addBlockedReason(
+        'MKT_PAYOUT_GATED_MINIMUM_PROOF_TIER_INVALID',
+        `Submission proof bundle must verify successfully for minimum_proof_tier '${bounty.minimum_proof_tier}'`,
+        'proof_verification',
+      );
+    } else if (
+      !submission.proof_tier
+      || submissionTrustTierRank(submission.proof_tier) < minimumProofTierRank(bounty.minimum_proof_tier)
+    ) {
+      addBlockedReason(
+        'MKT_PAYOUT_GATED_MINIMUM_PROOF_TIER_NOT_MET',
+        `Submission proof tier does not satisfy minimum_proof_tier '${bounty.minimum_proof_tier}'`,
+        'proof_verification',
+      );
+    }
+  }
+
   if (submission.commit_proof_verify_status === 'invalid') {
-    return 'Submission commit proof is invalid';
+    addBlockedReason('MKT_PAYOUT_GATED_COMMIT_PROOF_INVALID', 'Submission commit proof is invalid', 'commit_proof');
   }
 
   if (bounty.is_code_bounty && submission.commit_proof_verify_status !== 'valid') {
-    return 'Submission commit proof is required for code bounties';
+    addBlockedReason(
+      'MKT_PAYOUT_GATED_COMMIT_PROOF_REQUIRED',
+      'Submission commit proof is required for code bounties',
+      'commit_proof',
+    );
   }
 
   if (bounty.cwc_hash_b64u && submission.proof_verify_status !== 'valid') {
-    return 'Submission proof bundle must be valid for Confidential Work Contract bounties';
+    addBlockedReason(
+      'MKT_PAYOUT_GATED_CWC_PROOF_INVALID',
+      'Submission proof bundle must be valid for Confidential Work Contract bounties',
+      'proof_verification',
+    );
   }
 
-  return null;
+  if (submission.status !== 'pending_review') {
+    if (submission.status === 'approved') {
+      addBlockedReason(
+        'MKT_PAYOUT_GATED_SUBMISSION_ALREADY_APPROVED',
+        'Submission is already approved',
+        'submission_status',
+      );
+    } else if (submission.status === 'rejected') {
+      addBlockedReason(
+        'MKT_PAYOUT_GATED_SUBMISSION_REJECTED',
+        'Submission was rejected during review',
+        'submission_status',
+      );
+    } else if (submission.status === 'invalid') {
+      addBlockedReason(
+        'MKT_PAYOUT_GATED_SUBMISSION_INVALID',
+        'Submission is invalid and must be fixed before payout review',
+        'submission_status',
+      );
+    } else {
+      addBlockedReason(
+        'MKT_PAYOUT_GATED_SUBMISSION_NOT_PENDING_REVIEW',
+        `Submission status '${submission.status}' is not reviewable for payout`,
+        'submission_status',
+      );
+    }
+  }
+
+  const blocked_reasons = Array.from(blockedReasonByCode.values());
+  const blocked_reason_codes = blocked_reasons.map((entry) => entry.code);
+  const payout_ready = blocked_reasons.length === 0;
+
+  const review_routing_mode: SubmissionReviewRoutingMode = assuranceGating && assuranceGating.status !== 'satisfied'
+    ? 'assurance_hold'
+    : submission.status === 'pending_review'
+      ? bounty.closure_type === 'test'
+        ? 'test_auto_decision'
+        : 'requester_manual_review'
+      : 'not_reviewable';
+
+  const routeStateReasonCode = review_routing_mode === 'assurance_hold'
+    ? 'MKT_REVIEW_ROUTE_ASSURANCE_HOLD'
+    : review_routing_mode === 'test_auto_decision'
+      ? 'MKT_REVIEW_ROUTE_TEST_AUTO_DECISION'
+      : review_routing_mode === 'requester_manual_review'
+        ? 'MKT_REVIEW_ROUTE_REQUESTER_MANUAL_REVIEW'
+        : 'MKT_REVIEW_ROUTE_NOT_REVIEWABLE';
+
+  const route_reason_codes = dedupeStrings([routeStateReasonCode, ...blocked_reason_codes]);
+
+  return {
+    payout_ready,
+    blocked_reason_codes,
+    blocked_reasons,
+    review_routing_mode,
+    route_reason_codes,
+    view: {
+      payout_readiness: {
+        ready: payout_ready,
+        blocked_reason_codes,
+        blocked_reasons,
+      },
+      review_routing: {
+        mode: review_routing_mode,
+        reason_codes: route_reason_codes,
+      },
+    },
+  };
 }
 
-function isSubmissionEligibleForApproval(bounty: BountyV2, submission: SubmissionRecord): boolean {
-  return getSubmissionApprovalBlockReason(bounty, submission) === null;
+function evaluateSubmissionPayoutPolicyForBounty(
+  bounty: BountyV2,
+  submission: SubmissionRecord,
+): { ok: true; assurance_gating: SubmissionAssuranceGatingView | null; policy: SubmissionPayoutPolicyEvaluation }
+  | { ok: false; message: string } {
+  const assuranceEvaluation = evaluateSubmissionAssuranceForBounty(bounty, submission);
+  if (!assuranceEvaluation.ok) {
+    return { ok: false, message: assuranceEvaluation.message };
+  }
+
+  return {
+    ok: true,
+    assurance_gating: assuranceEvaluation.evaluation.view,
+    policy: evaluateSubmissionPayoutPolicy(bounty, submission, assuranceEvaluation.evaluation.view),
+  };
 }
 
 type ReplayReceiptKey = {
@@ -5177,6 +5379,7 @@ async function computeReplayReceiptKeys(
 function buildSubmitResponse(
   record: SubmissionRecord,
   assuranceGating: SubmissionAssuranceGatingView | null,
+  payoutReviewPolicy: SubmissionPayoutReviewPolicyView | null = null,
 ): SubmitBountyResponseV1 {
   const reasonCodes = assuranceGating?.reason_codes ?? [];
   const response: SubmitBountyResponseV1 = {
@@ -5185,6 +5388,7 @@ function buildSubmitResponse(
     status: record.status,
     ...(reasonCodes.length > 0 ? { reason_codes: reasonCodes } : {}),
     ...(assuranceGating ? { assurance_gating: assuranceGating } : {}),
+    ...(payoutReviewPolicy ? { payout_review_policy: payoutReviewPolicy } : {}),
     verification: {
       proof_bundle: {
         status: record.proof_verify_status,
@@ -5193,7 +5397,7 @@ function buildSubmitResponse(
         tier: record.proof_tier ?? undefined,
       },
     },
-    next_actions: buildSubmitNextActions(record, assuranceGating),
+    next_actions: buildSubmitNextActions(record, assuranceGating, payoutReviewPolicy),
   };
 
   if (record.proof_verify_status === 'pending' || record.proof_verify_status === 'valid' || record.proof_verify_status === 'invalid') {
@@ -5297,6 +5501,7 @@ function buildSubmissionFixDetails(
 function buildSubmitNextActions(
   record: SubmissionRecord,
   assuranceGating: SubmissionAssuranceGatingView | null,
+  payoutReviewPolicy: SubmissionPayoutReviewPolicyView | null,
 ): NextAction[] {
   if (assuranceGating?.status === 'quarantined') {
     return [
@@ -5307,6 +5512,7 @@ function buildSubmitNextActions(
         details: {
           reason_codes: assuranceGating.reason_codes,
           assurance_gating: assuranceGating,
+          payout_review_policy: payoutReviewPolicy,
         },
       },
     ];
@@ -5329,8 +5535,19 @@ function buildSubmitNextActions(
       action: 'wait',
       reason: record.status === 'approved'
         ? 'Submission approved; settlement finalization in progress'
-        : 'Auto-approval in progress',
+        : payoutReviewPolicy?.review_routing.mode === 'requester_manual_review'
+          ? 'Requester review required before payout can be released'
+          : payoutReviewPolicy?.review_routing.mode === 'test_auto_decision'
+            ? 'Test harness auto-decision in progress'
+            : payoutReviewPolicy?.review_routing.mode === 'assurance_hold'
+              ? 'Submission is on assurance hold pending required evidence verification'
+              : 'Submission is not currently reviewable for payout',
       poll_url: `/v1/submissions/${record.submission_id}`,
+      details: payoutReviewPolicy
+        ? {
+            payout_review_policy: payoutReviewPolicy,
+          }
+        : undefined,
     },
   ];
 }
@@ -5338,6 +5555,7 @@ function buildSubmitNextActions(
 function buildSubmissionStatusNextActions(
   record: SubmissionRecord,
   assuranceGating: SubmissionAssuranceGatingView | null,
+  payoutReviewPolicy: SubmissionPayoutReviewPolicyView | null,
 ): NextAction[] {
   if (assuranceGating?.status === 'quarantined') {
     return [
@@ -5348,6 +5566,7 @@ function buildSubmissionStatusNextActions(
         details: {
           reason_codes: assuranceGating.reason_codes,
           assurance_gating: assuranceGating,
+          payout_review_policy: payoutReviewPolicy,
         },
       },
     ];
@@ -5368,8 +5587,19 @@ function buildSubmissionStatusNextActions(
     return [
       {
         action: 'wait',
-        reason: 'Submission is pending review',
+        reason: payoutReviewPolicy?.review_routing.mode === 'requester_manual_review'
+          ? 'Submission is pending requester decision'
+          : payoutReviewPolicy?.review_routing.mode === 'test_auto_decision'
+            ? 'Submission is pending test harness auto-decision'
+            : payoutReviewPolicy?.review_routing.mode === 'assurance_hold'
+              ? 'Submission is on assurance hold pending required evidence verification'
+              : 'Submission is pending review',
         poll_url: `/v1/submissions/${record.submission_id}`,
+        details: payoutReviewPolicy
+          ? {
+              payout_review_policy: payoutReviewPolicy,
+            }
+          : undefined,
       },
     ];
   }
@@ -7481,6 +7711,7 @@ function toSubmissionSummaryView(
   latestTest: TestResultRecord | null,
   arenaReviewFlow: BountyReviewArenaFlowView,
   assuranceGating: SubmissionAssuranceGatingView | null,
+  payoutReviewPolicy: SubmissionPayoutReviewPolicyView,
 ): SubmissionSummaryView {
   const reasonCodes = assuranceGating?.reason_codes ?? [];
   return {
@@ -7490,6 +7721,7 @@ function toSubmissionSummaryView(
     status: record.status,
     reason_codes: reasonCodes,
     assurance_gating: assuranceGating,
+    payout_review_policy: payoutReviewPolicy,
     proof_verify_status: record.proof_verify_status,
     proof_tier: record.proof_tier,
     commit_proof_verify_status: record.commit_proof_verify_status,
@@ -7514,6 +7746,7 @@ function toSubmissionDetailView(
   latestTest: TestResultRecord | null,
   arenaReviewFlow: BountyReviewArenaFlowView,
   assuranceGating: SubmissionAssuranceGatingView | null,
+  payoutReviewPolicy: SubmissionPayoutReviewPolicyView,
 ): SubmissionDetailView {
   const reasonCodes = assuranceGating?.reason_codes ?? [];
   return {
@@ -7523,6 +7756,7 @@ function toSubmissionDetailView(
     status: record.status,
     reason_codes: reasonCodes,
     assurance_gating: assuranceGating,
+    payout_review_policy: payoutReviewPolicy,
     idempotency_key: record.idempotency_key,
     verification: {
       proof_bundle: {
@@ -14537,7 +14771,16 @@ async function handleSubmitBounty(
           return errorResponse('BOUNTY_METADATA_INVALID', assuranceEvaluation.message, 500, undefined, version);
         }
 
-        const response = buildSubmitResponse(existing.record, assuranceEvaluation.evaluation.view);
+        const payoutPolicy = evaluateSubmissionPayoutPolicy(
+          existingBounty,
+          existing.record,
+          assuranceEvaluation.evaluation.view,
+        );
+        const response = buildSubmitResponse(
+          existing.record,
+          assuranceEvaluation.evaluation.view,
+          payoutPolicy.view,
+        );
         return jsonResponse(response, 200, version);
       }
 
@@ -14842,7 +15085,16 @@ async function handleSubmitBounty(
           bountyAssuranceRequirements,
           existing.record,
         );
-        const response = buildSubmitResponse(existing.record, existingAssuranceEvaluation.view);
+        const existingPayoutPolicy = evaluateSubmissionPayoutPolicy(
+          bounty,
+          existing.record,
+          existingAssuranceEvaluation.view,
+        );
+        const response = buildSubmitResponse(
+          existing.record,
+          existingAssuranceEvaluation.view,
+          existingPayoutPolicy.view,
+        );
         return jsonResponse(response, 200, version);
       }
     } catch (lookupErr) {
@@ -14972,7 +15224,16 @@ async function handleSubmitBounty(
     bountyAssuranceRequirements,
     responseRecord,
   );
-  const response = buildSubmitResponse(responseRecord, responseAssuranceEvaluation.view);
+  const responsePayoutPolicy = evaluateSubmissionPayoutPolicy(
+    bounty,
+    responseRecord,
+    responseAssuranceEvaluation.view,
+  );
+  const response = buildSubmitResponse(
+    responseRecord,
+    responseAssuranceEvaluation.view,
+    responsePayoutPolicy.view,
+  );
   const statusCode = submissionAcceptedForReview ? 201 : submissionQuarantined ? 202 : 422;
   return jsonResponse(response, statusCode, version);
 }
@@ -15232,9 +15493,23 @@ async function handleApproveBounty(
     return errorResponse('INVALID_STATUS', `Submission status is '${submission.status}'`, 409, undefined, version);
   }
 
-  const approvalBlockReason = getSubmissionApprovalBlockReason(bounty, submission);
-  if (approvalBlockReason) {
-    return errorResponse('SUBMISSION_INVALID', approvalBlockReason, 422, undefined, version);
+  const payoutPolicy = evaluateSubmissionPayoutPolicyForBounty(bounty, submission);
+  if (!payoutPolicy.ok) {
+    return errorResponse('BOUNTY_METADATA_INVALID', payoutPolicy.message, 500, undefined, version);
+  }
+
+  if (!payoutPolicy.policy.payout_ready) {
+    return errorResponse(
+      'SUBMISSION_INVALID',
+      payoutPolicy.policy.blocked_reasons[0]?.message ?? 'Submission cannot be approved',
+      422,
+      {
+        reason_codes: payoutPolicy.policy.blocked_reason_codes,
+        payout_review_policy: payoutPolicy.policy.view,
+        assurance_gating: payoutPolicy.assurance_gating,
+      },
+      version,
+    );
   }
 
   const verification: Record<string, unknown> = {
@@ -22101,7 +22376,20 @@ async function handlePostArenaDeskDecisionLoop(
       continue;
     }
 
-    const eligibleForApproval = isSubmissionEligibleForApproval(bounty, submission);
+    const payoutPolicyResult = evaluateSubmissionPayoutPolicyForBounty(bounty, submission);
+    if (!payoutPolicyResult.ok) {
+      failedCount += 1;
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        status: 'failed',
+        reason_code: 'ARENA_DECISION_BOUNTY_METADATA_INVALID',
+        message: payoutPolicyResult.message,
+      });
+      continue;
+    }
+
+    const eligibleForApproval = payoutPolicyResult.policy.payout_ready;
 
     let action: 'approve' | 'reject' | null = null;
     if (decisionMode === 'approve_valid') {
@@ -22121,6 +22409,8 @@ async function handlePostArenaDeskDecisionLoop(
           ? 'ARENA_DECISION_MODE_SKIP_VALID'
           : 'ARENA_DECISION_MODE_SKIP_INVALID',
         decision_mode: decisionMode,
+        payout_blocked_reason_codes: payoutPolicyResult.policy.blocked_reason_codes,
+        payout_review_policy: payoutPolicyResult.policy.view,
       });
       continue;
     }
@@ -22149,6 +22439,8 @@ async function handlePostArenaDeskDecisionLoop(
         requester_did: bounty.requester_did,
         proof_verify_status: submission.proof_verify_status,
         commit_proof_verify_status: submission.commit_proof_verify_status,
+        payout_blocked_reason_codes: payoutPolicyResult.policy.blocked_reason_codes,
+        payout_review_policy: payoutPolicyResult.policy.view,
       });
       continue;
     }
@@ -22193,6 +22485,7 @@ async function handlePostArenaDeskDecisionLoop(
         action,
         idempotency_key: idempotencyKey,
         http_status: response.status,
+        payout_review_policy: payoutPolicyResult.policy.view,
         response: responsePayload,
       });
     } else {
@@ -22204,6 +22497,7 @@ async function handlePostArenaDeskDecisionLoop(
         action,
         idempotency_key: idempotencyKey,
         http_status: response.status,
+        payout_review_policy: payoutPolicyResult.policy.view,
         response: responsePayload,
       });
     }
@@ -25032,7 +25326,14 @@ async function handleListBountySubmissions(
       );
       const arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, record, latestArenaSummary, decisionCapture);
       const assuranceEvaluation = evaluateSubmissionAssuranceRequirements(bountyAssuranceRequirements, record);
-      views.push(toSubmissionSummaryView(record, latest, arenaReviewFlow, assuranceEvaluation.view));
+      const payoutPolicy = evaluateSubmissionPayoutPolicy(bounty, record, assuranceEvaluation.view);
+      views.push(toSubmissionSummaryView(
+        record,
+        latest,
+        arenaReviewFlow,
+        assuranceEvaluation.view,
+        payoutPolicy.view,
+      ));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
@@ -25176,7 +25477,14 @@ async function handleGetSubmissionDetail(
   }
 
   const assuranceEvaluation = evaluateSubmissionAssuranceRequirements(bountyAssuranceRequirements, submission);
-  const view = toSubmissionDetailView(submission, latestTest, arenaReviewFlow, assuranceEvaluation.view);
+  const payoutPolicy = evaluateSubmissionPayoutPolicy(bounty, submission, assuranceEvaluation.view);
+  const view = toSubmissionDetailView(
+    submission,
+    latestTest,
+    arenaReviewFlow,
+    assuranceEvaluation.view,
+    payoutPolicy.view,
+  );
   if (latestArenaPayload) {
     view.arena = latestArenaPayload;
   }
@@ -25186,7 +25494,8 @@ async function handleGetSubmissionDetail(
       submission: view,
       reason_codes: assuranceEvaluation.reason_codes,
       assurance_gating: assuranceEvaluation.view,
-      next_actions: buildSubmissionStatusNextActions(submission, assuranceEvaluation.view),
+      payout_review_policy: payoutPolicy.view,
+      next_actions: buildSubmissionStatusNextActions(submission, assuranceEvaluation.view, payoutPolicy.view),
     },
     200,
     version,
