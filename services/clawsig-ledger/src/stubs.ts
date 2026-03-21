@@ -3,7 +3,7 @@ import {
   type ComplianceFramework as CoreComplianceFramework,
   type ComplianceBundleInput as CoreComplianceBundleInput,
   type CompliancePolicyInput as CoreCompliancePolicyInput,
-} from '@clawbureau/clawverify-core';
+} from '../../../packages/clawverify-core/src/compliance.js';
 
 export type ComplianceFramework =
   | 'soc2'

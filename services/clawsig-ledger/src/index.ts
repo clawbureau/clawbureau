@@ -8,7 +8,7 @@ import {
   type ComplianceBundleInput,
   type CompliancePolicyInput,
 } from './stubs';
-import { jcsCanonicalize } from '@clawbureau/clawverify-core';
+import { jcsCanonicalize } from '../../../packages/clawverify-core/src/jcs.js';
 import { base64UrlEncode } from './utils';
 import {
   authenticateRequestApiKey,
