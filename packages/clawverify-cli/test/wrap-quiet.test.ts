@@ -869,7 +869,7 @@ describe('proofed mode privacy egress controls (PRV-EGR-001/002)', () => {
 });
 
 describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
-  it('redacts matched secrets before upstream egress and emits signed handling evidence', async () => {
+  it('false-negative guard: redacts matched secrets before upstream egress and emits signed handling evidence', async () => {
     const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-redact-'));
     const mock = await startMockClawproxy();
     const rawSecret = 'sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -911,6 +911,53 @@ describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
       };
       const actions = extractDataHandlingActions(bundle);
       expect(actions.some((entry) => entry.action === 'redact' && entry.reason_code === 'PRV_DLP_REDACTED')).toBe(true);
+    } finally {
+      await mock.stop();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('false-positive guard: allows token-like short strings that should not match secret classifiers', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-fp-allow-'));
+    const mock = await startMockClawproxy();
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'token sk-short should pass'}]})" +
+        "});" +
+        "if(res.status===200){process.exit(0);}"+
+        "console.error(await res.text());process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests).toHaveLength(1);
+      expect(mock.requests[0]?.body).toContain('sk-short');
+      expect(mock.requests[0]?.body).not.toContain('[REDACTED_SECRET]');
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: unknown;
+          };
+        };
+      };
+      const actions = extractDataHandlingActions(bundle);
+      expect(actions.some((entry) => entry.action === 'allow' && entry.reason_code === 'PRV_DLP_ALLOW')).toBe(true);
+      expect(actions.some((entry) => entry.action === 'redact')).toBe(false);
     } finally {
       await mock.stop();
       await rm(workdir, { recursive: true, force: true });
@@ -1152,6 +1199,113 @@ describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
       await mock.stop();
       await rm(workdir, { recursive: true, force: true });
     }
+  });
+
+  it('custom rules produce deterministic IDs across runs and bind policy evidence into receipts', async () => {
+    const customRulesJson = JSON.stringify([
+      {
+        class_id: 'customer.internal',
+        action: 'block',
+        pattern: 'internal_secret_[A-Z0-9]{6}',
+        flags: 'g',
+      },
+    ]);
+
+    async function runCustomRuleCase(workdirPrefix: string): Promise<{
+      ruleId: string;
+      rulesetHash: string;
+      customRuleCount: number;
+      taxonomyVersion: string;
+    }> {
+      const workdir = await mkdtemp(join(tmpdir(), workdirPrefix));
+      const mock = await startMockClawproxy();
+      try {
+        const childScript =
+          "(async()=>{" +
+          "const port=process.env.CLAWSIG_PROXY_PORT;" +
+          "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+          "method:'POST'," +
+          "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+          "body:JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'internal_secret_ABC123'}]})" +
+          "});" +
+          "const body=await res.json().catch(()=>({}));" +
+          "if(res.status===403&&body.reason_code==='PRV_DLP_BLOCKED'){process.exit(0);}"+
+          "console.error(JSON.stringify({status:res.status,body}));process.exit(1);" +
+          "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+        const result = await runWrapRaw(workdir, {
+          childArgs: [process.execPath, '-e', childScript],
+          extraEnv: {
+            CLAWSIG_PROOFED: '1',
+            CLAWSIG_CLAWPROXY_URL: mock.url,
+            CLAWSIG_DLP_CUSTOM_RULES_JSON: customRulesJson,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(mock.requests).toHaveLength(0);
+
+        const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+        const bundle = JSON.parse(bundleRaw) as {
+          payload?: {
+            metadata?: {
+              data_handling?: {
+                taxonomy_version?: string;
+                ruleset_hash_b64u?: string;
+                custom_rule_count?: number;
+                receipts?: Array<{
+                  payload?: {
+                    classes?: Array<{
+                      class_id?: string;
+                      rule_id?: string;
+                    }>;
+                    policy?: {
+                      taxonomy_version?: string;
+                      ruleset_hash_b64u?: string;
+                      custom_rule_count?: number;
+                    };
+                  };
+                }>;
+              };
+            };
+          };
+        };
+
+        const dataHandling = bundle.payload?.metadata?.data_handling;
+        expect(dataHandling?.taxonomy_version).toBe('prv.dlp.taxonomy.v2');
+        expect(dataHandling?.ruleset_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
+        expect(dataHandling?.custom_rule_count).toBe(1);
+
+        const firstReceipt = dataHandling?.receipts?.[0]?.payload;
+        const firstClass = firstReceipt?.classes?.[0];
+        expect(firstClass?.class_id).toBe('customer.internal');
+        expect(firstClass?.rule_id).toMatch(
+          /^prv\.dlp\.custom\.customer\.internal\.[A-Za-z0-9_-]{8,}\.v[0-9]+$/,
+        );
+        expect(firstReceipt?.policy?.taxonomy_version).toBe(dataHandling?.taxonomy_version);
+        expect(firstReceipt?.policy?.ruleset_hash_b64u).toBe(dataHandling?.ruleset_hash_b64u);
+        expect(firstReceipt?.policy?.custom_rule_count).toBe(dataHandling?.custom_rule_count);
+
+        return {
+          ruleId: firstClass?.rule_id ?? '',
+          rulesetHash: dataHandling?.ruleset_hash_b64u ?? '',
+          customRuleCount: dataHandling?.custom_rule_count ?? -1,
+          taxonomyVersion: dataHandling?.taxonomy_version ?? '',
+        };
+      } finally {
+        await mock.stop();
+        await rm(workdir, { recursive: true, force: true });
+      }
+    }
+
+    const first = await runCustomRuleCase('clawsig-proofed-dlp-custom-a-');
+    const second = await runCustomRuleCase('clawsig-proofed-dlp-custom-b-');
+
+    expect(first.ruleId).not.toBe('');
+    expect(first.ruleId).toBe(second.ruleId);
+    expect(first.rulesetHash).toBe(second.rulesetHash);
+    expect(first.customRuleCount).toBe(1);
+    expect(first.taxonomyVersion).toBe('prv.dlp.taxonomy.v2');
   });
 });
 
