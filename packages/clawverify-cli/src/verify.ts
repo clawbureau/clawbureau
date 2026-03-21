@@ -2,14 +2,17 @@ import * as fs from 'node:fs/promises';
 
 import {
   verifyAggregateBundle,
+  verifyCompiledEvidenceReportEnvelope,
   verifyExportBundle,
   verifyProofBundle,
   type AggregateBundleEnvelope,
+  type CompiledEvidenceReportEnvelope,
   type ExportBundlePayload,
   type ProofBundlePayload,
   type SignedEnvelope,
   type VerifyAggregateBundleResponse,
   type VerifyBundleResponse,
+  type VerifyCompiledEvidenceReportEnvelopeResponse,
   type VerifyExportBundleResponse,
 } from '@clawbureau/clawverify-core';
 
@@ -58,6 +61,13 @@ function unwrapExportBundleInput(value: unknown): unknown {
 }
 
 function unwrapAggregateBundleInput(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const envelope = value.envelope;
+  if (envelope !== undefined) return envelope;
+  return value;
+}
+
+function unwrapCompiledReportInput(value: unknown): unknown {
   if (!isRecord(value)) return value;
   const envelope = value.envelope;
   if (envelope !== undefined) return envelope;
@@ -366,6 +376,46 @@ export async function verifyExportBundleFromFile(opts: {
   };
 }
 
+export async function verifyCompiledReportFromFile(opts: {
+  inputPath: string;
+  configPath?: string;
+}): Promise<CliVerifyOutput> {
+  const verifiedAt = nowIso();
+  const raw = await readJsonFile(opts.inputPath);
+  const envelope = unwrapCompiledReportInput(raw) as CompiledEvidenceReportEnvelope;
+
+  const verification: VerifyCompiledEvidenceReportEnvelopeResponse =
+    await verifyCompiledEvidenceReportEnvelope(envelope);
+
+  if (verification.result.status !== 'VALID') {
+    return {
+      kind: 'compiled_report',
+      status: 'FAIL',
+      verified_at: verifiedAt,
+      reason_code: verification.error?.code ?? 'INVALID',
+      reason: verification.error?.message ?? verification.result.reason,
+      input: {
+        path: opts.inputPath,
+        config_path: opts.configPath,
+      },
+      verification,
+    };
+  }
+
+  return {
+    kind: 'compiled_report',
+    status: 'PASS',
+    verified_at: verifiedAt,
+    reason_code: 'OK',
+    reason: 'Compiled evidence report verified successfully',
+    input: {
+      path: opts.inputPath,
+      config_path: opts.configPath,
+    },
+    verification,
+  };
+}
+
 export function exitCodeForOutput(out: { status: string }): number {
   if (out.status === 'PASS') return 0;
   if (out.status === 'FAIL') return 1;
@@ -581,6 +631,9 @@ export function kindForSubcommand(cmd: string): CliKind | null {
     cmd === 'aggregate_bundle'
   ) {
     return 'export_bundle';
+  }
+  if (cmd === 'compiled-report' || cmd === 'compiled_report') {
+    return 'compiled_report';
   }
   if (cmd === 'commit-sig' || cmd === 'commit_sig') return 'commit_sig';
   return null;

@@ -1,4 +1,9 @@
-export type CliKind = 'proof_bundle' | 'export_bundle' | 'commit_sig' | 'compliance';
+export type CliKind =
+  | 'proof_bundle'
+  | 'export_bundle'
+  | 'commit_sig'
+  | 'compiled_report'
+  | 'compliance';
 
 export type CliStatus = 'PASS' | 'FAIL' | 'ERROR';
 

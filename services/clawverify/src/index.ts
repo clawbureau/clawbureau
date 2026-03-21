@@ -21,6 +21,10 @@ import { verifyScopedToken } from './verify-scoped-token';
 import { verifyControlChain } from './verify-control-chain';
 import { verifyTokenControl } from './verify-token-control';
 import { verifyExportBundle } from './verify-export-bundle';
+import {
+  compileAndSignCompiledEvidenceReport,
+  verifyCompiledEvidenceReport,
+} from './verify-compiled-report';
 import { validateWorkPolicyContractV2 } from './schema-validation';
 import {
   writeAuditLogEntry,
@@ -51,6 +55,8 @@ import type {
   VerifyControlChainResponse,
   VerifyTokenControlResponse,
   VerifyExportBundleResponse,
+  VerifyCompiledEvidenceReportResponse,
+  CompileCompiledEvidenceReportResponse,
   EnvelopeType,
   AuditLogReceipt,
 } from './types';
@@ -1674,6 +1680,89 @@ async function handleVerifyExportBundle(
 }
 
 /**
+ * Handle POST /v1/verify/compiled-report - Verify compiled evidence report envelopes
+ */
+async function handleVerifyCompiledReport(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+  const verification = await verifyCompiledEvidenceReport(envelope);
+
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'compiled_evidence_report' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did,
+    );
+  }
+
+  const response: VerifyCompiledEvidenceReportResponse & {
+    audit_receipt?: AuditLogReceipt;
+  } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
+
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+  return jsonResponse(response, status);
+}
+
+/**
+ * Handle POST /v1/compiler/compiled-report - Canonicalize + sign compiled report payloads
+ */
+async function handleCompileCompiledReport(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  const compilation = await compileAndSignCompiledEvidenceReport(body);
+
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && compilation.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'compiled_evidence_report' as EnvelopeType,
+      compilation.result.status,
+      compilation.result.signer_did,
+    );
+  }
+
+  const response: CompileCompiledEvidenceReportResponse & {
+    audit_receipt?: AuditLogReceipt;
+  } = {
+    ...compilation,
+    audit_receipt: auditReceipt,
+  };
+
+  const status = compilation.result.status === 'VALID' ? 200 : 422;
+  return jsonResponse(response, status);
+}
+
+/**
  * Handle POST /v1/verify/event-chain - Verify event chain envelopes
  */
 async function handleVerifyEventChain(
@@ -1955,6 +2044,8 @@ export default {
         <li><code>POST /v1/verify/batch</code> — batch verification</li>
         <li><code>POST /v1/verify/bundle</code> — proof bundle verification (trust tier)</li>
         <li><code>POST /v1/verify/export-bundle</code> — audit-ready export bundle verification (offline)</li>
+        <li><code>POST /v1/verify/compiled-report</code> — compiled evidence report envelope verification</li>
+        <li><code>POST /v1/compiler/compiled-report</code> — canonicalize + sign compiled evidence report payload</li>
         <li><code>POST /v1/verify/event-chain</code> — event chain verification</li>
         <li><code>POST /v1/verify/agent</code> — one-call agent verification</li>
         <li><code>POST /v1/introspect/scoped-token</code> — scoped token introspection</li>
@@ -1999,6 +2090,8 @@ export default {
             { method: 'POST', path: '/v1/verify/batch' },
             { method: 'POST', path: '/v1/verify/bundle' },
             { method: 'POST', path: '/v1/verify/export-bundle' },
+            { method: 'POST', path: '/v1/verify/compiled-report' },
+            { method: 'POST', path: '/v1/compiler/compiled-report' },
             { method: 'POST', path: '/v1/verify/event-chain' },
             { method: 'POST', path: '/v1/verify/agent' },
             { method: 'POST', path: '/v1/introspect/scoped-token' },
@@ -2158,6 +2251,16 @@ Canonical: ${url.origin}/.well-known/security.txt
     // POST /v1/verify/export-bundle - Export bundle verification
     if (url.pathname === '/v1/verify/export-bundle' && method === 'POST') {
       return handleVerifyExportBundle(request, env);
+    }
+
+    // POST /v1/verify/compiled-report - Compiled evidence report verification
+    if (url.pathname === '/v1/verify/compiled-report' && method === 'POST') {
+      return handleVerifyCompiledReport(request, env);
+    }
+
+    // POST /v1/compiler/compiled-report - Compiled evidence report canonicalization + signing
+    if (url.pathname === '/v1/compiler/compiled-report' && method === 'POST') {
+      return handleCompileCompiledReport(request, env);
     }
 
     // POST /v1/verify/event-chain - Event chain verification

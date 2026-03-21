@@ -27,6 +27,7 @@ export const ENVELOPE_TYPES = [
   'derivation_attestation',
   'audit_result_attestation',
   'export_bundle',
+  'compiled_evidence_report',
   'scoped_token',
   'policy_bundle',
 ] as const;
@@ -499,6 +500,87 @@ export interface VerifyArtifactRequest {
 
 export interface VerifyArtifactResponse {
   result: VerificationResult;
+  error?: VerificationError;
+}
+
+export type CompiledEvidenceControlStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'PARTIAL'
+  | 'INAPPLICABLE'
+  | 'FAIL_CLOSED_INVALID_EVIDENCE';
+
+export type CompiledEvidenceOverallStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'PARTIAL'
+  | 'FAIL_CLOSED_INVALID_EVIDENCE';
+
+export interface CompiledEvidenceReportEvidenceRefs {
+  proof_bundle_hash_b64u: string;
+  ontology_hash_b64u: string;
+  mapping_rules_hash_b64u: string;
+  verify_result_hash_b64u: string;
+}
+
+export interface CompiledEvidenceControlResult {
+  control_id: string;
+  status: CompiledEvidenceControlStatus;
+  reason_codes: string[];
+  evidence_hashes_b64u: string[];
+  waiver_applied: boolean;
+}
+
+export interface CompiledEvidenceReportPayload {
+  report_version: '1';
+  report_id: string;
+  compiled_at: string;
+  compiler_version: string;
+  evidence_refs: CompiledEvidenceReportEvidenceRefs;
+  overall_status: CompiledEvidenceOverallStatus;
+  matrix_hash_b64u: string;
+  control_results: CompiledEvidenceControlResult[];
+}
+
+export interface CompiledEvidenceReportEnvelope {
+  envelope_version: '1';
+  envelope_type: 'compiled_evidence_report';
+  payload: CompiledEvidenceReportPayload;
+  payload_hash_b64u: string;
+  hash_algorithm: HashAlgorithm;
+  signature_b64u: string;
+  algorithm: Algorithm;
+  signer_did: string;
+  issued_at: string;
+}
+
+export interface VerifyCompiledEvidenceReportRequest {
+  envelope: CompiledEvidenceReportEnvelope;
+}
+
+export interface VerifyCompiledEvidenceReportResponse {
+  result: VerificationResult;
+  report_id?: string;
+  matrix_hash_b64u?: string;
+  payload_hash_b64u?: string;
+  error?: VerificationError;
+}
+
+export interface CompileCompiledEvidenceReportSignerInput {
+  signer_did: string;
+  private_key_pkcs8_b64u: string;
+  issued_at?: string;
+}
+
+export interface CompileCompiledEvidenceReportRequest {
+  payload: CompiledEvidenceReportPayload;
+  signer: CompileCompiledEvidenceReportSignerInput;
+}
+
+export interface CompileCompiledEvidenceReportResponse {
+  result: VerificationResult;
+  report_id?: string;
+  envelope?: CompiledEvidenceReportEnvelope;
   error?: VerificationError;
 }
 

@@ -6,6 +6,14 @@
  * CEC-RT-003: fail-closed compiler state machine
  */
 
+import {
+  base64UrlDecode,
+  base64UrlEncode,
+  extractPublicKeyFromDidKey,
+  verifySignature,
+} from './crypto.js';
+import { jcsCanonicalize } from './jcs.js';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -58,6 +66,93 @@ export interface ComplianceReport {
   policy_hash_b64u?: string;
   controls: ControlResult[];
   gaps: ComplianceGap[];
+}
+
+export type CompiledEvidenceControlStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'PARTIAL'
+  | 'INAPPLICABLE'
+  | 'FAIL_CLOSED_INVALID_EVIDENCE';
+
+export type CompiledEvidenceOverallStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'PARTIAL'
+  | 'FAIL_CLOSED_INVALID_EVIDENCE';
+
+export interface CompiledEvidenceReportEvidenceRefs {
+  proof_bundle_hash_b64u: string;
+  ontology_hash_b64u: string;
+  mapping_rules_hash_b64u: string;
+  verify_result_hash_b64u: string;
+}
+
+export interface CompiledEvidenceControlResult {
+  control_id: string;
+  status: CompiledEvidenceControlStatus;
+  reason_codes: string[];
+  evidence_hashes_b64u: string[];
+  waiver_applied: boolean;
+}
+
+export interface CompiledEvidenceReport {
+  report_version: '1';
+  report_id: string;
+  compiled_at: string;
+  compiler_version: string;
+  evidence_refs: CompiledEvidenceReportEvidenceRefs;
+  overall_status: CompiledEvidenceOverallStatus;
+  matrix_hash_b64u: string;
+  control_results: CompiledEvidenceControlResult[];
+}
+
+export interface CompiledEvidenceReportEnvelope {
+  envelope_version: '1';
+  envelope_type: 'compiled_evidence_report';
+  payload: CompiledEvidenceReport;
+  payload_hash_b64u: string;
+  hash_algorithm: 'SHA-256';
+  signature_b64u: string;
+  algorithm: 'Ed25519';
+  signer_did: string;
+  issued_at: string;
+}
+
+export interface AuthoritativeCompiledReportSignerInput {
+  signer_did: string;
+  private_key_pkcs8_b64u: string;
+  issued_at?: string;
+}
+
+export interface VerifyCompiledEvidenceReportEnvelopeResult {
+  status: 'VALID' | 'INVALID';
+  reason: string;
+  envelope_type: 'compiled_evidence_report';
+  signer_did?: string;
+  verified_at: string;
+}
+
+export interface VerifyCompiledEvidenceReportEnvelopeError {
+  code:
+    | 'SIGNATURE_INVALID'
+    | 'HASH_MISMATCH'
+    | 'MISSING_REQUIRED_FIELD'
+    | 'SCHEMA_VALIDATION_FAILED'
+    | 'UNKNOWN_ALGORITHM'
+    | 'UNKNOWN_HASH_ALGORITHM'
+    | 'INVALID_DID_FORMAT'
+    | 'MALFORMED_ENVELOPE';
+  message: string;
+  field?: string;
+}
+
+export interface VerifyCompiledEvidenceReportEnvelopeResponse {
+  result: VerifyCompiledEvidenceReportEnvelopeResult;
+  report_id?: string;
+  matrix_hash_b64u?: string;
+  payload_hash_b64u?: string;
+  error?: VerifyCompiledEvidenceReportEnvelopeError;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +228,8 @@ export interface AuthoritativeCompilerInput {
   bundle: ComplianceBundleInput;
   policy?: CompliancePolicyInput;
   verification_fact: AuthoritativeVerificationFact;
+  compiled_report_refs?: Partial<CompiledEvidenceReportEvidenceRefs>;
+  compiled_report_signer?: AuthoritativeCompiledReportSignerInput;
 }
 
 export type AuthoritativeCompilerState =
@@ -143,7 +240,7 @@ export type AuthoritativeCompilerState =
 
 export interface AuthoritativeCompilerRuntime {
   runtime_version: '1';
-  engine: 'clawcompiler-runtime-v1-wave1';
+  engine: 'clawcompiler-runtime-v1-wave1' | 'clawcompiler-runtime-v1-wave2';
   deterministic: true;
   state: AuthoritativeCompilerState;
   framework?: ComplianceFramework;
@@ -162,6 +259,8 @@ export interface AuthoritativeCompilerFailure {
 export interface AuthoritativeCompilerResult {
   runtime: AuthoritativeCompilerRuntime;
   report?: ComplianceReport;
+  compiled_report?: CompiledEvidenceReport;
+  compiled_report_envelope?: CompiledEvidenceReportEnvelope;
   failure?: AuthoritativeCompilerFailure;
 }
 
@@ -173,6 +272,10 @@ const DETERMINISTIC_EPOCH_ISO = '1970-01-01T00:00:00.000Z';
 const REASON_CODE_RE = /^[A-Z0-9_]{1,64}$/;
 const STRICT_ISO_UTC_RE =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+const BASE64_URL_RE = /^[A-Za-z0-9_-]+$/;
+const COMPILED_REPORT_ID_RE = /^cer_[A-Za-z0-9._:-]+$/;
+const COMPILER_VERSION_WAVE2 = 'clawcompiler-runtime-v1-wave2';
+const COMPILER_MAPPING_VERSION = 'control-pack-v1';
 
 interface ParseFailure {
   ok: false;
@@ -220,6 +323,42 @@ function resolveGeneratedAt(raw: unknown): string {
 
 function reportGeneratedAt(raw: unknown): string {
   return resolveGeneratedAt(raw);
+}
+
+function isBase64UrlString(value: unknown, minLength: number = 1): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length >= minLength &&
+    BASE64_URL_RE.test(value)
+  );
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const source = bytes.buffer;
+  if (source instanceof ArrayBuffer) {
+    return source.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+async function sha256B64uFromCanonical(value: unknown): Promise<string> {
+  const canonical = jcsCanonicalize(value);
+  const bytes = new TextEncoder().encode(canonical);
+  const digest = await crypto.subtle.digest('SHA-256', toArrayBuffer(bytes));
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+async function sha256B64uFromString(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', toArrayBuffer(bytes));
+  return base64UrlEncode(new Uint8Array(digest));
 }
 
 function ensureOptionalArrayField(
@@ -386,6 +525,77 @@ function parsePolicyInput(
   return {
     ok: true,
     value: rawPolicy as CompliancePolicyInput,
+  };
+}
+
+function parseCompiledReportRefsInput(
+  rawRefs: Record<string, unknown>,
+): { ok: true; value: Partial<CompiledEvidenceReportEvidenceRefs> } | ParseFailure {
+  const refFields: Array<keyof CompiledEvidenceReportEvidenceRefs> = [
+    'proof_bundle_hash_b64u',
+    'ontology_hash_b64u',
+    'mapping_rules_hash_b64u',
+    'verify_result_hash_b64u',
+  ];
+
+  for (const field of refFields) {
+    if (rawRefs[field] === undefined) continue;
+
+    if (!isBase64UrlString(rawRefs[field], 8)) {
+      return {
+        ok: false,
+        reason_code: 'COMPILER_INPUT_MALFORMED_COMPILED_REPORT_REFS',
+        reason:
+          `compiled_report_refs.${field}, when present, must be base64url (min length 8).`,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    value: rawRefs as Partial<CompiledEvidenceReportEvidenceRefs>,
+  };
+}
+
+function parseCompiledReportSignerInput(
+  rawSigner: Record<string, unknown>,
+): { ok: true; value: AuthoritativeCompiledReportSignerInput } | ParseFailure {
+  if (!isNonEmptyString(rawSigner.signer_did)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_COMPILED_REPORT_SIGNER_DID',
+      reason: 'compiled_report_signer.signer_did must be a non-empty string.',
+    };
+  }
+
+  if (!isNonEmptyString(rawSigner.private_key_pkcs8_b64u)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_COMPILED_REPORT_SIGNER_KEY',
+      reason:
+        'compiled_report_signer.private_key_pkcs8_b64u must be a non-empty string.',
+    };
+  }
+
+  if (
+    rawSigner.issued_at !== undefined &&
+    (!isNonEmptyString(rawSigner.issued_at) || !STRICT_ISO_UTC_RE.test(rawSigner.issued_at))
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_COMPILED_REPORT_SIGNER_ISSUED_AT',
+      reason:
+        'compiled_report_signer.issued_at, when present, must be a strict UTC ISO-8601 timestamp.',
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      signer_did: rawSigner.signer_did,
+      private_key_pkcs8_b64u: rawSigner.private_key_pkcs8_b64u,
+      issued_at: rawSigner.issued_at,
+    },
   };
 }
 
@@ -840,6 +1050,14 @@ function parseCompilerInput(rawInput: unknown): ParseCompilerResult {
     };
   }
 
+  if (!isBase64UrlString(rawInput.bundle_hash_b64u, 8)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_BUNDLE_HASH',
+      reason: 'bundle_hash_b64u must be base64url (min length 8).',
+    };
+  }
+
   if (!isRecord(rawInput.bundle)) {
     return {
       ok: false,
@@ -939,6 +1157,46 @@ function parseCompilerInput(rawInput: unknown): ParseCompilerResult {
     };
   }
 
+  if (
+    rawInput.compiled_report_refs !== undefined &&
+    !isRecord(rawInput.compiled_report_refs)
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_COMPILED_REPORT_REFS',
+      reason: 'compiled_report_refs, when present, must be a JSON object.',
+    };
+  }
+
+  const parsedCompiledReportRefs =
+    rawInput.compiled_report_refs !== undefined
+      ? parseCompiledReportRefsInput(rawInput.compiled_report_refs)
+      : undefined;
+
+  if (parsedCompiledReportRefs && !parsedCompiledReportRefs.ok) {
+    return parsedCompiledReportRefs;
+  }
+
+  if (
+    rawInput.compiled_report_signer !== undefined &&
+    !isRecord(rawInput.compiled_report_signer)
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_COMPILED_REPORT_SIGNER',
+      reason: 'compiled_report_signer, when present, must be a JSON object.',
+    };
+  }
+
+  const parsedCompiledReportSigner =
+    rawInput.compiled_report_signer !== undefined
+      ? parseCompiledReportSignerInput(rawInput.compiled_report_signer)
+      : undefined;
+
+  if (parsedCompiledReportSigner && !parsedCompiledReportSigner.ok) {
+    return parsedCompiledReportSigner;
+  }
+
   return {
     ok: true,
     value: {
@@ -957,6 +1215,12 @@ function parseCompilerInput(rawInput: unknown): ParseCompilerResult {
         proof_tier: asString(vf.proof_tier),
         agent_did: vfAgentDid,
       },
+      compiled_report_refs: parsedCompiledReportRefs?.ok
+        ? parsedCompiledReportRefs.value
+        : undefined,
+      compiled_report_signer: parsedCompiledReportSigner?.ok
+        ? parsedCompiledReportSigner.value
+        : undefined,
     },
   };
 }
@@ -1076,5 +1340,855 @@ export function compileAuthoritativeComplianceWave1(
         blocking.narrative ??
         `Control ${blocking.control_id} did not pass authoritative compilation.`,
     },
+  };
+}
+
+function compiledReasonFallback(status: CompiledEvidenceControlStatus): string {
+  switch (status) {
+    case 'PASS':
+      return 'CONTROL_PREDICATE_SATISFIED';
+    case 'FAIL':
+      return 'CONTROL_PREDICATE_FAILED';
+    case 'PARTIAL':
+      return 'CONTROL_PARTIAL';
+    case 'INAPPLICABLE':
+      return 'CONTROL_INAPPLICABLE';
+    case 'FAIL_CLOSED_INVALID_EVIDENCE':
+      return 'CONTROL_FAIL_CLOSED_INVALID_EVIDENCE';
+    default: {
+      const _never: never = status;
+      return _never;
+    }
+  }
+}
+
+function toCompiledControlStatus(status: ControlStatus): CompiledEvidenceControlStatus {
+  switch (status) {
+    case 'PASS':
+      return 'PASS';
+    case 'FAIL':
+      return 'FAIL';
+    case 'NOT_APPLICABLE':
+      return 'INAPPLICABLE';
+    case 'INSUFFICIENT_EVIDENCE':
+      return 'FAIL_CLOSED_INVALID_EVIDENCE';
+    default: {
+      const _never: never = status;
+      return _never;
+    }
+  }
+}
+
+function summarizeCompiledOverallStatus(
+  controls: CompiledEvidenceControlResult[],
+): CompiledEvidenceOverallStatus {
+  if (controls.some((control) => control.status === 'FAIL_CLOSED_INVALID_EVIDENCE')) {
+    return 'FAIL_CLOSED_INVALID_EVIDENCE';
+  }
+
+  if (controls.some((control) => control.status === 'FAIL')) {
+    return 'FAIL';
+  }
+
+  if (controls.some((control) => control.status === 'PARTIAL')) {
+    return 'PARTIAL';
+  }
+
+  return 'PASS';
+}
+
+function normalizeCompiledMatrixControlResults(
+  controlResults: CompiledEvidenceControlResult[],
+): CompiledEvidenceControlResult[] {
+  return [...controlResults]
+    .map((control) => ({
+      control_id: control.control_id,
+      status: control.status,
+      reason_codes: [...control.reason_codes],
+      evidence_hashes_b64u: [...control.evidence_hashes_b64u],
+      waiver_applied: control.waiver_applied,
+    }))
+    .sort((a, b) => a.control_id.localeCompare(b.control_id));
+}
+
+async function computeCompiledMatrixHashB64u(
+  controlResults: CompiledEvidenceControlResult[],
+): Promise<string> {
+  const matrixView = {
+    matrix_version: '1',
+    control_results: normalizeCompiledMatrixControlResults(controlResults),
+  };
+
+  return sha256B64uFromCanonical(matrixView);
+}
+
+async function resolveCompiledEvidenceRefs(
+  input: AuthoritativeCompilerInput,
+  complianceReport: ComplianceReport,
+): Promise<CompiledEvidenceReportEvidenceRefs> {
+  const provided = input.compiled_report_refs;
+
+  const ontologyHash =
+    provided?.ontology_hash_b64u ??
+    (await sha256B64uFromCanonical({
+      ontology_version: '1',
+      framework: input.framework,
+      compiler_version: COMPILER_VERSION_WAVE2,
+    }));
+
+  const mappingRulesHash =
+    provided?.mapping_rules_hash_b64u ??
+    (await sha256B64uFromCanonical({
+      mapping_version: COMPILER_MAPPING_VERSION,
+      framework: input.framework,
+      controls: [...complianceReport.controls.map((control) => control.control_id)].sort(),
+    }));
+
+  const verifyResultHash =
+    provided?.verify_result_hash_b64u ??
+    (await sha256B64uFromCanonical({
+      verification_fact_version: input.verification_fact.fact_version,
+      status: input.verification_fact.status,
+      reason_code: input.verification_fact.reason_code,
+      reason: input.verification_fact.reason,
+      verified_at: input.verification_fact.verified_at,
+      verifier: input.verification_fact.verifier ?? null,
+      proof_tier: input.verification_fact.proof_tier ?? null,
+      agent_did: input.verification_fact.agent_did ?? null,
+    }));
+
+  return {
+    proof_bundle_hash_b64u:
+      provided?.proof_bundle_hash_b64u ?? input.bundle_hash_b64u,
+    ontology_hash_b64u: ontologyHash,
+    mapping_rules_hash_b64u: mappingRulesHash,
+    verify_result_hash_b64u: verifyResultHash,
+  };
+}
+
+async function compileDeterministicControlResults(
+  report: ComplianceReport,
+): Promise<CompiledEvidenceControlResult[]> {
+  const controls = await Promise.all(
+    report.controls.map(async (control) => {
+      const compiledStatus = toCompiledControlStatus(control.status);
+      const reasonCode = normalizeReasonCode(
+        control.reason_code,
+        compiledReasonFallback(compiledStatus),
+      );
+
+      const evidenceHash = await sha256B64uFromCanonical({
+        control_id: control.control_id,
+        evidence_type: control.evidence_type ?? null,
+        evidence_ref: control.evidence_ref ?? null,
+        proof_bundle_hash_b64u: report.proof_bundle_hash_b64u,
+      });
+
+      return {
+        control_id: control.control_id,
+        status: compiledStatus,
+        reason_codes: [reasonCode],
+        evidence_hashes_b64u: [evidenceHash],
+        waiver_applied: false,
+      } satisfies CompiledEvidenceControlResult;
+    }),
+  );
+
+  return controls.sort((a, b) => a.control_id.localeCompare(b.control_id));
+}
+
+function deterministicCompiledReportId(input: AuthoritativeCompilerInput): string {
+  const frameworkPart = input.framework.replace(/[^A-Za-z0-9._:-]/g, '_');
+  const bundlePart = input.bundle_hash_b64u.slice(0, 24);
+  return `cer_${frameworkPart}_${bundlePart}`;
+}
+
+export async function buildCompiledEvidenceReport(
+  input: AuthoritativeCompilerInput,
+  complianceReport: ComplianceReport,
+): Promise<CompiledEvidenceReport> {
+  const controlResults = await compileDeterministicControlResults(complianceReport);
+  const matrixHash = await computeCompiledMatrixHashB64u(controlResults);
+  const evidenceRefs = await resolveCompiledEvidenceRefs(input, complianceReport);
+
+  const reportId = deterministicCompiledReportId(input);
+  if (!COMPILED_REPORT_ID_RE.test(reportId)) {
+    throw new Error('Deterministic compiled report ID generation failed schema constraints.');
+  }
+
+  return {
+    report_version: '1',
+    report_id: reportId,
+    compiled_at: resolveGeneratedAt(complianceReport.generated_at),
+    compiler_version: COMPILER_VERSION_WAVE2,
+    evidence_refs: evidenceRefs,
+    overall_status: summarizeCompiledOverallStatus(controlResults),
+    matrix_hash_b64u: matrixHash,
+    control_results: controlResults,
+  };
+}
+
+async function signCompiledReportEnvelope(
+  compiledReport: CompiledEvidenceReport,
+  signer: AuthoritativeCompiledReportSignerInput,
+  fallbackIssuedAt: string,
+): Promise<
+  { ok: true; envelope: CompiledEvidenceReportEnvelope }
+  | { ok: false; reason_code: string; reason: string }
+> {
+  if (!isNonEmptyString(signer.signer_did) || !signer.signer_did.startsWith('did:key:')) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_SIGNER_DID_INVALID',
+      reason: 'compiled_report_signer.signer_did must be a did:key DID.',
+    };
+  }
+
+  const signerPublicKey = extractPublicKeyFromDidKey(signer.signer_did);
+  if (!signerPublicKey) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_SIGNER_DID_INVALID',
+      reason:
+        'compiled_report_signer.signer_did must be did:key with an Ed25519 multicodec key.',
+    };
+  }
+
+  let pkcs8Bytes: Uint8Array;
+  try {
+    pkcs8Bytes = base64UrlDecode(signer.private_key_pkcs8_b64u);
+  } catch {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_SIGNER_KEY_INVALID',
+      reason: 'compiled_report_signer.private_key_pkcs8_b64u must be valid base64url.',
+    };
+  }
+
+  let privateKey: CryptoKey;
+  try {
+    privateKey = await crypto.subtle.importKey(
+      'pkcs8',
+      toArrayBuffer(pkcs8Bytes),
+      { name: 'Ed25519' },
+      false,
+      ['sign'],
+    );
+  } catch {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_SIGNER_KEY_IMPORT_FAILED',
+      reason: 'Could not import compiled report signer private key.',
+    };
+  }
+
+  const payloadHash = await sha256B64uFromCanonical(compiledReport);
+  const payloadHashBytes = new TextEncoder().encode(payloadHash);
+
+  let signatureBytes: Uint8Array;
+  try {
+    const signed = await crypto.subtle.sign(
+      'Ed25519',
+      privateKey,
+      toArrayBuffer(payloadHashBytes),
+    );
+    signatureBytes = new Uint8Array(signed);
+  } catch {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_SIGNER_SIGNATURE_FAILED',
+      reason: 'Failed to sign compiled report payload hash.',
+    };
+  }
+
+  const signerMatchesDid = await verifySignature(
+    'Ed25519',
+    signerPublicKey,
+    signatureBytes,
+    payloadHashBytes,
+  );
+
+  if (!signerMatchesDid) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_SIGNER_DID_MISMATCH',
+      reason:
+        'compiled_report_signer.private_key_pkcs8_b64u does not match compiled_report_signer.signer_did.',
+    };
+  }
+
+  return {
+    ok: true,
+    envelope: {
+      envelope_version: '1',
+      envelope_type: 'compiled_evidence_report',
+      payload: compiledReport,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: base64UrlEncode(signatureBytes),
+      algorithm: 'Ed25519',
+      signer_did: signer.signer_did,
+      issued_at: resolveGeneratedAt(signer.issued_at ?? fallbackIssuedAt),
+    },
+  };
+}
+
+export async function compileAuthoritativeComplianceWave2(
+  rawInput: unknown,
+): Promise<AuthoritativeCompilerResult> {
+  const wave1 = compileAuthoritativeComplianceWave1(rawInput);
+
+  if (!wave1.report) {
+    return wave1;
+  }
+
+  const parsed = parseCompilerInput(rawInput);
+  if (!parsed.ok) {
+    return {
+      runtime: {
+        ...wave1.runtime,
+        engine: 'clawcompiler-runtime-v1-wave2',
+        state: 'INPUT_REJECTED',
+        global_status: 'FAIL',
+        global_reason_code: parsed.reason_code,
+      },
+      failure: {
+        reason_code: parsed.reason_code,
+        reason: parsed.reason,
+      },
+    };
+  }
+
+  const input = parsed.value;
+
+  let compiledReport: CompiledEvidenceReport;
+  try {
+    compiledReport = await buildCompiledEvidenceReport(input, wave1.report);
+  } catch (err) {
+    const reason =
+      err instanceof Error
+        ? err.message
+        : 'Failed to deterministically compile authoritative evidence report.';
+
+    return {
+      runtime: {
+        ...wave1.runtime,
+        engine: 'clawcompiler-runtime-v1-wave2',
+        state: 'COMPILED_FAIL',
+        global_status: 'FAIL',
+        global_reason_code: 'COMPILER_COMPILED_REPORT_FAILED',
+      },
+      report: wave1.report,
+      failure: {
+        reason_code: 'COMPILER_COMPILED_REPORT_FAILED',
+        reason,
+      },
+    };
+  }
+
+  const runtime: AuthoritativeCompilerRuntime = {
+    ...wave1.runtime,
+    engine: 'clawcompiler-runtime-v1-wave2',
+  };
+
+  if (!input.compiled_report_signer) {
+    return {
+      ...wave1,
+      runtime,
+      compiled_report: compiledReport,
+    };
+  }
+
+  const signed = await signCompiledReportEnvelope(
+    compiledReport,
+    input.compiled_report_signer,
+    runtime.generated_at,
+  );
+
+  if (!signed.ok) {
+    return {
+      runtime: {
+        ...runtime,
+        state: 'COMPILED_FAIL',
+        global_status: 'FAIL',
+        global_reason_code: signed.reason_code,
+      },
+      report: wave1.report,
+      compiled_report: compiledReport,
+      failure: {
+        reason_code: signed.reason_code,
+        reason: signed.reason,
+      },
+    };
+  }
+
+  return {
+    ...wave1,
+    runtime,
+    compiled_report: compiledReport,
+    compiled_report_envelope: signed.envelope,
+  };
+}
+
+function validateCompiledReportPayloadShape(
+  rawPayload: unknown,
+):
+  | {
+      ok: true;
+      value: CompiledEvidenceReport;
+    }
+  | {
+      ok: false;
+      code: VerifyCompiledEvidenceReportEnvelopeError['code'];
+      message: string;
+      field?: string;
+    } {
+  if (!isRecord(rawPayload)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload must be a JSON object.',
+      field: 'payload',
+    };
+  }
+
+  if (rawPayload.report_version !== '1') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.report_version must equal "1".',
+      field: 'payload.report_version',
+    };
+  }
+
+  if (!isNonEmptyString(rawPayload.report_id) || !COMPILED_REPORT_ID_RE.test(rawPayload.report_id)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.report_id must match /^cer_[A-Za-z0-9._:-]+$/.',
+      field: 'payload.report_id',
+    };
+  }
+
+  if (!isNonEmptyString(rawPayload.compiled_at) || !STRICT_ISO_UTC_RE.test(rawPayload.compiled_at)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.compiled_at must be a strict UTC ISO-8601 timestamp.',
+      field: 'payload.compiled_at',
+    };
+  }
+
+  if (rawPayload.compiler_version !== COMPILER_VERSION_WAVE2) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `payload.compiler_version must equal "${COMPILER_VERSION_WAVE2}".`,
+      field: 'payload.compiler_version',
+    };
+  }
+
+  if (!isRecord(rawPayload.evidence_refs)) {
+    return {
+      ok: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'payload.evidence_refs is required.',
+      field: 'payload.evidence_refs',
+    };
+  }
+
+  const evidenceRefFields: Array<keyof CompiledEvidenceReportEvidenceRefs> = [
+    'proof_bundle_hash_b64u',
+    'ontology_hash_b64u',
+    'mapping_rules_hash_b64u',
+    'verify_result_hash_b64u',
+  ];
+
+  for (const field of evidenceRefFields) {
+    const value = rawPayload.evidence_refs[field];
+    if (!isNonEmptyString(value)) {
+      return {
+        ok: false,
+        code: 'MISSING_REQUIRED_FIELD',
+        message: `payload.evidence_refs.${field} is required.`,
+        field: `payload.evidence_refs.${field}`,
+      };
+    }
+
+    if (!isBase64UrlString(value, 8)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `payload.evidence_refs.${field} must be base64url (min length 8).`,
+        field: `payload.evidence_refs.${field}`,
+      };
+    }
+  }
+
+  if (
+    rawPayload.overall_status !== 'PASS' &&
+    rawPayload.overall_status !== 'FAIL' &&
+    rawPayload.overall_status !== 'FAIL_CLOSED_INVALID_EVIDENCE'
+  ) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.overall_status must be PASS, FAIL, or FAIL_CLOSED_INVALID_EVIDENCE for wave2 compiled reports.',
+      field: 'payload.overall_status',
+    };
+  }
+
+  if (!isBase64UrlString(rawPayload.matrix_hash_b64u, 8)) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.matrix_hash_b64u must be base64url (min length 8).',
+      field: 'payload.matrix_hash_b64u',
+    };
+  }
+
+  if (!Array.isArray(rawPayload.control_results) || rawPayload.control_results.length === 0) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: 'payload.control_results must be a non-empty array.',
+      field: 'payload.control_results',
+    };
+  }
+
+  for (let i = 0; i < rawPayload.control_results.length; i++) {
+    const control = rawPayload.control_results[i];
+    const prefix = `payload.control_results[${i}]`;
+
+    if (!isRecord(control)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix} must be an object.`,
+        field: prefix,
+      };
+    }
+
+    if (!isNonEmptyString(control.control_id)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.control_id must be a non-empty string.`,
+        field: `${prefix}.control_id`,
+      };
+    }
+
+    if (
+      control.status !== 'PASS' &&
+      control.status !== 'FAIL' &&
+      control.status !== 'INAPPLICABLE' &&
+      control.status !== 'FAIL_CLOSED_INVALID_EVIDENCE'
+    ) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          `${prefix}.status must be PASS, FAIL, INAPPLICABLE, or FAIL_CLOSED_INVALID_EVIDENCE for wave2 compiled reports.`,
+        field: `${prefix}.status`,
+      };
+    }
+
+    if (!Array.isArray(control.reason_codes) || control.reason_codes.length === 0) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.reason_codes must be a non-empty array.`,
+        field: `${prefix}.reason_codes`,
+      };
+    }
+
+    const invalidReasonCode = control.reason_codes.some(
+      (reason) => !isNonEmptyString(reason) || !/^[A-Z0-9_]{3,}$/.test(reason),
+    );
+    if (invalidReasonCode) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.reason_codes values must match /^[A-Z0-9_]{3,}$/.`,
+        field: `${prefix}.reason_codes`,
+      };
+    }
+
+    if (
+      !Array.isArray(control.evidence_hashes_b64u) ||
+      control.evidence_hashes_b64u.length === 0
+    ) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.evidence_hashes_b64u must be a non-empty array.`,
+        field: `${prefix}.evidence_hashes_b64u`,
+      };
+    }
+
+    const invalidEvidenceHash = control.evidence_hashes_b64u.some(
+      (hash) => !isBase64UrlString(hash, 8),
+    );
+    if (invalidEvidenceHash) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.evidence_hashes_b64u values must be base64url (min length 8).`,
+        field: `${prefix}.evidence_hashes_b64u`,
+      };
+    }
+
+    if (typeof control.waiver_applied !== 'boolean') {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.waiver_applied must be a boolean.`,
+        field: `${prefix}.waiver_applied`,
+      };
+    }
+
+    if (control.waiver_applied !== false) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.waiver_applied must be false for wave2 compiled reports.`,
+        field: `${prefix}.waiver_applied`,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    value: rawPayload as unknown as CompiledEvidenceReport,
+  };
+}
+
+export async function verifyCompiledEvidenceReportEnvelope(
+  rawEnvelope: unknown,
+): Promise<VerifyCompiledEvidenceReportEnvelopeResponse> {
+  const verifiedAt = new Date().toISOString();
+
+  const invalid = (
+    code: VerifyCompiledEvidenceReportEnvelopeError['code'],
+    reason: string,
+    message: string,
+    field?: string,
+    payload?: { report_id?: string; matrix_hash_b64u?: string; payload_hash_b64u?: string },
+  ): VerifyCompiledEvidenceReportEnvelopeResponse => ({
+    result: {
+      status: 'INVALID',
+      reason,
+      envelope_type: 'compiled_evidence_report',
+      verified_at: verifiedAt,
+    },
+    report_id: payload?.report_id,
+    matrix_hash_b64u: payload?.matrix_hash_b64u,
+    payload_hash_b64u: payload?.payload_hash_b64u,
+    error: {
+      code,
+      message,
+      field,
+    },
+  });
+
+  if (!isRecord(rawEnvelope)) {
+    return invalid(
+      'SCHEMA_VALIDATION_FAILED',
+      'Compiled evidence report envelope is malformed.',
+      'Envelope must be a JSON object.',
+      'envelope',
+    );
+  }
+
+  if (rawEnvelope.envelope_version !== '1') {
+    return invalid(
+      'SCHEMA_VALIDATION_FAILED',
+      'Compiled evidence report envelope version is unsupported.',
+      'envelope_version must equal "1".',
+      'envelope_version',
+    );
+  }
+
+  if (rawEnvelope.envelope_type !== 'compiled_evidence_report') {
+    return invalid(
+      'SCHEMA_VALIDATION_FAILED',
+      'Compiled evidence report envelope type is invalid.',
+      'envelope_type must equal "compiled_evidence_report".',
+      'envelope_type',
+    );
+  }
+
+  if (rawEnvelope.hash_algorithm !== 'SHA-256') {
+    return invalid(
+      rawEnvelope.hash_algorithm === 'BLAKE3'
+        ? 'UNKNOWN_HASH_ALGORITHM'
+        : 'SCHEMA_VALIDATION_FAILED',
+      'Compiled evidence report hash algorithm is unsupported.',
+      'hash_algorithm must equal "SHA-256".',
+      'hash_algorithm',
+    );
+  }
+
+  if (rawEnvelope.algorithm !== 'Ed25519') {
+    return invalid(
+      'UNKNOWN_ALGORITHM',
+      'Compiled evidence report signature algorithm is unsupported.',
+      'algorithm must equal "Ed25519".',
+      'algorithm',
+    );
+  }
+
+  if (!isBase64UrlString(rawEnvelope.payload_hash_b64u, 8)) {
+    return invalid(
+      'SCHEMA_VALIDATION_FAILED',
+      'Compiled evidence report payload hash format is invalid.',
+      'payload_hash_b64u must be base64url (min length 8).',
+      'payload_hash_b64u',
+    );
+  }
+
+  if (!isBase64UrlString(rawEnvelope.signature_b64u, 8)) {
+    return invalid(
+      'SCHEMA_VALIDATION_FAILED',
+      'Compiled evidence report signature format is invalid.',
+      'signature_b64u must be base64url (min length 8).',
+      'signature_b64u',
+    );
+  }
+
+  if (!isNonEmptyString(rawEnvelope.signer_did)) {
+    return invalid(
+      'SCHEMA_VALIDATION_FAILED',
+      'Compiled evidence report signer DID is missing.',
+      'signer_did must be a non-empty string.',
+      'signer_did',
+    );
+  }
+
+  if (!rawEnvelope.signer_did.startsWith('did:')) {
+    return invalid(
+      'INVALID_DID_FORMAT',
+      'Compiled evidence report signer DID format is invalid.',
+      'signer_did must start with "did:".',
+      'signer_did',
+    );
+  }
+
+  if (!isNonEmptyString(rawEnvelope.issued_at) || !STRICT_ISO_UTC_RE.test(rawEnvelope.issued_at)) {
+    return invalid(
+      'SCHEMA_VALIDATION_FAILED',
+      'Compiled evidence report issued_at is invalid.',
+      'issued_at must be a strict UTC ISO-8601 timestamp.',
+      'issued_at',
+    );
+  }
+
+  const payloadValidation = validateCompiledReportPayloadShape(rawEnvelope.payload);
+  if (!payloadValidation.ok) {
+    return invalid(
+      payloadValidation.code,
+      'Compiled evidence report payload failed schema validation.',
+      payloadValidation.message,
+      payloadValidation.field,
+    );
+  }
+
+  const payload = payloadValidation.value;
+
+  const expectedMatrixHash = await computeCompiledMatrixHashB64u(payload.control_results);
+  if (expectedMatrixHash !== payload.matrix_hash_b64u) {
+    return invalid(
+      'HASH_MISMATCH',
+      'Compiled evidence report matrix hash mismatch.',
+      'matrix_hash_b64u does not match the canonical hash of control_results.',
+      'payload.matrix_hash_b64u',
+      {
+        report_id: payload.report_id,
+        matrix_hash_b64u: payload.matrix_hash_b64u,
+        payload_hash_b64u: rawEnvelope.payload_hash_b64u,
+      },
+    );
+  }
+
+  const expectedPayloadHash = await sha256B64uFromCanonical(payload);
+  if (expectedPayloadHash !== rawEnvelope.payload_hash_b64u) {
+    return invalid(
+      'HASH_MISMATCH',
+      'Compiled evidence report payload hash mismatch.',
+      'payload_hash_b64u does not match the canonical hash of payload.',
+      'payload_hash_b64u',
+      {
+        report_id: payload.report_id,
+        matrix_hash_b64u: payload.matrix_hash_b64u,
+        payload_hash_b64u: rawEnvelope.payload_hash_b64u,
+      },
+    );
+  }
+
+  const publicKey = extractPublicKeyFromDidKey(rawEnvelope.signer_did);
+  if (!publicKey) {
+    return invalid(
+      'INVALID_DID_FORMAT',
+      'Compiled evidence report signer DID could not be resolved to an Ed25519 key.',
+      'signer_did must be did:key with an Ed25519 multicodec key.',
+      'signer_did',
+      {
+        report_id: payload.report_id,
+        matrix_hash_b64u: payload.matrix_hash_b64u,
+        payload_hash_b64u: rawEnvelope.payload_hash_b64u,
+      },
+    );
+  }
+
+  let signatureBytes: Uint8Array;
+  try {
+    signatureBytes = base64UrlDecode(rawEnvelope.signature_b64u);
+  } catch {
+    return invalid(
+      'MALFORMED_ENVELOPE',
+      'Compiled evidence report signature encoding is invalid.',
+      'signature_b64u must be valid base64url encoding.',
+      'signature_b64u',
+      {
+        report_id: payload.report_id,
+        matrix_hash_b64u: payload.matrix_hash_b64u,
+        payload_hash_b64u: rawEnvelope.payload_hash_b64u,
+      },
+    );
+  }
+
+  const signatureValid = await verifySignature(
+    'Ed25519',
+    publicKey,
+    signatureBytes,
+    new TextEncoder().encode(rawEnvelope.payload_hash_b64u),
+  );
+
+  if (!signatureValid) {
+    return invalid(
+      'SIGNATURE_INVALID',
+      'Compiled evidence report signature verification failed.',
+      'signature_b64u does not verify payload_hash_b64u with signer_did key.',
+      'signature_b64u',
+      {
+        report_id: payload.report_id,
+        matrix_hash_b64u: payload.matrix_hash_b64u,
+        payload_hash_b64u: rawEnvelope.payload_hash_b64u,
+      },
+    );
+  }
+
+  return {
+    result: {
+      status: 'VALID',
+      reason: 'Compiled evidence report envelope verified successfully.',
+      envelope_type: 'compiled_evidence_report',
+      signer_did: rawEnvelope.signer_did,
+      verified_at: verifiedAt,
+    },
+    report_id: payload.report_id,
+    matrix_hash_b64u: payload.matrix_hash_b64u,
+    payload_hash_b64u: rawEnvelope.payload_hash_b64u,
   };
 }
