@@ -16,7 +16,7 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 - **Clawcompiler Runtime v1** (deterministic compiler runtime, signed compiled reports, first assurance pack, auditor-facing surfaces)
   - Folder: `docs/roadmaps/clawcompiler-runtime-v1/`
-  - Status: Wave 1 foundations shipped, 3/10 stories complete (PR #516); Wave 2 is next
+  - Status: Waves 1-2 shipped, 6/10 stories complete (PRs #516/#518); Wave 3 is next
   - Beads: `monorepo-cec2`, `monorepo-cec2.1`..`monorepo-cec2.10`
 
 ## Completed roadmaps

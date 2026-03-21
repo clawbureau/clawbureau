@@ -50,3 +50,36 @@ Started: 2026-03-21T17:45:00Z
   - Runtime v1 is now **3/10 shipped stories**.
   - Wave 2 (`CEC-RT-004`..`CEC-RT-006`) is the next dependency-cleared tranche.
 ---
+
+## 2026-03-21T23:35:00Z - Wave 2 authoritative compile runtime shipped
+- What shipped
+  - Merged PR #518 — `feat(clawcompiler): add compiled report runtime`
+  - Closed the feature lane for:
+    - `CEC-RT-004` deterministic compiled report generation
+    - `CEC-RT-005` signed compiler service/runtime
+    - `CEC-RT-006` compiled-report verification in CLI/service
+  - Added deterministic authoritative compiled-report generation on top of Wave 1 compiler output in `packages/clawverify-core/src/compliance.ts`
+  - Added signer-bound compiled-report envelopes plus verifier exports in `packages/clawverify-core/src/compliance.ts` and `packages/clawverify-core/src/index.ts`
+  - Routed `packages/clawverify-cli/src/compliance-cmd.ts`, `src/verify.ts`, `src/cli.ts`, and `src/types.ts` through the new compiled-report generation and verification path
+  - Added a narrow hosted compile/verify runtime in `services/clawverify`:
+    - `POST /v1/compiler/compiled-report`
+    - `POST /v1/verify/compiled-report`
+  - Added targeted deterministic-generation and verifier regressions:
+    - `packages/clawverify-cli/test/compliance-cmd-wave1.test.ts`
+    - `services/clawverify/test/compiled-report.test.ts`
+- Reviewer + follow-up notes
+  - Reviewer verdict: **PASS WITH FIXES**
+  - Reviewer tightened signer DID/private-key binding, validated authoritative base64url refs before compilation, rejected future-version / waiver / `PARTIAL` semantics in Wave 2 verifier paths, and aligned service reason-code behavior + request typing with core deterministic contracts.
+- Validation
+  - `npm --prefix packages/clawverify-core run typecheck`
+  - `npm --prefix packages/clawverify-core run build`
+  - `npm --prefix packages/clawverify-cli run typecheck`
+  - `npm --prefix packages/clawverify-cli run build`
+  - `npm --prefix packages/clawverify-cli test -- test/compliance-cmd-wave1.test.ts`
+  - `npm --prefix services/clawverify run typecheck`
+  - `npm --prefix services/clawverify test -- test/compiled-report.test.ts`
+  - `npm --prefix services/clawverify test -- test/clawcompiler-schema-conformance.test.ts`
+- Status
+  - Runtime v1 is now **6/10 shipped stories**.
+  - Wave 3 (`CEC-RT-007`..`CEC-RT-008`) is the next dependency-cleared tranche.
+---
