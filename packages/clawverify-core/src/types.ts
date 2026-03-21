@@ -961,7 +961,7 @@ export interface SignedPolicyBundlePayload {
   issued_at: string;
   hash_algorithm: 'SHA-256';
   layers: SignedPolicyLayer[];
-  metadata?: Record<string, unknown>;
+  metadata?: SignedPolicyBundleMetadata;
 }
 
 export interface AppliedPolicyLayerRef {
@@ -991,6 +991,19 @@ export interface EffectivePolicySnapshot {
   };
   applied_layers: AppliedPolicyLayerRef[];
   effective_policy: SignedLayerPolicy;
+}
+
+/** AF2-TRN-002: trust-root revocation artifact bound into signed metadata. */
+export interface TrustRootRevocationArtifact {
+  revocation_version: '1';
+  revoked_signer_did: string;
+  effective_at: string;
+  reason?: string;
+}
+
+export interface SignedPolicyBundleMetadata {
+  revoked_policy_issuer_keys?: TrustRootRevocationArtifact[];
+  [key: string]: unknown;
 }
 
 export interface PolicyBindingMetadata {
@@ -1081,6 +1094,7 @@ export interface RunnerAttestationReceiptPayload {
   policy: {
     effective_policy_hash_b64u: string;
   };
+  revoked_runner_keys?: TrustRootRevocationArtifact[];
   transparency?: AssuranceReceiptTransparencyAnchor;
 }
 
@@ -1131,6 +1145,7 @@ export interface ReviewerSignoffReceiptPayload {
     status: ReviewerDisputeStatus;
     notes?: ReviewerDisputeNote[];
   };
+  revoked_reviewer_keys?: TrustRootRevocationArtifact[];
   transparency?: AssuranceReceiptTransparencyAnchor;
 }
 

@@ -169,6 +169,12 @@ async function computeEgressPolicyTransparencyLeafHash(payload: {
 async function buildSignedPolicyBundleEnvelope(args: {
   did: string;
   sign: (message: Uint8Array) => Promise<string>;
+  revokedPolicyIssuerKeys?: Array<{
+    revocation_version: '1';
+    revoked_signer_did: string;
+    effective_at: string;
+    reason?: string;
+  }>;
 }) {
   const payload = {
     policy_bundle_version: '1' as const,
@@ -189,6 +195,13 @@ async function buildSignedPolicyBundleEnvelope(args: {
         policy_hash_b64u: '',
       },
     ],
+    ...(args.revokedPolicyIssuerKeys
+      ? {
+          metadata: {
+            revoked_policy_issuer_keys: args.revokedPolicyIssuerKeys,
+          },
+        }
+      : {}),
   };
   payload.layers[0]!.policy_hash_b64u = await computeSignedPolicyLayerHashB64u(
     payload.layers[0]!.policy,
@@ -226,6 +239,12 @@ async function buildSignedRunnerAttestationReceiptEnvelope(args: {
   };
   manifestHashB64u: string;
   tamperSignature?: boolean;
+  revokedRunnerKeys?: Array<{
+    revocation_version: '1';
+    revoked_signer_did: string;
+    effective_at: string;
+    reason?: string;
+  }>;
   transparencyMode?:
     | 'none'
     | 'valid'
@@ -251,6 +270,11 @@ async function buildSignedRunnerAttestationReceiptEnvelope(args: {
     policy: {
       effective_policy_hash_b64u: args.effectivePolicyHashB64u,
     },
+    ...(args.revokedRunnerKeys
+      ? {
+          revoked_runner_keys: args.revokedRunnerKeys,
+        }
+      : {}),
   };
 
   const transparencyMode = args.transparencyMode ?? 'none';
@@ -337,6 +361,9 @@ async function buildAttestedPolicyBindingEnvelope(args?: {
     | 'tamper_leaf'
     | 'bad_consistency'
     | 'bad_prior_root';
+  revokePolicyIssuer?: boolean;
+  revokeRunner?: boolean;
+  tamperRunnerSignature?: boolean;
 }) {
   const keyPair = await generateKeyPair();
   const did = await didFromPublicKey(keyPair.publicKey);
@@ -356,6 +383,18 @@ async function buildAttestedPolicyBindingEnvelope(args?: {
   const signedPolicyBundleEnvelope = await buildSignedPolicyBundleEnvelope({
     did,
     sign,
+    ...(args?.revokePolicyIssuer
+      ? {
+          revokedPolicyIssuerKeys: [
+            {
+              revocation_version: '1' as const,
+              revoked_signer_did: did,
+              effective_at: '2026-03-20T00:00:00.000Z',
+              reason: 'Compromised policy issuer root key',
+            },
+          ],
+        }
+      : {}),
   });
   const policySnapshot = {
     snapshot_version: '1',
@@ -428,6 +467,19 @@ async function buildAttestedPolicyBindingEnvelope(args?: {
     effectivePolicyHashB64u: effectivePolicyHash,
     manifest,
     manifestHashB64u: runnerMeasurement.manifest_hash_b64u,
+    ...(args?.revokeRunner
+      ? {
+          revokedRunnerKeys: [
+            {
+              revocation_version: '1' as const,
+              revoked_signer_did: did,
+              effective_at: '2026-03-20T00:00:01.000Z',
+              reason: 'Compromised runner attestation key',
+            },
+          ],
+        }
+      : {}),
+    tamperSignature: args?.tamperRunnerSignature,
     transparencyMode: args?.runnerTransparencyMode ?? 'none',
   });
 
@@ -1287,6 +1339,46 @@ describe('AF2-POL service verifier policy binding', () => {
     expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
     expect(out.error?.field).toBe(
       'payload.metadata.runner_attestation_receipt.payload.transparency.consistency_proof.from_root_hash_b64u',
+    );
+  });
+
+  it('fails closed when the signed policy bundle issuer trust root key is revoked', async () => {
+    const envelope = await buildAttestedPolicyBindingEnvelope({
+      revokePolicyIssuer: true,
+    });
+
+    const out = await verifyProofBundle(envelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('REVOKED');
+    expect(out.error?.field).toBe(
+      'payload.metadata.policy_binding.signed_policy_bundle_envelope.payload.metadata.revoked_policy_issuer_keys[0].revoked_signer_did',
+    );
+  });
+
+  it('fails closed when the runner attestation trust root key is revoked', async () => {
+    const envelope = await buildAttestedPolicyBindingEnvelope({
+      revokeRunner: true,
+    });
+
+    const out = await verifyProofBundle(envelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('REVOKED');
+    expect(out.error?.field).toBe(
+      'payload.metadata.runner_attestation_receipt.payload.revoked_runner_keys[0].revoked_signer_did',
+    );
+  });
+
+  it('prioritizes runner attestation signature failure over revocation claims', async () => {
+    const envelope = await buildAttestedPolicyBindingEnvelope({
+      revokeRunner: true,
+      tamperRunnerSignature: true,
+    });
+
+    const out = await verifyProofBundle(envelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('SIGNATURE_INVALID');
+    expect(out.error?.field).toBe(
+      'payload.metadata.runner_attestation_receipt.signature_b64u',
     );
   });
 });

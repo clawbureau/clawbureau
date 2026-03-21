@@ -47,6 +47,7 @@ import type {
   SignedPolicyBundlePayload,
   SignedPolicyLayer,
   SignedPolicyStatement,
+  TrustRootRevocationArtifact,
 } from './types';
 import {
   isAllowedVersion,
@@ -3955,6 +3956,113 @@ function hasOnlyAllowedKeys(
   return Object.keys(value).every((key) => allowed.has(key));
 }
 
+function parseTrustRootRevocationArtifacts(args: {
+  artifactsRaw: unknown;
+  fieldPrefix: string;
+  schemaErrorCode: VerificationError['code'];
+}):
+  | { ok: true; artifacts: TrustRootRevocationArtifact[] }
+  | {
+      ok: false;
+      code: VerificationError['code'];
+      message: string;
+      field: string;
+    } {
+  if (args.artifactsRaw === undefined) {
+    return { ok: true, artifacts: [] };
+  }
+  if (!Array.isArray(args.artifactsRaw)) {
+    return {
+      ok: false,
+      code: args.schemaErrorCode,
+      message: `${args.fieldPrefix} must be an array when present`,
+      field: args.fieldPrefix,
+    };
+  }
+
+  const artifacts: TrustRootRevocationArtifact[] = [];
+  for (let i = 0; i < args.artifactsRaw.length; i++) {
+    const raw = args.artifactsRaw[i];
+    const itemField = `${args.fieldPrefix}[${i}]`;
+    if (!isObjectRecord(raw)) {
+      return {
+        ok: false,
+        code: args.schemaErrorCode,
+        message: `${itemField} must be an object`,
+        field: itemField,
+      };
+    }
+    if (
+      !hasOnlyAllowedKeys(raw, [
+        'revocation_version',
+        'revoked_signer_did',
+        'effective_at',
+        'reason',
+      ])
+    ) {
+      return {
+        ok: false,
+        code: args.schemaErrorCode,
+        message: `${itemField} has unsupported fields`,
+        field: itemField,
+      };
+    }
+    if (raw.revocation_version !== '1') {
+      return {
+        ok: false,
+        code: args.schemaErrorCode,
+        message: `${itemField}.revocation_version must be "1"`,
+        field: `${itemField}.revocation_version`,
+      };
+    }
+    if (!isValidDidFormat(raw.revoked_signer_did)) {
+      return {
+        ok: false,
+        code: args.schemaErrorCode,
+        message: `${itemField}.revoked_signer_did must be a valid DID`,
+        field: `${itemField}.revoked_signer_did`,
+      };
+    }
+    if (!isIsoDate(raw.effective_at)) {
+      return {
+        ok: false,
+        code: args.schemaErrorCode,
+        message: `${itemField}.effective_at must be ISO-8601`,
+        field: `${itemField}.effective_at`,
+      };
+    }
+    if (raw.reason !== undefined && !isNonEmptyString(raw.reason)) {
+      return {
+        ok: false,
+        code: args.schemaErrorCode,
+        message: `${itemField}.reason must be non-empty when present`,
+        field: `${itemField}.reason`,
+      };
+    }
+
+    artifacts.push({
+      revocation_version: '1',
+      revoked_signer_did: String(raw.revoked_signer_did).trim(),
+      effective_at: String(raw.effective_at),
+      ...(isNonEmptyString(raw.reason) ? { reason: String(raw.reason).trim() } : {}),
+    });
+  }
+
+  return { ok: true, artifacts };
+}
+
+function findTrustRootRevocation(
+  artifacts: readonly TrustRootRevocationArtifact[],
+  signerDid: string,
+): { index: number; artifact: TrustRootRevocationArtifact } | null {
+  for (let i = 0; i < artifacts.length; i++) {
+    if (artifacts[i]!.revoked_signer_did === signerDid) {
+      return { index: i, artifact: artifacts[i]! };
+    }
+  }
+  return null;
+}
+
 function canonicalizeForHash(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((entry) => canonicalizeForHash(entry));
@@ -4286,6 +4394,31 @@ async function validateSignedPolicyBundleEnvelopeForBinding(
     };
   }
 
+  if (payloadRecord.metadata !== undefined && !isObjectRecord(payloadRecord.metadata)) {
+    return {
+      valid: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${fieldPrefix}.payload.metadata must be an object when present`,
+      field: `${fieldPrefix}.payload.metadata`,
+    };
+  }
+  const payloadMetadata = isObjectRecord(payloadRecord.metadata)
+    ? payloadRecord.metadata
+    : null;
+  const policyIssuerRevocationArtifacts = parseTrustRootRevocationArtifacts({
+    artifactsRaw: payloadMetadata?.revoked_policy_issuer_keys,
+    fieldPrefix: `${fieldPrefix}.payload.metadata.revoked_policy_issuer_keys`,
+    schemaErrorCode: 'SCHEMA_VALIDATION_FAILED',
+  });
+  if (!policyIssuerRevocationArtifacts.ok) {
+    return {
+      valid: false,
+      code: policyIssuerRevocationArtifacts.code,
+      message: policyIssuerRevocationArtifacts.message,
+      field: policyIssuerRevocationArtifacts.field,
+    };
+  }
+
   const normalizedLayers: SignedPolicyLayer[] = [];
   for (let i = 0; i < payloadRecord.layers.length; i++) {
     const rawLayer = payloadRecord.layers[i];
@@ -4398,7 +4531,7 @@ async function validateSignedPolicyBundleEnvelopeForBinding(
     issued_at: String(payloadRecord.issued_at),
     hash_algorithm: 'SHA-256',
     layers: normalizedLayers,
-    ...(isObjectRecord(payloadRecord.metadata) ? { metadata: payloadRecord.metadata } : {}),
+    ...(payloadMetadata ? { metadata: payloadMetadata } : {}),
   };
 
   const computedPayloadHash = await computeHash(
@@ -4436,6 +4569,20 @@ async function validateSignedPolicyBundleEnvelopeForBinding(
       code: 'SIGNATURE_INVALID',
       message: `${fieldPrefix}.signature_b64u failed verification`,
       field: `${fieldPrefix}.signature_b64u`,
+    };
+  }
+
+  const policyIssuerRevocation = findTrustRootRevocation(
+    policyIssuerRevocationArtifacts.artifacts,
+    String(envelope.signer_did),
+  );
+  if (policyIssuerRevocation) {
+    return {
+      valid: false,
+      code: 'REVOKED',
+      message:
+        'policy binding signed policy bundle signer_did is revoked by payload.metadata.revoked_policy_issuer_keys',
+      field: `${fieldPrefix}.payload.metadata.revoked_policy_issuer_keys[${policyIssuerRevocation.index}].revoked_signer_did`,
     };
   }
 
@@ -5697,6 +5844,7 @@ async function verifyRunnerAttestationReceiptEnvelope(args: {
       'binding',
       'runner_measurement',
       'policy',
+      'revoked_runner_keys',
       'transparency',
     ])
   ) {
@@ -5879,6 +6027,21 @@ async function verifyRunnerAttestationReceiptEnvelope(args: {
     };
   }
 
+  const runnerRevocationArtifacts = parseTrustRootRevocationArtifacts({
+    artifactsRaw: (envelope.payload as Record<string, unknown>).revoked_runner_keys,
+    fieldPrefix:
+      'payload.metadata.runner_attestation_receipt.payload.revoked_runner_keys',
+    schemaErrorCode: 'MALFORMED_ENVELOPE',
+  });
+  if (!runnerRevocationArtifacts.ok) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: runnerRevocationArtifacts.code,
+      message: runnerRevocationArtifacts.message,
+      field: runnerRevocationArtifacts.field,
+    };
+  }
   if (!isObjectRecord(payload.runner_measurement)) {
     return {
       valid: false,
@@ -6037,6 +6200,22 @@ async function verifyRunnerAttestationReceiptEnvelope(args: {
       code: 'SIGNATURE_INVALID',
       message: 'runner attestation receipt signature verification failed',
       field: 'payload.metadata.runner_attestation_receipt.signature_b64u',
+    };
+  }
+
+  const runnerRevocation = findTrustRootRevocation(
+    runnerRevocationArtifacts.artifacts,
+    envelope.signer_did,
+  );
+  if (runnerRevocation) {
+    return {
+      valid: false,
+      signature_valid: true,
+      code: 'REVOKED',
+      message:
+        'runner attestation receipt signer_did is revoked by payload.revoked_runner_keys',
+      field:
+        `payload.metadata.runner_attestation_receipt.payload.revoked_runner_keys[${runnerRevocation.index}].revoked_signer_did`,
     };
   }
 
@@ -6254,6 +6433,7 @@ async function verifyReviewerSignoffReceipts(args: {
         'timestamp',
         'binding',
         'dispute',
+        'revoked_reviewer_keys',
         'transparency',
       ])
     ) {
@@ -6298,6 +6478,20 @@ async function verifyReviewerSignoffReceipts(args: {
         code: 'EVIDENCE_MISMATCH',
         message: 'reviewer signoff receipt payload.reviewer_did must match signer_did',
         field: `${fieldPrefix}.payload.reviewer_did`,
+        summary,
+      };
+    }
+    const reviewerRevocationArtifacts = parseTrustRootRevocationArtifacts({
+      artifactsRaw: (envelope.payload as Record<string, unknown>).revoked_reviewer_keys,
+      fieldPrefix: `${fieldPrefix}.payload.revoked_reviewer_keys`,
+      schemaErrorCode: 'MALFORMED_ENVELOPE',
+    });
+    if (!reviewerRevocationArtifacts.ok) {
+      return {
+        valid: false,
+        code: reviewerRevocationArtifacts.code,
+        message: reviewerRevocationArtifacts.message,
+        field: reviewerRevocationArtifacts.field,
         summary,
       };
     }
@@ -6641,6 +6835,21 @@ async function verifyReviewerSignoffReceipts(args: {
         code: 'SIGNATURE_INVALID',
         message: 'reviewer signoff receipt signature verification failed',
         field: `${fieldPrefix}.signature_b64u`,
+        summary,
+      };
+    }
+
+    const reviewerRevocation = findTrustRootRevocation(
+      reviewerRevocationArtifacts.artifacts,
+      envelope.signer_did,
+    );
+    if (reviewerRevocation) {
+      return {
+        valid: false,
+        code: 'REVOKED',
+        message:
+          'reviewer signoff receipt signer_did is revoked by payload.revoked_reviewer_keys',
+        field: `${fieldPrefix}.payload.revoked_reviewer_keys[${reviewerRevocation.index}].revoked_signer_did`,
         summary,
       };
     }

@@ -129,6 +129,12 @@ async function buildSignedRunnerAttestationReceiptEnvelope(args: {
   };
   manifestHashB64u: string;
   tamperSignature?: boolean;
+  revokedRunnerKeys?: Array<{
+    revocation_version: '1';
+    revoked_signer_did: string;
+    effective_at: string;
+    reason?: string;
+  }>;
 }): Promise<Record<string, unknown>> {
   const payload = {
     receipt_version: '1',
@@ -148,6 +154,11 @@ async function buildSignedRunnerAttestationReceiptEnvelope(args: {
     policy: {
       effective_policy_hash_b64u: args.effectivePolicyHashB64u,
     },
+    ...(args.revokedRunnerKeys
+      ? {
+          revoked_runner_keys: args.revokedRunnerKeys,
+        }
+      : {}),
   };
   const payloadHash = await computeHash(payload, 'SHA-256');
   const signature = args.tamperSignature
@@ -551,6 +562,162 @@ describe('AF2-POL verifier policy binding fail-closed behavior', () => {
     expect(verification.result.status).toBe('INVALID');
     expect(verification.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
     expect(verification.error?.field).toBeTruthy();
+  });
+
+  it('rejects proof bundles when the signed policy issuer key is revoked', async () => {
+    const keyPair = await generateKeyPair();
+    const did = await didFromPublicKey(keyPair.publicKey);
+    const sign = (message: Uint8Array) => signEd25519(keyPair.privateKey, message);
+
+    const eventHeader = {
+      event_id: 'evt_policy_revoked_issuer_1',
+      run_id: 'run_policy_revoked_issuer_1',
+      event_type: 'llm_call',
+      timestamp: '2026-03-20T00:00:01.000Z',
+      payload_hash_b64u: 'evt_payload_hash_policy_revoked_issuer_1',
+      prev_hash_b64u: null,
+    };
+    const eventHash = await computeHash(eventHeader, 'SHA-256');
+
+    const policySnapshot = {
+      snapshot_version: '1',
+      resolver_version: 'org_project_task_exception.v1',
+      context: { org_id: 'acme' },
+      source_bundle: {
+        bundle_id: 'bundle_signed_policy_revoked_issuer_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.000Z',
+      },
+      applied_layers: [
+        {
+          layer_id: 'org',
+          scope_type: 'org',
+          org_id: 'acme',
+          priority: 0,
+          apply_mode: 'merge',
+          policy_hash_b64u: 'org_hash_revoked_issuer_1',
+        },
+      ],
+      effective_policy: {
+        statements: [
+          { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+        ],
+      },
+    };
+
+    const signedPolicyBundleEnvelope = await buildSignedPolicyBundleEnvelope(
+      {
+        policy_bundle_version: '1',
+        bundle_id: 'bundle_signed_policy_revoked_issuer_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.000Z',
+        hash_algorithm: 'SHA-256',
+        metadata: {
+          revoked_policy_issuer_keys: [
+            {
+              revocation_version: '1',
+              revoked_signer_did: did,
+              effective_at: '2026-03-20T00:00:00.500Z',
+              reason: 'Compromised policy issuer key',
+            },
+          ],
+        },
+        layers: [
+          {
+            layer_id: 'org',
+            scope: { scope_type: 'org', org_id: 'acme' },
+            apply_mode: 'merge',
+            policy: {
+              statements: [
+                { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+              ],
+            },
+          },
+        ],
+      },
+      did,
+      sign,
+    );
+    policySnapshot.applied_layers[0]!.policy_hash_b64u = (
+      signedPolicyBundleEnvelope.payload as { layers: Array<{ policy_hash_b64u: string }> }
+    ).layers[0]!.policy_hash_b64u;
+    const boundEffectivePolicyHash = await computeHash(canonicalize(policySnapshot), 'SHA-256');
+
+    const payload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_policy_revoked_issuer_1',
+      agent_did: did,
+      event_chain: [
+        {
+          ...eventHeader,
+          event_hash_b64u: eventHash,
+        },
+      ],
+      metadata: {
+        policy_binding: {
+          binding_version: '1',
+          effective_policy_hash_b64u: boundEffectivePolicyHash,
+          effective_policy_snapshot: policySnapshot,
+          signed_policy_bundle_envelope: signedPolicyBundleEnvelope,
+        },
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: {
+            envelope_version: '1',
+            envelope_type: 'egress_policy_receipt',
+            payload_hash_b64u: 'egress_payload_hash_revoked_issuer_1',
+            hash_algorithm: 'SHA-256',
+            signature_b64u: 'egress_signature_revoked_issuer_1',
+            algorithm: 'Ed25519',
+            signer_did: did,
+            issued_at: '2026-03-20T00:00:02.000Z',
+            payload: {
+              receipt_version: '1',
+              receipt_id: 'epr_policy_revoked_issuer_1',
+              policy_version: '1',
+              policy_hash_b64u: 'descriptor_hash_revoked_issuer_1',
+              effective_policy_hash_b64u: boundEffectivePolicyHash,
+              proofed_mode: true,
+              clawproxy_url: 'https://clawproxy.example',
+              allowed_proxy_destinations: ['clawproxy.example'],
+              allowed_child_destinations: ['127.0.0.1'],
+              direct_provider_access_blocked: true,
+              blocked_attempt_count: 0,
+              blocked_attempts_observed: false,
+              hash_algorithm: 'SHA-256',
+              agent_did: did,
+              timestamp: '2026-03-20T00:00:02.000Z',
+              binding: {
+                run_id: eventHeader.run_id,
+                event_hash_b64u: eventHash,
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const payloadHash = await computeHash(payload, 'SHA-256');
+    const signature = await sign(new TextEncoder().encode(payloadHash));
+
+    const envelope = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:03.000Z',
+    };
+
+    const verification = await verifyProofBundle(envelope);
+    expect(verification.result.status).toBe('INVALID');
+    expect(verification.error?.code).toBe('REVOKED');
+    expect(verification.error?.field).toBe(
+      'payload.metadata.policy_binding.signed_policy_bundle_envelope.payload.metadata.revoked_policy_issuer_keys[0].revoked_signer_did',
+    );
   });
 
   it('rejects approval-required data handling evidence when signed approval receipt proof is missing', async () => {
@@ -1340,6 +1507,436 @@ describe('AF2-ATT verifier runner measurement fail-closed behavior', () => {
     const payload = {
       bundle_version: '1',
       bundle_id: 'bundle_runner_attestation_forged_1',
+      agent_did: did,
+      event_chain: [
+        {
+          ...eventHeader,
+          event_hash_b64u: eventHash,
+        },
+      ],
+      metadata: {
+        policy_binding: {
+          binding_version: '1',
+          effective_policy_hash_b64u: effectivePolicyHash,
+          effective_policy_snapshot: policySnapshot,
+          signed_policy_bundle_envelope: signedPolicyBundleEnvelope,
+        },
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: egressPolicyReceipt,
+        },
+        runner_measurement: runnerMeasurement,
+        runner_attestation_receipt: runnerAttestationReceipt,
+      },
+    };
+
+    const payloadHash = await computeHash(payload, 'SHA-256');
+    const signature = await sign(new TextEncoder().encode(payloadHash));
+    const envelope = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:03.000Z',
+    };
+
+    const verification = await verifyProofBundle(envelope);
+    expect(verification.result.status).toBe('INVALID');
+    expect(verification.error?.code).toBe('SIGNATURE_INVALID');
+    expect(verification.error?.field).toBe(
+      'payload.metadata.runner_attestation_receipt.signature_b64u',
+    );
+  });
+
+  it('rejects proof bundles when the runner attestation signer key is revoked', async () => {
+    const keyPair = await generateKeyPair();
+    const did = await didFromPublicKey(keyPair.publicKey);
+    const sign = (message: Uint8Array) => signEd25519(keyPair.privateKey, message);
+
+    const eventHeader = {
+      event_id: 'evt_runner_attestation_revoked_1',
+      run_id: 'run_runner_attestation_revoked_1',
+      event_type: 'llm_call',
+      timestamp: '2026-03-20T00:00:01.000Z',
+      payload_hash_b64u: 'evt_payload_hash_runner_att_revoked_1',
+      prev_hash_b64u: null,
+    };
+    const eventHash = await computeHash(eventHeader, 'SHA-256');
+
+    const signedPolicyBundleEnvelope = await buildSignedPolicyBundleEnvelope(
+      {
+        policy_bundle_version: '1',
+        bundle_id: 'bundle_runner_attestation_revoked_policy_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.000Z',
+        hash_algorithm: 'SHA-256',
+        layers: [
+          {
+            layer_id: 'org',
+            scope: { scope_type: 'org', org_id: 'acme' },
+            apply_mode: 'merge',
+            policy: {
+              statements: [
+                { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+              ],
+            },
+          },
+        ],
+      },
+      did,
+      sign,
+    );
+    const policySnapshot = {
+      snapshot_version: '1',
+      resolver_version: 'org_project_task_exception.v1',
+      context: { org_id: 'acme' },
+      source_bundle: {
+        bundle_id: 'bundle_runner_attestation_revoked_policy_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.000Z',
+      },
+      applied_layers: [
+        {
+          layer_id: 'org',
+          scope_type: 'org',
+          org_id: 'acme',
+          priority: 0,
+          apply_mode: 'merge',
+          policy_hash_b64u: (signedPolicyBundleEnvelope.payload as { layers: Array<{ policy_hash_b64u: string }> }).layers[0]!.policy_hash_b64u,
+        },
+      ],
+      effective_policy: {
+        statements: [
+          { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+        ],
+      },
+    };
+    const effectivePolicyHash = await computeHash(canonicalize(policySnapshot), 'SHA-256');
+
+    const egressPayload = {
+      receipt_version: '1',
+      receipt_id: 'epr_runner_attestation_revoked_1',
+      policy_version: '1',
+      policy_hash_b64u: await computeHash(
+        {
+          policy_version: '1',
+          proofed_mode: true,
+          clawproxy_url: 'https://clawproxy.example',
+          allowed_proxy_destinations: ['clawproxy.example'],
+          allowed_child_destinations: ['127.0.0.1'],
+          direct_provider_access_blocked: true,
+        },
+        'SHA-256',
+      ),
+      effective_policy_hash_b64u: effectivePolicyHash,
+      proofed_mode: true,
+      clawproxy_url: 'https://clawproxy.example',
+      allowed_proxy_destinations: ['clawproxy.example'],
+      allowed_child_destinations: ['127.0.0.1'],
+      direct_provider_access_blocked: true,
+      blocked_attempt_count: 0,
+      blocked_attempts_observed: false,
+      hash_algorithm: 'SHA-256',
+      agent_did: did,
+      timestamp: '2026-03-20T00:00:02.000Z',
+      binding: {
+        run_id: eventHeader.run_id,
+        event_hash_b64u: eventHash,
+      },
+    };
+    const egressPayloadHash = await computeHash(egressPayload, 'SHA-256');
+    const egressPolicyReceipt = {
+      envelope_version: '1',
+      envelope_type: 'egress_policy_receipt',
+      payload: egressPayload,
+      payload_hash_b64u: egressPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: await sign(new TextEncoder().encode(egressPayloadHash)),
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:02.000Z',
+    };
+
+    const manifest = {
+      manifest_version: '1' as const,
+      runtime: {
+        platform: process.platform,
+        arch: process.arch,
+        node_version: process.version,
+      },
+      proofed: {
+        proofed_mode: true as const,
+        clawproxy_url: 'https://clawproxy.example',
+        allowed_proxy_destinations: ['clawproxy.example'],
+        allowed_child_destinations: ['127.0.0.1'],
+        sentinels: {
+          shell_enabled: false,
+          interpose_enabled: false,
+          preload_enabled: true,
+          fs_enabled: true,
+          net_enabled: true,
+        },
+      },
+      policy: {
+        effective_policy_hash_b64u: effectivePolicyHash,
+      },
+      artifacts: {
+        preload_hash_b64u: 'a'.repeat(43),
+        node_preload_sentinel_hash_b64u: 'b'.repeat(43),
+        sentinel_shell_hash_b64u: null,
+        sentinel_shell_policy_hash_b64u: null,
+        interpose_library_hash_b64u: null,
+      },
+    };
+    const runnerMeasurement = {
+      binding_version: '1',
+      hash_algorithm: 'SHA-256',
+      manifest_hash_b64u: await hashJsonB64u(manifest),
+      manifest,
+    };
+    const runnerAttestationReceipt = await buildSignedRunnerAttestationReceiptEnvelope({
+      did,
+      sign,
+      agentDid: did,
+      runId: eventHeader.run_id,
+      eventHashB64u: eventHash,
+      effectivePolicyHashB64u: effectivePolicyHash,
+      manifest,
+      manifestHashB64u: runnerMeasurement.manifest_hash_b64u,
+      revokedRunnerKeys: [
+        {
+          revocation_version: '1',
+          revoked_signer_did: did,
+          effective_at: '2026-03-20T00:00:01.500Z',
+          reason: 'Runner trust root key revoked',
+        },
+      ],
+    });
+
+    const payload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_runner_attestation_revoked_1',
+      agent_did: did,
+      event_chain: [
+        {
+          ...eventHeader,
+          event_hash_b64u: eventHash,
+        },
+      ],
+      metadata: {
+        policy_binding: {
+          binding_version: '1',
+          effective_policy_hash_b64u: effectivePolicyHash,
+          effective_policy_snapshot: policySnapshot,
+          signed_policy_bundle_envelope: signedPolicyBundleEnvelope,
+        },
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: egressPolicyReceipt,
+        },
+        runner_measurement: runnerMeasurement,
+        runner_attestation_receipt: runnerAttestationReceipt,
+      },
+    };
+
+    const payloadHash = await computeHash(payload, 'SHA-256');
+    const signature = await sign(new TextEncoder().encode(payloadHash));
+    const envelope = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:03.000Z',
+    };
+
+    const verification = await verifyProofBundle(envelope);
+    expect(verification.result.status).toBe('INVALID');
+    expect(verification.error?.code).toBe('REVOKED');
+    expect(verification.error?.field).toBe(
+      'payload.metadata.runner_attestation_receipt.payload.revoked_runner_keys[0].revoked_signer_did',
+    );
+  });
+
+  it('prioritizes runner attestation signature failure over revocation claims', async () => {
+    const keyPair = await generateKeyPair();
+    const did = await didFromPublicKey(keyPair.publicKey);
+    const sign = (message: Uint8Array) => signEd25519(keyPair.privateKey, message);
+
+    const eventHeader = {
+      event_id: 'evt_runner_attestation_revoked_bad_sig_1',
+      run_id: 'run_runner_attestation_revoked_bad_sig_1',
+      event_type: 'llm_call',
+      timestamp: '2026-03-20T00:00:01.000Z',
+      payload_hash_b64u: 'evt_payload_hash_runner_revoked_bad_sig_1',
+      prev_hash_b64u: null,
+    };
+    const eventHash = await computeHash(eventHeader, 'SHA-256');
+
+    const signedPolicyBundleEnvelope = await buildSignedPolicyBundleEnvelope(
+      {
+        policy_bundle_version: '1',
+        bundle_id: 'pb_runner_attestation_revoked_bad_sig_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.100Z',
+        hash_algorithm: 'SHA-256',
+        layers: [
+          {
+            layer_id: 'org',
+            scope: { scope_type: 'org', org_id: 'acme' },
+            apply_mode: 'merge',
+            policy: {
+              statements: [
+                { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+              ],
+            },
+          },
+        ],
+      },
+      did,
+      sign,
+    );
+    const policySnapshot = {
+      snapshot_version: '1',
+      resolver_version: 'org_project_task_exception.v1',
+      context: { org_id: 'acme' },
+      source_bundle: {
+        bundle_id: 'pb_runner_attestation_revoked_bad_sig_1',
+        issuer_did: did,
+        issued_at: '2026-03-20T00:00:00.100Z',
+      },
+      applied_layers: [
+        {
+          layer_id: 'org',
+          scope_type: 'org',
+          org_id: 'acme',
+          priority: 0,
+          apply_mode: 'merge',
+          policy_hash_b64u: (signedPolicyBundleEnvelope.payload as { layers: Array<{ policy_hash_b64u: string }> }).layers[0]!.policy_hash_b64u,
+        },
+      ],
+      effective_policy: {
+        statements: [
+          { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+        ],
+      },
+    };
+    const effectivePolicyHash = await computeHash(
+      canonicalize(policySnapshot),
+      'SHA-256',
+    );
+
+    const egressPayload = {
+      receipt_version: '1',
+      receipt_id: 'epr_runner_attestation_revoked_bad_sig_1',
+      policy_version: '1',
+      policy_hash_b64u: await computeHash(
+        {
+          policy_version: '1',
+          proofed_mode: true,
+          clawproxy_url: 'https://clawproxy.example',
+          allowed_proxy_destinations: ['clawproxy.example'],
+          allowed_child_destinations: ['127.0.0.1'],
+          direct_provider_access_blocked: true,
+        },
+        'SHA-256',
+      ),
+      effective_policy_hash_b64u: effectivePolicyHash,
+      proofed_mode: true,
+      clawproxy_url: 'https://clawproxy.example',
+      allowed_proxy_destinations: ['clawproxy.example'],
+      allowed_child_destinations: ['127.0.0.1'],
+      direct_provider_access_blocked: true,
+      blocked_attempt_count: 0,
+      blocked_attempts_observed: false,
+      hash_algorithm: 'SHA-256',
+      agent_did: did,
+      timestamp: '2026-03-20T00:00:02.000Z',
+      binding: {
+        run_id: eventHeader.run_id,
+        event_hash_b64u: eventHash,
+      },
+    };
+    const egressPayloadHash = await computeHash(egressPayload, 'SHA-256');
+    const egressPolicyReceipt = {
+      envelope_version: '1',
+      envelope_type: 'egress_policy_receipt',
+      payload: egressPayload,
+      payload_hash_b64u: egressPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: await sign(new TextEncoder().encode(egressPayloadHash)),
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:02.000Z',
+    };
+
+    const manifest = {
+      manifest_version: '1' as const,
+      runtime: {
+        platform: process.platform,
+        arch: process.arch,
+        node_version: process.version,
+      },
+      proofed: {
+        proofed_mode: true as const,
+        clawproxy_url: 'https://clawproxy.example',
+        allowed_proxy_destinations: ['clawproxy.example'],
+        allowed_child_destinations: ['127.0.0.1'],
+        sentinels: {
+          shell_enabled: false,
+          interpose_enabled: false,
+          preload_enabled: true,
+          fs_enabled: true,
+          net_enabled: true,
+        },
+      },
+      policy: {
+        effective_policy_hash_b64u: effectivePolicyHash,
+      },
+      artifacts: {
+        preload_hash_b64u: 'a'.repeat(43),
+        node_preload_sentinel_hash_b64u: 'b'.repeat(43),
+        sentinel_shell_hash_b64u: null,
+        sentinel_shell_policy_hash_b64u: null,
+        interpose_library_hash_b64u: null,
+      },
+    };
+    const runnerMeasurement = {
+      binding_version: '1',
+      hash_algorithm: 'SHA-256',
+      manifest_hash_b64u: await hashJsonB64u(manifest),
+      manifest,
+    };
+    const runnerAttestationReceipt = await buildSignedRunnerAttestationReceiptEnvelope({
+      did,
+      sign,
+      agentDid: did,
+      runId: eventHeader.run_id,
+      eventHashB64u: eventHash,
+      effectivePolicyHashB64u: effectivePolicyHash,
+      manifest,
+      manifestHashB64u: runnerMeasurement.manifest_hash_b64u,
+      tamperSignature: true,
+      revokedRunnerKeys: [
+        {
+          revocation_version: '1',
+          revoked_signer_did: did,
+          effective_at: '2026-03-20T00:00:01.500Z',
+          reason: 'Runner trust root key revoked',
+        },
+      ],
+    });
+
+    const payload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_runner_attestation_revoked_bad_sig_1',
       agent_did: did,
       event_chain: [
         {

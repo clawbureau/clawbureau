@@ -63,6 +63,10 @@ function sha256B64uJson(value: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function syncReviewerSignoffReceiptHashes(bundle: Record<string, unknown>): void {
   const payload = bundle.payload as {
     metadata?: {
@@ -841,6 +845,100 @@ describe('buildProofReport', () => {
     expect(text).toContain('Runner attestation receipt  : present');
   });
 
+  it('surfaces policy/runner trust-root revocation as explicit attestation failure reasons', () => {
+    const bundle = makeAttestedBundle();
+    const payload = bundle.payload as {
+      agent_did?: string;
+      metadata?: {
+        policy_binding?: {
+          signed_policy_bundle_envelope?: {
+            signer_did?: string;
+            payload?: {
+              metadata?: Record<string, unknown>;
+            };
+          };
+        };
+        runner_attestation_receipt?: {
+          signer_did?: string;
+          payload?: Record<string, unknown>;
+          payload_hash_b64u?: string;
+        };
+      };
+    };
+
+    if (!payload.metadata) {
+      payload.metadata = {};
+    }
+    if (!payload.metadata.policy_binding) {
+      payload.metadata.policy_binding = {};
+    }
+    if (!payload.metadata.policy_binding.signed_policy_bundle_envelope) {
+      payload.metadata.policy_binding.signed_policy_bundle_envelope = {
+        signer_did: payload.agent_did ?? 'did:key:zAgent',
+        payload: {},
+      };
+    }
+
+    const policySignerDid =
+      payload.metadata.policy_binding.signed_policy_bundle_envelope.signer_did ??
+      'did:key:zAgent';
+    const runnerSignerDid =
+      payload.metadata?.runner_attestation_receipt?.signer_did ?? 'did:key:zAgent';
+
+    const signedPolicyEnvelope = payload.metadata.policy_binding.signed_policy_bundle_envelope;
+    if (signedPolicyEnvelope?.payload) {
+      const policyMetadata = isRecord(signedPolicyEnvelope.payload.metadata)
+        ? signedPolicyEnvelope.payload.metadata
+        : {};
+      policyMetadata.revoked_policy_issuer_keys = [
+        {
+          revocation_version: '1',
+          revoked_signer_did: policySignerDid,
+          effective_at: '2026-03-20T19:16:57.000Z',
+          reason: 'Policy issuer trust root revoked',
+        },
+      ];
+      signedPolicyEnvelope.payload.metadata = policyMetadata;
+    }
+
+    const runnerEnvelope = payload.metadata?.runner_attestation_receipt;
+    if (runnerEnvelope?.payload) {
+      runnerEnvelope.payload.revoked_runner_keys = [
+        {
+          revocation_version: '1',
+          revoked_signer_did: runnerSignerDid,
+          effective_at: '2026-03-20T19:16:57.000Z',
+          reason: 'Runner signer trust root revoked',
+        },
+      ];
+      runnerEnvelope.payload_hash_b64u = sha256B64uJson(runnerEnvelope.payload);
+    }
+
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle,
+      runSummary: {
+        status: 'PASS',
+        tier: 'attested',
+        trust_tier: 'attested',
+      },
+    });
+
+    expect(report.privacy_posture.runner_attestation.posture).toBe('non_attested');
+    expect(report.privacy_posture.runner_attestation.reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_REVOKED_POLICY_ISSUER',
+    );
+    expect(report.privacy_posture.signal_buckets.reviewer_action_required.join(' ')).toContain(
+      'Policy issuer signer DID',
+    );
+    expect(report.privacy_posture.not_proven_claims).toContain(
+      'Cannot prove attested runner posture because the signed policy issuer trust-root key is revoked.',
+    );
+    expect(report.warnings).toContain(
+      'Policy issuer trust-root key is revoked in signed policy metadata.',
+    );
+  });
+
   it('does not treat malformed privacy metadata as proof evidence', () => {
     const bundle = makeBundle();
     const payload = bundle.payload as {
@@ -1041,6 +1139,48 @@ describe('buildProofReport', () => {
     expect(report.reviewer_signoff.dispute_present).toBe(false);
     expect(report.warnings).toContain(
       '1 reviewer signoff receipt failed local integrity or binding checks in the report summary.',
+    );
+  });
+
+  it('marks reviewer signoff receipts as revoked when reviewer trust-root metadata revokes the signer', () => {
+    const bundle = makeBundle();
+    const payload = bundle.payload as {
+      metadata?: {
+        reviewer_signoff_receipts?: Array<Record<string, unknown>>;
+      };
+    };
+
+    const first = payload.metadata?.reviewer_signoff_receipts?.[0];
+    if (first && isRecord(first.payload)) {
+      first.payload.revoked_reviewer_keys = [
+        {
+          revocation_version: '1',
+          revoked_signer_did: REVIEWER_TEST_DID,
+          effective_at: '2026-03-20T19:17:11.000Z',
+          reason: 'Reviewer key revoked',
+        },
+      ];
+    }
+    syncReviewerSignoffReceiptHashes(bundle);
+
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle,
+      runSummary: {
+        status: 'PASS',
+        tier: 'gateway',
+      },
+    });
+
+    expect(report.reviewer_signoff.receipt_count).toBe(1);
+    expect(report.reviewer_signoff.structured_receipt_count).toBe(0);
+    expect(report.reviewer_signoff.revoked_receipt_count).toBe(1);
+    expect(report.reviewer_signoff.revoked_reviewer_dids).toEqual([REVIEWER_TEST_DID]);
+    expect(report.warnings).toContain(
+      '1 reviewer signoff receipt was marked revoked by reviewer trust-root metadata.',
+    );
+    expect(report.review_buckets[3].items).toContain(
+      '1 reviewer signoff receipt was marked revoked by reviewer trust-root metadata.',
     );
   });
 });
