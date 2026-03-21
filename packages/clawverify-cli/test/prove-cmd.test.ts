@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,6 +12,10 @@ import {
   runProveReport,
 } from '../src/prove-cmd.js';
 import { renderProofReportText as renderProofReportTextFromIndex } from '../src/index.js';
+
+function sha256B64uJson(value: unknown): string {
+  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('base64url');
+}
 
 function makeBundle(): Record<string, unknown> {
   return {
@@ -435,6 +440,99 @@ function makeCleanBundle(): Record<string, unknown> {
   };
 }
 
+function makeAttestedBundle(): Record<string, unknown> {
+  const bundle = makeCleanBundle();
+  const payload = bundle.payload as {
+    event_chain?: Array<{ run_id?: string; event_hash_b64u?: string }>;
+    metadata?: Record<string, unknown>;
+    agent_did?: string;
+  };
+  if (!payload.metadata) {
+    payload.metadata = {};
+  }
+
+  const runId = payload.event_chain?.[0]?.run_id ?? 'run_1';
+  const eventHash = payload.event_chain?.[0]?.event_hash_b64u ?? 'event_hash_def123';
+  const policyHash = 'policy_hash_attested_123456';
+  const artifacts = {
+    preload_hash_b64u: 'preload_hash_attested_123456',
+    node_preload_sentinel_hash_b64u: 'node_preload_hash_attested_123456',
+    sentinel_shell_hash_b64u: null,
+    sentinel_shell_policy_hash_b64u: null,
+    interpose_library_hash_b64u: null,
+  };
+  const manifest = {
+    manifest_version: '1',
+    runtime: {
+      platform: 'linux',
+      arch: 'x64',
+      node_version: 'v22.0.0',
+    },
+    proofed: {
+      proofed_mode: true,
+      clawproxy_url: 'https://clawproxy.example',
+      allowed_proxy_destinations: ['generativelanguage.googleapis.com'],
+      allowed_child_destinations: [],
+      sentinels: {
+        shell_enabled: false,
+        interpose_enabled: false,
+        preload_enabled: true,
+        fs_enabled: true,
+        net_enabled: true,
+      },
+    },
+    policy: {
+      effective_policy_hash_b64u: policyHash,
+    },
+    artifacts,
+  };
+  const manifestHash = sha256B64uJson(manifest);
+  const runtimeHash = sha256B64uJson(manifest.runtime);
+  const receiptPayload = {
+    receipt_version: '1',
+    receipt_id: 'rar_1',
+    hash_algorithm: 'SHA-256',
+    agent_did: payload.agent_did ?? 'did:key:zAgent',
+    timestamp: '2026-03-20T19:16:57.701Z',
+    binding: {
+      run_id: runId,
+      event_hash_b64u: eventHash,
+    },
+    runner_measurement: {
+      manifest_hash_b64u: manifestHash,
+      runtime_hash_b64u: runtimeHash,
+      artifacts,
+    },
+    policy: {
+      effective_policy_hash_b64u: policyHash,
+    },
+  };
+
+  payload.metadata.policy_binding = {
+    binding_version: '1',
+    effective_policy_hash_b64u: policyHash,
+  };
+  payload.metadata.runner_measurement = {
+    binding_version: '1',
+    hash_algorithm: 'SHA-256',
+    manifest_hash_b64u: manifestHash,
+    manifest,
+  };
+  payload.metadata.runner_attestation_receipt = {
+    envelope_version: '1',
+    envelope_type: 'runner_attestation_receipt',
+    payload_hash_b64u: sha256B64uJson(receiptPayload),
+    hash_algorithm: 'SHA-256',
+    signature_b64u: 'runner_attestation_signature_123456',
+    algorithm: 'Ed25519',
+    signer_did: payload.agent_did ?? 'did:key:zAgent',
+    issued_at: '2026-03-20T19:16:57.701Z',
+    payload: receiptPayload,
+  };
+
+  return bundle;
+}
+
 describe('buildProofReport', () => {
   it('summarizes gateway, sentinel, and network evidence for reviewer-facing output', () => {
     const report = buildProofReport({
@@ -545,6 +643,92 @@ describe('buildProofReport', () => {
     expect(report.privacy_posture.data_handling.approval_unsatisfied_count).toBe(0);
     expect(report.privacy_posture.signal_buckets.reviewer_action_required).toEqual([]);
     expect(report.review_buckets[3].items).toEqual(['No extra reviewer action is required.']);
+    expect(report.privacy_posture.runner_attestation.posture).toBe('non_attested');
+    expect(report.privacy_posture.runner_attestation.reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION',
+    );
+  });
+
+  it('surfaces attested posture only when attested tier is claimed and runner evidence is structurally bound', () => {
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle: makeAttestedBundle(),
+      runSummary: {
+        status: 'PASS',
+        tier: 'attested',
+        trust_tier: 'attested',
+      },
+    });
+
+    expect(report.harness.tier).toBe('attested');
+    expect(report.harness.trust_tier).toBe('attested');
+    expect(report.privacy_posture.runner_attestation.posture).toBe('attested');
+    expect(report.privacy_posture.runner_attestation.reason_code).toBe('ATTESTED_TIER_GRANTED');
+    expect(report.privacy_posture.runner_attestation.evidence.runner_measurement_present).toBe(true);
+    expect(report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_present).toBe(true);
+    expect(report.privacy_posture.runner_attestation.evidence.binding_consistent).toBe(true);
+    expect(report.privacy_posture.proven_claims).toContain(
+      'Run summary claims attested tier and bundle metadata carries runner measurement + runner attestation receipt evidence with matching run/event/policy/manifest bindings.',
+    );
+  });
+
+  it('keeps posture non-attested when runner evidence exists but attested tier is not claimed', () => {
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle: makeAttestedBundle(),
+      runSummary: {
+        status: 'PASS',
+        tier: 'gateway',
+      },
+    });
+
+    expect(report.privacy_posture.runner_attestation.posture).toBe('non_attested');
+    expect(report.privacy_posture.runner_attestation.reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED',
+    );
+    expect(report.privacy_posture.not_proven_claims).toContain(
+      'Cannot claim attested runner posture because run summary does not claim attested trust tier, even though runner attestation evidence is present.',
+    );
+  });
+
+  it('treats malformed runner attestation evidence as invalid and renders it conservatively', () => {
+    const bundle = makeAttestedBundle();
+    const payload = bundle.payload as {
+      metadata?: {
+        runner_measurement?: {
+          manifest?: Record<string, unknown>;
+        };
+      };
+    };
+
+    if (payload.metadata?.runner_measurement?.manifest) {
+      delete payload.metadata.runner_measurement.manifest.proofed;
+    }
+
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle,
+      runSummary: {
+        status: 'PASS',
+        tier: 'attested',
+        trust_tier: 'attested',
+      },
+    });
+
+    expect(report.privacy_posture.overall_verdict).toBe('action');
+    expect(report.privacy_posture.runner_attestation.posture).toBe('non_attested');
+    expect(report.privacy_posture.runner_attestation.reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION',
+    );
+    expect(report.privacy_posture.runner_attestation.evidence.runner_measurement_present).toBe(true);
+    expect(report.privacy_posture.runner_attestation.evidence.runner_measurement_structured).toBe(false);
+    expect(report.privacy_posture.signal_buckets.reviewer_action_required).toContain(
+      'Run summary claims attested posture, but runner attestation evidence is missing required structure/binding consistency.',
+    );
+
+    const text = renderProofReportText(report);
+    expect(text).toContain('Runner measurement evidence : present but invalid');
+    expect(text).toContain('Runner attestation receipt  : present');
   });
 
   it('does not treat malformed privacy metadata as proof evidence', () => {
@@ -619,6 +803,8 @@ describe('renderProofReportHtml', () => {
     expect(html).toContain('Background noise / ignorable infra');
     expect(html).toContain('Reviewer action needed');
     expect(html).toContain('Privacy posture');
+    expect(html).toContain('Runner attestation posture');
+    expect(html).toContain('Attested-tier reason code');
     expect(html).toContain('Allowed processors and blocked routes');
     expect(html).toContain('Sensitive classes and actions');
     expect(html).toContain('What Is Not Proven');
@@ -640,6 +826,8 @@ describe('renderProofReportText', () => {
 
     const text = renderProofReportText(report);
     expect(text).toContain('Privacy posture:');
+    expect(text).toContain('Runner attestation posture');
+    expect(text).toContain('Attested-tier reason code');
     expect(text).toContain('Allowed egress destinations:');
     expect(text).toContain('Allowed processors used:');
     expect(text).toContain('Blocked processor attempts:');
@@ -750,6 +938,7 @@ describe('runProveReport export pack', () => {
       const claimsBoundary = await readFile(join(exportPackPath, 'reports/claims-boundary.md'), 'utf-8');
       expect(claimsBoundary).toContain('## What This Pack Proves');
       expect(claimsBoundary).toContain('## What This Pack Does Not Prove');
+      expect(claimsBoundary).toContain('Runner attestation posture:');
       expect(claimsBoundary).toContain(
         'Run canonical verification first: `clawverify verify proof-bundle --input proof-bundle/proof_bundle.json`.',
       );
@@ -779,6 +968,39 @@ describe('runProveReport export pack', () => {
         expect(first).toBe(second);
       }
     } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exports runner attestation evidence alongside the report when present', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'clawsig-prove-export-pack-attested-'));
+    const bundlePath = join(tempDir, 'proof_bundle.json');
+    const exportPackPath = join(tempDir, 'privacy-pack');
+
+    await writeFile(bundlePath, JSON.stringify(makeAttestedBundle(), null, 2) + '\n', 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await runProveReport({
+        inputPath: bundlePath,
+        exportPackPath,
+        decrypt: false,
+        json: false,
+      });
+
+      const runnerMeasurement = await readFile(
+        join(exportPackPath, 'privacy-evidence/runner_measurement.json'),
+        'utf-8',
+      );
+      const runnerAttestationReceipt = await readFile(
+        join(exportPackPath, 'privacy-evidence/runner_attestation_receipt.json'),
+        'utf-8',
+      );
+
+      expect(runnerMeasurement).toContain('"manifest_hash_b64u"');
+      expect(runnerAttestationReceipt).toContain('"envelope_type": "runner_attestation_receipt"');
+    } finally {
+      stdoutSpy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });
     }
   });

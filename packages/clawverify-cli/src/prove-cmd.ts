@@ -57,6 +57,14 @@ type ProofPrivacyVerdict = 'good' | 'caution' | 'action';
 
 type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
 
+type ProofRunnerAttestationPosture = 'attested' | 'non_attested';
+
+type ProofRunnerAttestationReasonCode =
+  | 'ATTESTED_TIER_GRANTED'
+  | 'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION'
+  | 'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED'
+  | 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
+
 export interface ProofPrivacyProcessorRoute {
   provider: string;
   model: string;
@@ -91,6 +99,8 @@ export interface ProofPrivacyPosture {
     runtime_hygiene_present: boolean;
     data_handling_receipts_present: boolean;
     processor_policy_evidence_present: boolean;
+    runner_measurement_present: boolean;
+    runner_attestation_receipt_present: boolean;
   };
   egress: {
     proofed_mode: boolean | null;
@@ -125,6 +135,20 @@ export interface ProofPrivacyPosture {
     profile_status: string | null;
     hygiene_verdict: ProofRuntimeHygiene['verdict'];
   };
+  runner_attestation: {
+    posture: ProofRunnerAttestationPosture;
+    reason_code: ProofRunnerAttestationReasonCode;
+    claimed_tier: string | null;
+    claimed_trust_tier: string | null;
+    attested_tier_claimed: boolean;
+    evidence: {
+      runner_measurement_present: boolean;
+      runner_measurement_structured: boolean;
+      runner_attestation_receipt_present: boolean;
+      runner_attestation_receipt_structured: boolean;
+      binding_consistent: boolean;
+    };
+  };
   signal_buckets: {
     background_noise: string[];
     caution: string[];
@@ -142,6 +166,7 @@ export interface ProofReport {
   harness: {
     status: string | null;
     tier: string | null;
+    trust_tier: string | null;
     duration_seconds: number | null;
     timestamp: string | null;
     did: string | null;
@@ -232,6 +257,51 @@ function isDataHandlingAction(value: unknown): value is DataHandlingAction {
 
 function isBase64UrlLike(value: string | null, minLength = 8): boolean {
   return value !== null && value.length >= minLength && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+function isCanonicalHostList(value: unknown): value is string[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  let previous: string | null = null;
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const normalized = asString(entry);
+    if (
+      normalized === null ||
+      normalized !== normalized.toLowerCase() ||
+      seen.has(normalized) ||
+      (previous !== null && normalized.localeCompare(previous) < 0)
+    ) {
+      return false;
+    }
+    seen.add(normalized);
+    previous = normalized;
+  }
+
+  return true;
+}
+
+function isIsoTimestamp(value: string | null): boolean {
+  if (value === null) {
+    return false;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && value === new Date(parsed).toISOString();
+}
+
+function computeJsonSha256B64u(value: unknown): string {
+  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('base64url');
+}
+
+function describeAttestationEvidenceState(present: boolean, structured: boolean): string {
+  if (!present) {
+    return 'missing';
+  }
+
+  return structured ? 'present' : 'present but invalid';
 }
 
 function isSignedEnvelopeLike(envelope: Record<string, unknown>, expectedType: string): boolean {
@@ -335,6 +405,220 @@ function getStructuredDataHandlingPayload(envelope: Record<string, unknown>): Re
   return payload;
 }
 
+const RUNNER_MEASUREMENT_ARTIFACT_FIELDS = [
+  'preload_hash_b64u',
+  'node_preload_sentinel_hash_b64u',
+  'sentinel_shell_hash_b64u',
+  'sentinel_shell_policy_hash_b64u',
+  'interpose_library_hash_b64u',
+] as const;
+
+type RunnerMeasurementArtifactField = typeof RUNNER_MEASUREMENT_ARTIFACT_FIELDS[number];
+type RunnerMeasurementArtifacts = Record<RunnerMeasurementArtifactField, string | null>;
+
+interface StructuredRunnerMeasurementEvidence {
+  manifest_hash_b64u: string;
+  policy_effective_policy_hash_b64u: string;
+  runtime: Record<string, unknown>;
+  artifacts: RunnerMeasurementArtifacts;
+}
+
+interface StructuredRunnerAttestationReceiptEvidence {
+  payload_hash_b64u: string;
+  signer_did: string;
+  binding_run_id: string;
+  binding_event_hash_b64u: string;
+  policy_effective_policy_hash_b64u: string;
+  runner_measurement_manifest_hash_b64u: string;
+  runner_measurement_runtime_hash_b64u: string;
+  artifacts: RunnerMeasurementArtifacts;
+}
+
+function parseRunnerMeasurementArtifacts(
+  value: Record<string, unknown> | null,
+): RunnerMeasurementArtifacts | null {
+  if (!value) {
+    return null;
+  }
+
+  const result = {} as RunnerMeasurementArtifacts;
+  for (const field of RUNNER_MEASUREMENT_ARTIFACT_FIELDS) {
+    const raw = value[field];
+    if (raw === null) {
+      result[field] = null;
+      continue;
+    }
+    const normalized = asString(raw);
+    if (!isBase64UrlLike(normalized)) {
+      return null;
+    }
+    result[field] = normalized;
+  }
+
+  return result;
+}
+
+function parseStructuredRunnerMeasurementEvidence(
+  value: Record<string, unknown> | null,
+): StructuredRunnerMeasurementEvidence | null {
+  if (!value) {
+    return null;
+  }
+
+  const manifestHash = asString(value.manifest_hash_b64u);
+  if (
+    asString(value.binding_version) !== '1' ||
+    asString(value.hash_algorithm) !== 'SHA-256' ||
+    !isBase64UrlLike(manifestHash)
+  ) {
+    return null;
+  }
+
+  const manifest = isRecord(value.manifest) ? value.manifest : null;
+  const runtime = manifest && isRecord(manifest.runtime) ? manifest.runtime : null;
+  const proofed = manifest && isRecord(manifest.proofed) ? manifest.proofed : null;
+  const policy = manifest && isRecord(manifest.policy) ? manifest.policy : null;
+  const artifacts = manifest && isRecord(manifest.artifacts) ? manifest.artifacts : null;
+  const sentinels = proofed && isRecord(proofed.sentinels) ? proofed.sentinels : null;
+  const policyHash = asString(policy?.effective_policy_hash_b64u);
+  const parsedArtifacts = parseRunnerMeasurementArtifacts(artifacts);
+
+  if (
+    !manifest ||
+    asString(manifest.manifest_version) !== '1' ||
+    !runtime ||
+    asString(runtime.platform) === null ||
+    asString(runtime.arch) === null ||
+    asString(runtime.node_version) === null ||
+    !proofed ||
+    proofed.proofed_mode !== true ||
+    asString(proofed.clawproxy_url) === null ||
+    !isCanonicalHostList(proofed.allowed_proxy_destinations) ||
+    !isCanonicalHostList(proofed.allowed_child_destinations) ||
+    !sentinels ||
+    typeof sentinels.shell_enabled !== 'boolean' ||
+    typeof sentinels.interpose_enabled !== 'boolean' ||
+    typeof sentinels.preload_enabled !== 'boolean' ||
+    typeof sentinels.fs_enabled !== 'boolean' ||
+    typeof sentinels.net_enabled !== 'boolean' ||
+    !isBase64UrlLike(policyHash) ||
+    !parsedArtifacts
+  ) {
+    return null;
+  }
+
+  try {
+    const clawproxyUrl = new URL(asString(proofed.clawproxy_url)!);
+    if (clawproxyUrl.protocol !== 'http:' && clawproxyUrl.protocol !== 'https:') {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  if (
+    sentinels.preload_enabled &&
+    (!parsedArtifacts.preload_hash_b64u || !parsedArtifacts.node_preload_sentinel_hash_b64u)
+  ) {
+    return null;
+  }
+  if (
+    sentinels.shell_enabled &&
+    (!parsedArtifacts.sentinel_shell_hash_b64u || !parsedArtifacts.sentinel_shell_policy_hash_b64u)
+  ) {
+    return null;
+  }
+  if (sentinels.interpose_enabled && !parsedArtifacts.interpose_library_hash_b64u) {
+    return null;
+  }
+  if (computeJsonSha256B64u(manifest) !== manifestHash) {
+    return null;
+  }
+
+  return {
+    manifest_hash_b64u: manifestHash!,
+    policy_effective_policy_hash_b64u: policyHash!,
+    runtime,
+    artifacts: parsedArtifacts,
+  };
+}
+
+function parseStructuredRunnerAttestationReceiptEvidence(
+  envelope: Record<string, unknown> | null,
+  expectedAgentDid: string | null,
+): StructuredRunnerAttestationReceiptEvidence | null {
+  if (!envelope || !isSignedEnvelopeLike(envelope, 'runner_attestation_receipt')) {
+    return null;
+  }
+
+  const payload = isRecord(envelope.payload) ? envelope.payload : null;
+  const binding = payload && isRecord(payload.binding) ? payload.binding : null;
+  const policy = payload && isRecord(payload.policy) ? payload.policy : null;
+  const runnerMeasurement = payload && isRecord(payload.runner_measurement)
+    ? payload.runner_measurement
+    : null;
+  const artifacts = runnerMeasurement && isRecord(runnerMeasurement.artifacts)
+    ? runnerMeasurement.artifacts
+    : null;
+
+  const runId = asString(binding?.run_id);
+  const eventHash = asString(binding?.event_hash_b64u);
+  const policyHash = asString(policy?.effective_policy_hash_b64u);
+  const manifestHash = asString(runnerMeasurement?.manifest_hash_b64u);
+  const runtimeHash = asString(runnerMeasurement?.runtime_hash_b64u);
+  const agentDid = asString(payload?.agent_did);
+  const signerDid = asString(envelope.signer_did);
+  const parsedArtifacts = parseRunnerMeasurementArtifacts(artifacts);
+
+  if (
+    !payload ||
+    asString(payload.receipt_version) !== '1' ||
+    asString(payload.receipt_id) === null ||
+    asString(payload.hash_algorithm) !== 'SHA-256' ||
+    !isIsoTimestamp(asString(payload.timestamp)) ||
+    !runId ||
+    !isBase64UrlLike(eventHash) ||
+    !isBase64UrlLike(policyHash) ||
+    !isBase64UrlLike(manifestHash) ||
+    !isBase64UrlLike(runtimeHash) ||
+    !agentDid ||
+    !signerDid ||
+    agentDid !== signerDid ||
+    (expectedAgentDid !== null && agentDid !== expectedAgentDid) ||
+    computeJsonSha256B64u(payload) !== asString(envelope.payload_hash_b64u) ||
+    !parsedArtifacts
+  ) {
+    return null;
+  }
+
+  return {
+    payload_hash_b64u: asString(envelope.payload_hash_b64u)!,
+    signer_did: signerDid,
+    binding_run_id: runId,
+    binding_event_hash_b64u: eventHash!,
+    policy_effective_policy_hash_b64u: policyHash!,
+    runner_measurement_manifest_hash_b64u: manifestHash!,
+    runner_measurement_runtime_hash_b64u: runtimeHash!,
+    artifacts: parsedArtifacts,
+  };
+}
+
+function runnerMeasurementArtifactsMatch(
+  left: RunnerMeasurementArtifacts,
+  right: RunnerMeasurementArtifacts,
+): boolean {
+  for (const field of RUNNER_MEASUREMENT_ARTIFACT_FIELDS) {
+    if (left[field] !== right[field]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function normalizeTierValue(value: string | null): string | null {
+  return value ? value.trim().toLowerCase() : null;
+}
+
 const BACKGROUND_NETWORK_CLASSIFICATIONS = new Set([
   'infrastructure',
   'expected',
@@ -416,6 +700,7 @@ function renderPrivacyClaimsBoundaryMarkdown(report: ProofReport): string {
   lines.push(`Bundle ID: ${report.public_layer.bundle_id ?? 'unknown'}`);
   lines.push(`Agent DID: ${report.public_layer.agent_did ?? 'unknown'}`);
   lines.push(`Privacy verdict: ${report.privacy_posture.overall_verdict.toUpperCase()}`);
+  lines.push(`Runner attestation posture: ${report.privacy_posture.runner_attestation.posture.toUpperCase()} (${report.privacy_posture.runner_attestation.reason_code})`);
   lines.push('');
   lines.push('## What This Pack Proves');
   if (report.privacy_posture.proven_claims.length === 0) {
@@ -449,7 +734,8 @@ function renderPrivacyExportPackReadme(report: ProofReport): string {
   lines.push('## Contents');
   lines.push('- `proof-bundle/proof_bundle.json`: proof bundle included in this export pack.');
   lines.push('- `privacy-evidence/*.json`: privacy policy receipts/evidence extracted from bundle metadata when present.');
-  lines.push('- `reports/proof-report.json`: machine-readable prove report (includes privacy posture).');
+  lines.push('- Runner measurement / runner attestation evidence is copied into `privacy-evidence/` when present so reviewers can inspect the exact posture inputs.');
+  lines.push('- `reports/proof-report.json`: machine-readable prove report (includes privacy + runner-attestation posture).');
   lines.push('- `reports/proof-report.txt`: human-readable prove report.');
   lines.push('- `reports/claims-boundary.md`: explicit what-is-proven / not-proven boundaries.');
   lines.push('- `manifest.json`: deterministic file manifest with SHA-256 digests.');
@@ -499,6 +785,18 @@ function collectPrivacyEvidenceFiles(bundle: Record<string, unknown>): Array<{
     files.push({
       relative_path: 'privacy-evidence/processor_policy.json',
       payload: metadata.processor_policy,
+    });
+  }
+  if (metadata && metadata.runner_measurement !== undefined) {
+    files.push({
+      relative_path: 'privacy-evidence/runner_measurement.json',
+      payload: metadata.runner_measurement,
+    });
+  }
+  if (metadata && metadata.runner_attestation_receipt !== undefined) {
+    files.push({
+      relative_path: 'privacy-evidence/runner_attestation_receipt.json',
+      payload: metadata.runner_attestation_receipt,
     });
   }
 
@@ -738,9 +1036,12 @@ const DATA_HANDLING_ACTION_ORDER: DataHandlingAction[] = ['allow', 'redact', 'bl
 function summarizePrivacyPosture(args: {
   payload: Record<string, unknown>;
   sentinels: ProofReport['sentinels'];
+  claimedTier: string | null;
+  claimedTrustTier: string | null;
 }): ProofPrivacyPosture {
-  const { payload, sentinels } = args;
+  const { payload, sentinels, claimedTier, claimedTrustTier } = args;
   const metadata = isRecord(payload.metadata) ? payload.metadata : null;
+  const expectedAgentDid = asString(payload.agent_did);
   const sentinelMetadata = metadata && isRecord(metadata.sentinels) ? metadata.sentinels : null;
   const rawEgressEnvelope = sentinelMetadata && isRecord(sentinelMetadata.egress_policy_receipt)
     ? sentinelMetadata.egress_policy_receipt
@@ -876,12 +1177,67 @@ function summarizePrivacyPosture(args: {
     sentinels.runtime_hygiene.background_signals.length > 0 ||
     sentinels.runtime_hygiene.caution_signals.length > 0 ||
     sentinels.runtime_hygiene.action_required_signals.length > 0;
+  const runnerMeasurementPresent = metadata ? metadata.runner_measurement !== undefined : false;
+  const runnerAttestationReceiptPresent = metadata ? metadata.runner_attestation_receipt !== undefined : false;
+  const rawRunnerMeasurement = metadata && isRecord(metadata.runner_measurement)
+    ? metadata.runner_measurement
+    : null;
+  const rawRunnerAttestationReceipt = metadata && isRecord(metadata.runner_attestation_receipt)
+    ? metadata.runner_attestation_receipt
+    : null;
+  const runnerMeasurement = parseStructuredRunnerMeasurementEvidence(rawRunnerMeasurement);
+  const runnerAttestationReceipt = parseStructuredRunnerAttestationReceiptEvidence(
+    rawRunnerAttestationReceipt,
+    expectedAgentDid,
+  );
+  const policyBinding = metadata && isRecord(metadata.policy_binding) ? metadata.policy_binding : null;
+  const policyBindingHash = asString(policyBinding?.effective_policy_hash_b64u);
+  const eventChainEntries = asArray(payload.event_chain).filter((entry): entry is Record<string, unknown> => isRecord(entry));
+  const expectedRunId = asString(eventChainEntries[0]?.run_id);
+  const allowedEventHashes = new Set(
+    eventChainEntries
+      .map((entry) => asString(entry.event_hash_b64u))
+      .filter((entry): entry is string => entry !== null),
+  );
+  const runnerAttestationBindingConsistent =
+    runnerMeasurement !== null &&
+    runnerAttestationReceipt !== null &&
+    runnerAttestationReceipt.signer_did === expectedAgentDid &&
+    runnerAttestationReceipt.runner_measurement_manifest_hash_b64u === runnerMeasurement.manifest_hash_b64u &&
+    runnerAttestationReceipt.runner_measurement_runtime_hash_b64u === computeJsonSha256B64u(runnerMeasurement.runtime) &&
+    runnerAttestationReceipt.policy_effective_policy_hash_b64u === runnerMeasurement.policy_effective_policy_hash_b64u &&
+    policyBindingHash !== null &&
+    runnerAttestationReceipt.policy_effective_policy_hash_b64u === policyBindingHash &&
+    expectedRunId !== null &&
+    runnerAttestationReceipt.binding_run_id === expectedRunId &&
+    allowedEventHashes.has(runnerAttestationReceipt.binding_event_hash_b64u) &&
+    runnerMeasurementArtifactsMatch(runnerMeasurement.artifacts, runnerAttestationReceipt.artifacts);
+  const normalizedClaimedTier = normalizeTierValue(claimedTier);
+  const normalizedClaimedTrustTier = normalizeTierValue(claimedTrustTier);
+  const attestedTierClaimed =
+    normalizedClaimedTier === 'attested' ||
+    normalizedClaimedTier === 'full' ||
+    normalizedClaimedTrustTier === 'attested' ||
+    normalizedClaimedTrustTier === 'full';
+  const runnerAttestationEvidencePresent = runnerMeasurementPresent || runnerAttestationReceiptPresent;
+  const runnerAttestationReasonCode: ProofRunnerAttestationReasonCode = !runnerAttestationEvidencePresent
+    ? 'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION'
+    : runnerMeasurement === null || runnerAttestationReceipt === null || !runnerAttestationBindingConsistent
+      ? 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION'
+      : attestedTierClaimed
+        ? 'ATTESTED_TIER_GRANTED'
+        : 'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED';
+  const runnerAttestationPosture: ProofRunnerAttestationPosture = runnerAttestationReasonCode === 'ATTESTED_TIER_GRANTED'
+    ? 'attested'
+    : 'non_attested';
   const evidence = {
     egress_policy_receipt_present: egressPayload !== null,
     runtime_profile_present: runtimeProfilePresent,
     runtime_hygiene_present: runtimeHygienePresent,
     data_handling_receipts_present: dataHandlingPayloads.length > 0,
     processor_policy_evidence_present: processorPolicy !== null,
+    runner_measurement_present: runnerMeasurementPresent,
+    runner_attestation_receipt_present: runnerAttestationReceiptPresent,
   };
 
   const cautionSignals: string[] = [];
@@ -975,6 +1331,15 @@ function summarizePrivacyPosture(args: {
       `${sentinels.unmonitored_spawns} unmonitored ${pluralize(sentinels.unmonitored_spawns, 'spawn')} were observed.`,
     );
   }
+  if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION' && attestedTierClaimed) {
+    reviewerActionSignals.push(
+      'Run summary claims attested posture, but runner attestation evidence is missing required structure/binding consistency.',
+    );
+  } else if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION') {
+    cautionSignals.push(
+      'Runner attestation evidence is present, but it is missing required structure or binding consistency and cannot support attested posture.',
+    );
+  }
 
   const dedupedCautionSignals = dedupeStrings(cautionSignals);
   const dedupedReviewerActionSignals = dedupeStrings(reviewerActionSignals);
@@ -1007,6 +1372,15 @@ function summarizePrivacyPosture(args: {
       `Runtime evidence reports profile ${(sentinels.runtime_profile.profile_id ?? 'unknown')} (${sentinels.runtime_profile.status ?? 'unknown'}) with hygiene verdict ${(sentinels.runtime_hygiene.verdict ?? 'unknown')}.`,
     );
   }
+  if (runnerAttestationReasonCode === 'ATTESTED_TIER_GRANTED') {
+    provenClaims.push(
+      'Run summary claims attested tier and bundle metadata carries runner measurement + runner attestation receipt evidence with matching run/event/policy/manifest bindings.',
+    );
+  } else if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED') {
+    provenClaims.push(
+      'Bundle metadata carries structurally consistent runner measurement + runner attestation receipt evidence, but run summary does not claim attested tier.',
+    );
+  }
 
   const notProvenClaims: string[] = [];
   if (!evidence.egress_policy_receipt_present) {
@@ -1021,11 +1395,27 @@ function summarizePrivacyPosture(args: {
   if (!evidence.runtime_hygiene_present) {
     notProvenClaims.push('Cannot prove runtime hygiene posture because runtime hygiene evidence is missing.');
   }
+  if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION') {
+    notProvenClaims.push(
+      'Cannot prove attested runner posture because runner measurement/attestation evidence is absent; treat this run as non-attested.',
+    );
+  } else if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION') {
+    notProvenClaims.push(
+      'Cannot prove attested runner posture because runner attestation evidence is missing required structure or binding consistency; treat this run as non-attested.',
+    );
+  } else if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED') {
+    notProvenClaims.push(
+      'Cannot claim attested runner posture because run summary does not claim attested trust tier, even though runner attestation evidence is present.',
+    );
+  }
+  notProvenClaims.push(
+    'This report does not independently verify runner attestation signatures or recompute runner-measurement hashes; use clawverify verify proof-bundle for canonical attested-tier validation.',
+  );
   notProvenClaims.push('This report does not independently verify every privacy receipt signature or processor-policy hash; use clawverify verify proof-bundle for canonical validation.');
   notProvenClaims.push('This report does not by itself prove legal or regulatory compliance.');
   notProvenClaims.push('This report does not prove what third-party processors retained or deleted after receipt.');
   notProvenClaims.push('This report does not replace legal, contractual, or policy review.');
-  notProvenClaims.push('This report does not include remote attestation or measured boot guarantees.');
+  notProvenClaims.push('This report does not include hardware-rooted remote attestation or measured boot guarantees.');
 
   return {
     overall_verdict: overallVerdict,
@@ -1063,6 +1453,20 @@ function summarizePrivacyPosture(args: {
       profile_id: sentinels.runtime_profile.profile_id,
       profile_status: sentinels.runtime_profile.status,
       hygiene_verdict: sentinels.runtime_hygiene.verdict,
+    },
+    runner_attestation: {
+      posture: runnerAttestationPosture,
+      reason_code: runnerAttestationReasonCode,
+      claimed_tier: claimedTier,
+      claimed_trust_tier: claimedTrustTier,
+      attested_tier_claimed: attestedTierClaimed,
+      evidence: {
+        runner_measurement_present: runnerMeasurementPresent,
+        runner_measurement_structured: runnerMeasurement !== null,
+        runner_attestation_receipt_present: runnerAttestationReceiptPresent,
+        runner_attestation_receipt_structured: runnerAttestationReceipt !== null,
+        binding_consistent: runnerAttestationBindingConsistent,
+      },
     },
     signal_buckets: {
       background_noise: backgroundSignals,
@@ -1265,6 +1669,11 @@ function deriveNextSteps(
   } else {
     steps.push('Privacy posture evidence is clean enough for reviewer-facing discussion, subject to claim limits.');
   }
+  if (report.privacy_posture.runner_attestation.posture === 'attested') {
+    steps.push('Runner attestation posture is ATTESTED in this report; still run canonical verification before relying on attested-tier claims.');
+  } else {
+    steps.push('Runner attestation posture is NON-ATTESTED; avoid making attested-tier runtime integrity claims for this run.');
+  }
   steps.push(`Canonical offline verifier command: ${report.verify_command}`);
   if (report.warnings.length > 0) {
     steps.push('Review the bucketed warning/action cards before treating the run as clean reviewer-facing evidence.');
@@ -1284,13 +1693,22 @@ export function buildProofReport(args: {
   const gateway = summarizeGateway(payload);
   const sentinels = summarizeSentinels(payload);
   const network = summarizeNetwork(payload);
-  const privacyPosture = summarizePrivacyPosture({ payload, sentinels });
+  const harnessStatus = asString(runSummary?.status);
+  const harnessTier = asString(runSummary?.tier);
+  const harnessTrustTier = asString(runSummary?.trust_tier);
+  const privacyPosture = summarizePrivacyPosture({
+    payload,
+    sentinels,
+    claimedTier: harnessTier,
+    claimedTrustTier: harnessTrustTier,
+  });
 
   const base: ProofReportBase = {
     public_layer: publicLayer,
     harness: {
-      status: asString(runSummary?.status),
-      tier: asString(runSummary?.tier),
+      status: harnessStatus,
+      tier: harnessTier,
+      trust_tier: harnessTrustTier,
       duration_seconds: asNumber(runSummary?.duration_seconds),
       timestamp: asString(runSummary?.timestamp),
       did: asString(runSummary?.did),
@@ -1490,6 +1908,7 @@ export function renderProofReportHtml(report: ProofReport): string {
       <div>
         <span class="pill ok">Harness status: ${escapeHtml(report.harness.status ?? 'unknown')}</span>
         <span class="pill ok">Claimed tier: ${escapeHtml(report.harness.tier ?? 'unknown')}</span>
+        <span class="pill info">Claimed trust tier: ${escapeHtml(report.harness.trust_tier ?? 'unknown')}</span>
         <span class="pill ${warningsClass}">Reviewer actions: ${reviewerActionCount}</span>
         <span class="pill ${privacyPillClass}">Privacy verdict: ${escapeHtml(report.privacy_posture.overall_verdict.toUpperCase())}</span>
         <span class="pill ok">Signed gateway receipts: ${report.gateway.signed_count}</span>
@@ -1506,10 +1925,22 @@ export function renderProofReportHtml(report: ProofReport): string {
         ${renderKeyValueRows([
           ['Overall verdict', report.privacy_posture.overall_verdict],
           ['Reviewer action required', report.privacy_posture.reviewer_action_required ? 'yes' : 'no'],
+          ['Runner attestation posture', report.privacy_posture.runner_attestation.posture],
+          ['Attested-tier reason code', report.privacy_posture.runner_attestation.reason_code],
+          ['Attested tier claimed', report.privacy_posture.runner_attestation.attested_tier_claimed ? 'yes' : 'no'],
           ['Egress policy evidence', report.privacy_posture.evidence.egress_policy_receipt_present ? 'present' : 'missing'],
           ['Processor policy evidence', report.privacy_posture.evidence.processor_policy_evidence_present ? 'present' : 'missing'],
           ['Data-handling evidence', report.privacy_posture.evidence.data_handling_receipts_present ? 'present' : 'missing'],
           ['Runtime hygiene evidence', report.privacy_posture.evidence.runtime_hygiene_present ? 'present' : 'missing'],
+          ['Runner measurement evidence', describeAttestationEvidenceState(
+            report.privacy_posture.runner_attestation.evidence.runner_measurement_present,
+            report.privacy_posture.runner_attestation.evidence.runner_measurement_structured,
+          )],
+          ['Runner attestation receipt', describeAttestationEvidenceState(
+            report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_present,
+            report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_structured,
+          )],
+          ['Runner attestation bindings', report.privacy_posture.runner_attestation.evidence.binding_consistent ? 'consistent' : 'not established'],
         ])}
         <div class="subheading">What Is Proven</div>
         <ul>${renderList(report.privacy_posture.proven_claims)}</ul>
@@ -1675,6 +2106,7 @@ export function renderProofReportText(report: ProofReport): string {
   lines.push(`Agent DID        : ${report.public_layer.agent_did ?? '—'}`);
   lines.push(`Harness status   : ${report.harness.status ?? 'unknown'}`);
   lines.push(`Claimed tier     : ${report.harness.tier ?? 'unknown'}`);
+  lines.push(`Claimed trust    : ${report.harness.trust_tier ?? 'unknown'}`);
   lines.push(`Gateway proof    : ${report.gateway.signed_count > 0 ? 'SIGNED' : 'MISSING'}`);
   lines.push(`Gateway signer   : ${report.gateway.signer_dids[0] ?? '—'}`);
   lines.push(`Provider/model   : ${(report.gateway.provider ?? '—')} / ${(report.gateway.model ?? '—')}`);
@@ -1693,10 +2125,22 @@ export function renderProofReportText(report: ProofReport): string {
   lines.push('Privacy posture:');
   lines.push(`  Overall verdict             : ${report.privacy_posture.overall_verdict.toUpperCase()}`);
   lines.push(`  Reviewer action required    : ${report.privacy_posture.reviewer_action_required ? 'yes' : 'no'}`);
+  lines.push(`  Runner attestation posture  : ${report.privacy_posture.runner_attestation.posture.toUpperCase()}`);
+  lines.push(`  Attested-tier reason code   : ${report.privacy_posture.runner_attestation.reason_code}`);
+  lines.push(`  Attested tier claimed       : ${report.privacy_posture.runner_attestation.attested_tier_claimed ? 'yes' : 'no'}`);
   lines.push(`  Egress policy evidence      : ${report.privacy_posture.evidence.egress_policy_receipt_present ? 'present' : 'missing'}`);
   lines.push(`  Processor policy evidence   : ${report.privacy_posture.evidence.processor_policy_evidence_present ? 'present' : 'missing'}`);
   lines.push(`  Data-handling evidence      : ${report.privacy_posture.evidence.data_handling_receipts_present ? 'present' : 'missing'}`);
   lines.push(`  Runtime hygiene evidence    : ${report.privacy_posture.evidence.runtime_hygiene_present ? 'present' : 'missing'}`);
+  lines.push(`  Runner measurement evidence : ${describeAttestationEvidenceState(
+    report.privacy_posture.runner_attestation.evidence.runner_measurement_present,
+    report.privacy_posture.runner_attestation.evidence.runner_measurement_structured,
+  )}`);
+  lines.push(`  Runner attestation receipt  : ${describeAttestationEvidenceState(
+    report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_present,
+    report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_structured,
+  )}`);
+  lines.push(`  Runner attestation bindings : ${report.privacy_posture.runner_attestation.evidence.binding_consistent ? 'consistent' : 'not established'}`);
   lines.push(`  Blocked egress attempts     : ${report.privacy_posture.egress.blocked_attempt_count ?? 0}`);
   lines.push(`  Direct providers blocked    : ${report.privacy_posture.egress.direct_provider_access_blocked === null ? 'unknown' : report.privacy_posture.egress.direct_provider_access_blocked ? 'true' : 'false'}`);
   lines.push(`  Proofed mode                : ${report.privacy_posture.egress.proofed_mode === null ? 'unknown' : report.privacy_posture.egress.proofed_mode ? 'true' : 'false'}`);
