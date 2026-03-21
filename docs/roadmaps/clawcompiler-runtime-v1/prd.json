@@ -1,0 +1,143 @@
+{
+  "name": "clawcompiler-runtime-v1",
+  "project": "clawbureau",
+  "description": "Build the first deployed deterministic Clawcompiler runtime on top of the shipped schema/bootstrap contracts.",
+  "branchName": "main",
+  "userStories": [
+    {
+      "id": "CEC-RT-001",
+      "title": "Verified-evidence ingest contract",
+      "description": "As a compiler pipeline, I need a deterministic ingest contract for already-verified artifacts so compilation never depends on ambient, mutable, or unauthenticated inputs.",
+      "acceptanceCriteria": [
+        "Define the authoritative compile input contract for proof bundles, export packs, and verifier result references",
+        "Reject unknown schema/version/reference shapes fail-closed",
+        "Require upstream evidence to be verified before authoritative compilation proceeds",
+        "Canonicalize evidence references by content hash so equivalent inputs normalize identically"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-002",
+      "title": "Deterministic control-pack runtime",
+      "description": "As a governance operator, I need a bounded deterministic rule runtime so control evaluation is reproducible and machine-verifiable.",
+      "acceptanceCriteria": [
+        "Implement a deterministic control-pack/runtime contract with stable rule ordering",
+        "Support explicit control outcomes and deterministic reason-code emission",
+        "Disallow probabilistic or free-form security decisions at the authoritative decision boundary",
+        "Keep rule evaluation bounded and fail closed on unsupported operators or malformed inputs"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-003",
+      "title": "Fail-closed compiler state machine",
+      "description": "As an auditor, I need deterministic compiler precedence rules so invalid or incomplete upstream evidence halts compilation rather than being narrated away.",
+      "acceptanceCriteria": [
+        "Compilation halts fail-closed on upstream INVALID evidence with deterministic global failure codes",
+        "Missing required evidence produces explicit deterministic outcomes instead of silent skips",
+        "Compiler precedence is documented and stable for identical inputs",
+        "Upstream reason codes are preserved or mapped deterministically, never dropped"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-004",
+      "title": "Deterministic compiled report generation",
+      "description": "As a compliance pipeline, I need byte-stable authoritative report generation so compiled evidence is reproducible and hash-addressable.",
+      "acceptanceCriteria": [
+        "Generate authoritative compiled report payloads with stable ordering and canonical serialization inputs",
+        "Compute deterministic results/content hashes over the authoritative matrix",
+        "Same evidence set plus same rule set yields byte-identical authoritative output",
+        "Add conformance coverage proving determinism across repeated runs"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-005",
+      "title": "Signed compiler service/runtime",
+      "description": "As an enterprise operator, I need a runtime that emits signed compiled reports so output provenance is cryptographically bindable and portable.",
+      "acceptanceCriteria": [
+        "Add the first `services/clawcompiler` runtime/service scaffold or equivalent compile endpoint",
+        "Authoritative compile outputs are wrapped in signed compiler envelopes",
+        "Compiler signer identity is explicit and allowlistable",
+        "Runtime remains deterministic and does not emit unsigned authoritative reports"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-006",
+      "title": "Compiled-report verification in CLI/service",
+      "description": "As an auditor, I need offline and hosted verification for compiled reports so portability does not depend on trusting the compiler blindly.",
+      "acceptanceCriteria": [
+        "Add verification support for compiled report envelopes in CLI and/or service surfaces",
+        "Verification recomputes authoritative matrix/report hashes and validates signer identity",
+        "Deterministic invalid codes exist for signature mismatch, hash mismatch, missing refs, and schema violations",
+        "Offline verification works without network requirements for authoritative validity checks"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-007",
+      "title": "AI execution assurance control pack",
+      "description": "As a buyer or auditor, I need a first real control pack that maps Clawsig proof facts into an execution-assurance matrix rather than a generic empty compiler shell.",
+      "acceptanceCriteria": [
+        "Ship one versioned AI execution assurance pack using existing Clawsig/Clawverify facts",
+        "Cover policy, egress, DLP/privacy, attestation, and reviewer/signoff style controls where evidence exists",
+        "Each control result includes explicit evidence links and deterministic reason codes",
+        "No control outcome may overstate proof strength beyond upstream verifier facts"
+      ],
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-008",
+      "title": "Waiver and compensating-control semantics",
+      "description": "As governance, I need signed waiver semantics so human exceptions are explicit, bounded, and never silently promote failing controls to PASS.",
+      "acceptanceCriteria": [
+        "Signed waivers and compensating-control markers are represented as explicit compiler inputs",
+        "Waivers can only degrade FAIL to PARTIAL, never promote to PASS",
+        "Residual markers such as compensating-control reliance are emitted deterministically",
+        "Waiver binding, expiry, and scope are fail-closed validated"
+      ],
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-009",
+      "title": "Export-pack and viewer integration",
+      "description": "As a reviewer, I need compiled evidence reports to show up inside existing export/viewer flows so the compiler becomes part of the actual product handoff.",
+      "acceptanceCriteria": [
+        "Compiled authoritative reports can be included in export packs or equivalent handoff artifacts",
+        "Viewer/report surfaces link compiled outcomes back to source evidence cleanly",
+        "Authoritative vs non-authoritative surfaces remain visually and contractually distinct",
+        "Integration remains additive and does not break existing proof-pack workflows"
+      ],
+      "priority": 4,
+      "passes": false
+    },
+    {
+      "id": "CEC-RT-010",
+      "title": "Non-authoritative narrative runtime",
+      "description": "As an auditor-facing operator, I want an optional narrative plane so reports are explainable without allowing prose to override authoritative outcomes.",
+      "acceptanceCriteria": [
+        "Runtime can emit the optional narrative plane with `authoritative:false` and the fixed disclaimer",
+        "Narrative output includes a stable hash pin back to the authoritative matrix/report",
+        "Policy gates can disable narrative generation entirely for strict environments",
+        "Tampered or mismatched narrative output fails closed and cannot change authoritative results"
+      ],
+      "priority": 4,
+      "passes": false
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-03-21T17:45:00Z",
+    "status": "roadmap seeded (0/10 shipped)",
+    "predecessorRoadmap": "docs/roadmaps/clawcompiler/"
+  }
+}
