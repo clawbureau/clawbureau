@@ -20,3 +20,33 @@ Started: 2026-03-21T17:45:00Z
   - This roadmap explicitly depends on the shipped bootstrap contracts in `docs/roadmaps/clawcompiler/` and must not re-open schema membrane debates inside runtime lanes.
   - Execution should follow waves, not blind parallelism: foundations first, authoritative runtime second, first assurance pack third, product surfaces last.
 ---
+
+## 2026-03-21T22:33:52Z - Wave 1 foundations shipped
+- What shipped
+  - Merged PR #516 — `feat(clawcompiler): add authoritative wave 1 foundations`
+  - Closed the feature lane for:
+    - `CEC-RT-001` verified-evidence ingest contract
+    - `CEC-RT-002` deterministic control-pack runtime
+    - `CEC-RT-003` fail-closed compiler state machine
+  - Added the authoritative Wave-1 compiler contract and fail-closed state machine in `packages/clawverify-core/src/compliance.ts`
+  - Routed `packages/clawverify-cli/src/compliance-cmd.ts` through verifier-backed authoritative compiler inputs instead of loose raw-bundle mapping
+  - Replaced ledger placeholder compliance output with authoritative compiler output / explicit fail-closed results in `services/clawsig-ledger/src/stubs.ts` and `services/clawsig-ledger/src/index.ts`
+  - Added targeted regression coverage:
+    - `packages/clawverify-cli/test/compliance-cmd-wave1.test.ts`
+    - `services/clawsig-ledger/test/stubs-wave1.test.ts`
+- Reviewer + follow-up notes
+  - Reviewer verdict: **PASS WITH FIXES**
+  - Reviewer removed a CLI verifier-bypass path, tightened malformed-input fail-closed handling, rejected synthetic fallback bundle hashes in ledger stubs, and switched ledger compiler context to canonical payload hashing / deterministic INVALID emission.
+  - A post-review CI follow-up corrected `services/clawsig-ledger` imports to source-path imports so the service typecheck job resolves the Wave-1 compiler reliably in CI.
+- Validation
+  - `npm --prefix packages/clawverify-core run typecheck`
+  - `npm --prefix packages/clawverify-core run build`
+  - `npm --prefix packages/clawverify-cli run typecheck`
+  - `npm --prefix packages/clawverify-cli run build`
+  - `npm --prefix packages/clawverify-cli run test -- test/compliance-cmd-wave1.test.ts`
+  - `npm --prefix services/clawsig-ledger run typecheck`
+  - `npm --prefix services/clawsig-ledger run test -- test/stubs-wave1.test.ts`
+- Status
+  - Runtime v1 is now **3/10 shipped stories**.
+  - Wave 2 (`CEC-RT-004`..`CEC-RT-006`) is the next dependency-cleared tranche.
+---
