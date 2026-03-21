@@ -244,3 +244,33 @@ Started: 2026-03-20T22:40:00Z
   - Post-merge review found the CLI/reporting path could overstate malformed or unbound reviewer receipts as structured evidence. PR #508 hardened local summarization to require the same signature/binding integrity expectations that the verifiers already enforced.
   - Wave 8 leaves browser/automation parity (`AF2-XRT-002`) and transparency/revocation (`AF2-TRN-001`/`002`) as the remaining major framework lanes.
 ---
+
+## 2026-03-21T10:59:35Z - Wave 9 browser parity lane merged
+- What was implemented
+  - Closed `AF2-XRT-002` via PR #510.
+  - Added browser/automation proofed adapter parity so browser-named runners inherit clawsig-managed proxy mediation, proofed env propagation, fail-closed bypass checks, and end-to-end verifier-compatible evidence flow.
+- Validation
+  - `packages/clawverify-cli`: `npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck`
+  - `packages/clawsig-sdk`: `npm run typecheck`
+  - `packages/clawverify-cli`: `npm test -- test/wrap-browser-proofed.test.ts test/wrap-python-proofed.test.ts`
+- Notes
+  - Reviewer fixes moved bypass-flag rejection ahead of long-lived proxy startup, expanded fail-closed browser flag coverage beyond `--no-proxy-server`, and tightened browser proof-path assertions so silent proxy downgrades are caught.
+---
+
+## 2026-03-21T11:06:27Z - Wave 9 transparency-log lane merged
+- What was implemented
+  - Closed `AF2-TRN-001` via PR #511.
+  - Added optional transparency-log anchor metadata for policy, runner attestation, and reviewer signoff receipts, with fail-closed inclusion/consistency verification when anchor metadata is present.
+- Validation
+  - `services/clawverify`: `npm run typecheck`
+  - `packages/clawverify-core`: `npm run typecheck`
+  - `services/clawverify`: `npm test -- --run test/policy-binding.test.ts test/reviewer-signoff.test.ts`
+  - `packages/clawverify-core`: `npm run build`
+  - `packages/clawverify-cli`: `npm run build`
+  - `packages/clawverify-cli`: `npm run test:proof-reliability`
+- Notes
+  - Post-CI follow-up rebased the lane after PR #510 merged, reran proof-reliability guardrails locally, refreshed the DID proof, and force-pushed with lease before final merge.
+  - Reviewer fixes tightened same-tree consistency semantics and rejected malformed transparency `anchor_uri` values fail-closed.
+  - Wave 9 leaves revocation (`AF2-TRN-002`) as the final remaining Framework vNext lane.
+---
