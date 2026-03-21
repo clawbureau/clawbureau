@@ -30,6 +30,15 @@ Turn Clawcompiler into the service that can honestly say:
 - Make identical inputs + rules produce byte-identical authoritative outputs.
 - Keep offline verification and portability first-class.
 
+## Implementation status
+
+- **Wave 1 shipped** via PR #516:
+  - `CEC-RT-001` verified-evidence ingest contract
+  - `CEC-RT-002` deterministic control-pack runtime
+  - `CEC-RT-003` fail-closed compiler state machine
+- Current roadmap progress: **3/10 shipped stories**
+- Next up: **Wave 2** (`CEC-RT-004`..`CEC-RT-006`)
+
 ## Tracks
 
 ### Track A — Ingest + evaluation foundations
