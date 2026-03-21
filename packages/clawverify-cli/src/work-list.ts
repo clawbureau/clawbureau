@@ -109,6 +109,34 @@ function pad(s: string, len: number): string {
   return s.length >= len ? s : s + ' '.repeat(len - s.length);
 }
 
+function formatAssuranceSummary(bounty: Bounty): string {
+  const minimumProofTier = typeof bounty.minimum_proof_tier === 'string'
+    ? bounty.minimum_proof_tier
+    : typeof bounty.min_proof_tier === 'string'
+      ? bounty.min_proof_tier
+      : undefined;
+
+  const explicit = bounty.assurance_requirements;
+  if (explicit) {
+    const parts: string[] = [];
+    parts.push(`tier:${explicit.required_assurance_level ?? minimumProofTier ?? 'none'}`);
+    if (explicit.required_processors && explicit.required_processors.length > 0) {
+      parts.push(`proc:${explicit.required_processors.join('/')}`);
+    }
+    if (explicit.required_privacy_posture) {
+      parts.push(`privacy:${explicit.required_privacy_posture}`);
+    }
+    if (explicit.approval_policy) {
+      parts.push(`approval:${explicit.approval_policy === 'human_approval_receipt' ? 'receipt' : explicit.approval_policy}`);
+    }
+    if (parts.length > 0) {
+      return parts.join(',');
+    }
+  }
+
+  return minimumProofTier ? `tier:${minimumProofTier}` : '-';
+}
+
 export function renderTable(bounties: Bounty[]): string {
   if (bounties.length === 0) {
     return 'No bounties found.';
@@ -120,9 +148,10 @@ export function renderTable(bounties: Bounty[]): string {
   const hId = pad('ID', 14);
   const hBudget = pad('BUDGET', 10);
   const hRepo = pad('REPO', 28);
+  const hAssurance = pad('ASSURANCE', 56);
   const hTitle = 'TITLE';
-  lines.push(`${hId} ${hBudget} ${hRepo} ${hTitle}`);
-  lines.push('-'.repeat(78));
+  lines.push(`${hId} ${hBudget} ${hRepo} ${hAssurance} ${hTitle}`);
+  lines.push('-'.repeat(146));
 
   for (const b of bounties) {
     const id = pad(truncate(b.id, 13), 14);
@@ -131,8 +160,9 @@ export function renderTable(bounties: Bounty[]): string {
         ? pad(`${b.budget}${b.currency ? ' ' + b.currency : ''}`, 10)
         : pad('-', 10);
     const repo = pad(truncate(b.repo ?? '-', 27), 28);
-    const title = truncate(b.title || '(untitled)', 40);
-    lines.push(`${id} ${budget} ${repo} ${title}`);
+    const assurance = pad(truncate(formatAssuranceSummary(b), 55), 56);
+    const title = truncate(b.title || '(untitled)', 24);
+    lines.push(`${id} ${budget} ${repo} ${assurance} ${title}`);
   }
 
   return lines.join('\n');

@@ -693,6 +693,18 @@ interface ArenaAutoClaimLockRecord {
   updated_at: string;
 }
 
+type AssuranceRequiredLevel = 'none' | 'gateway' | 'sandbox';
+type AssurancePrivacyPosture = 'good' | 'caution' | 'action';
+type AssuranceApprovalPolicy = 'none' | 'human_approval_receipt';
+
+interface AssuranceRequirementsV1 {
+  version: '1';
+  required_assurance_level?: AssuranceRequiredLevel;
+  required_privacy_posture?: AssurancePrivacyPosture;
+  required_processors?: string[];
+  approval_policy?: AssuranceApprovalPolicy;
+}
+
 interface BountyListItemV2 {
   schema_version: '2';
   bounty_id: string;
@@ -708,6 +720,7 @@ interface BountyListItemV2 {
   tags: string[];
   min_proof_tier: ProofTier;
   minimum_proof_tier: MinimumProofTier;
+  assurance_requirements?: AssuranceRequirementsV1;
 }
 
 interface WorkerBountyListItemV2 {
@@ -723,6 +736,7 @@ interface WorkerBountyListItemV2 {
   tags: string[];
   min_proof_tier: ProofTier;
   minimum_proof_tier: MinimumProofTier;
+  assurance_requirements?: AssuranceRequirementsV1;
 }
 
 interface VerifyBundleComponentResults {
@@ -1208,6 +1222,7 @@ interface AcceptBountyResponseV1 {
   accepted_at: string;
   fee_policy_version: string;
   payout: { worker_net_minor: string; currency: 'USD' };
+  assurance_requirements?: AssuranceRequirementsV1;
 
   cwc_auth?: CwcAuthResponseV1;
   next_actions: NextAction[];
@@ -5829,6 +5844,135 @@ function parseJsonStringArray(text: string): string[] | null {
   }
 }
 
+const ASSURANCE_REQUIRED_PROCESSOR_RE = /^[a-z0-9][a-z0-9._:-]{0,119}$/;
+
+function parseAssuranceRequirementsV1(
+  value: unknown,
+): { ok: true; value: AssuranceRequirementsV1 } | { ok: false; message: string } {
+  if (!isRecord(value)) {
+    return { ok: false, message: 'assurance_requirements must be an object' };
+  }
+
+  const allowedKeys = new Set([
+    'version',
+    'required_assurance_level',
+    'required_privacy_posture',
+    'required_processors',
+    'approval_policy',
+  ]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      return { ok: false, message: `assurance_requirements contains unsupported field "${key}"` };
+    }
+  }
+
+  if (value.version !== '1') {
+    return { ok: false, message: 'assurance_requirements.version must be "1"' };
+  }
+
+  let required_assurance_level: AssuranceRequiredLevel | undefined;
+  if (value.required_assurance_level !== undefined) {
+    if (
+      value.required_assurance_level !== 'none'
+      && value.required_assurance_level !== 'gateway'
+      && value.required_assurance_level !== 'sandbox'
+    ) {
+      return { ok: false, message: 'required_assurance_level must be none|gateway|sandbox' };
+    }
+    required_assurance_level = value.required_assurance_level;
+  }
+
+  let required_privacy_posture: AssurancePrivacyPosture | undefined;
+  if (value.required_privacy_posture !== undefined) {
+    if (
+      value.required_privacy_posture !== 'good'
+      && value.required_privacy_posture !== 'caution'
+      && value.required_privacy_posture !== 'action'
+    ) {
+      return { ok: false, message: 'required_privacy_posture must be good|caution|action' };
+    }
+    required_privacy_posture = value.required_privacy_posture;
+  }
+
+  let required_processors: string[] | undefined;
+  if (value.required_processors !== undefined) {
+    if (!Array.isArray(value.required_processors)) {
+      return { ok: false, message: 'required_processors must be an array' };
+    }
+    if (value.required_processors.length === 0) {
+      return { ok: false, message: 'required_processors must include at least one processor' };
+    }
+    if (value.required_processors.length > 32) {
+      return { ok: false, message: 'required_processors must include at most 32 processors' };
+    }
+
+    const seen = new Set<string>();
+    const parsed: string[] = [];
+    for (const entry of value.required_processors) {
+      if (!isNonEmptyString(entry)) {
+        return { ok: false, message: 'required_processors entries must be non-empty strings' };
+      }
+      const trimmed = entry.trim();
+      if (!ASSURANCE_REQUIRED_PROCESSOR_RE.test(trimmed)) {
+        return {
+          ok: false,
+          message: `required_processors entry "${trimmed}" must match ^[a-z0-9][a-z0-9._:-]{0,119}$`,
+        };
+      }
+      if (seen.has(trimmed)) {
+        return { ok: false, message: `required_processors contains duplicate entry "${trimmed}"` };
+      }
+      seen.add(trimmed);
+      parsed.push(trimmed);
+    }
+    required_processors = parsed;
+  }
+
+  let approval_policy: AssuranceApprovalPolicy | undefined;
+  if (value.approval_policy !== undefined) {
+    if (value.approval_policy !== 'none' && value.approval_policy !== 'human_approval_receipt') {
+      return { ok: false, message: 'approval_policy must be none|human_approval_receipt' };
+    }
+    approval_policy = value.approval_policy;
+  }
+
+  if (
+    required_assurance_level === undefined
+    && required_privacy_posture === undefined
+    && required_processors === undefined
+    && approval_policy === undefined
+  ) {
+    return {
+      ok: false,
+      message:
+        'assurance_requirements must declare at least one requirement (required_assurance_level|required_privacy_posture|required_processors|approval_policy)',
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      version: '1',
+      ...(required_assurance_level ? { required_assurance_level } : {}),
+      ...(required_privacy_posture ? { required_privacy_posture } : {}),
+      ...(required_processors ? { required_processors } : {}),
+      ...(approval_policy ? { approval_policy } : {}),
+    },
+  };
+}
+
+function parseAssuranceRequirementsFromMetadata(
+  metadata: Record<string, unknown>,
+): { ok: true; value: AssuranceRequirementsV1 | null } | { ok: false; message: string } {
+  const raw = metadata.assurance_requirements;
+  if (raw === undefined || raw === null) {
+    return { ok: true, value: null };
+  }
+  const parsed = parseAssuranceRequirementsV1(raw);
+  if (!parsed.ok) return parsed;
+  return { ok: true, value: parsed.value };
+}
+
 function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const bounty_id = d1String(row.bounty_id);
   const create_idempotency_key = d1String(row.create_idempotency_key);
@@ -5947,6 +6091,8 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   }
 
   if (!tags || !metadata) return null;
+  const assuranceRequirementsParsed = parseAssuranceRequirementsFromMetadata(metadata);
+  if (!assuranceRequirementsParsed.ok) return null;
 
   let arena_evidence_links: ArenaScoreExplainLink[] = [];
   if (arena_evidence_links_json) {
@@ -11574,7 +11720,7 @@ async function listBounties(
   const isCode = filters.is_code_bounty;
 
   let query =
-    'SELECT bounty_id, requester_did, title, reward_amount_minor, reward_currency, closure_type, difficulty_scalar, status, created_at, escrow_id, is_code_bounty, tags_json, min_proof_tier FROM bounties WHERE status = ?';
+    'SELECT bounty_id, requester_did, title, reward_amount_minor, reward_currency, closure_type, difficulty_scalar, status, created_at, escrow_id, is_code_bounty, tags_json, min_proof_tier, metadata_json FROM bounties WHERE status = ?';
   const bindings: unknown[] = [status];
 
   if (isCode !== undefined) {
@@ -11604,6 +11750,7 @@ async function listBounties(
     const is_code_bounty_num = d1Number(raw.is_code_bounty);
     const tags_json = d1String(raw.tags_json);
     const min_proof_tier = parseProofTier(d1String(raw.min_proof_tier));
+    const metadata_json = d1String(raw.metadata_json);
 
     if (
       !bounty_id ||
@@ -11618,13 +11765,19 @@ async function listBounties(
       !escrow_id ||
       is_code_bounty_num === null ||
       !tags_json ||
-      !min_proof_tier
+      !min_proof_tier ||
+      !metadata_json
     ) {
       continue;
     }
 
     const tags = parseJsonStringArray(tags_json);
-    if (!tags) continue;
+    const metadata = parseJsonObject(metadata_json);
+    if (!tags || !metadata) continue;
+    const assuranceParsed = parseAssuranceRequirementsFromMetadata(metadata);
+    if (!assuranceParsed.ok) {
+      throw new Error(`BOUNTY_ASSURANCE_REQUIREMENTS_INVALID:${bounty_id}:${assuranceParsed.message}`);
+    }
 
     parsed.push({
       schema_version: '2',
@@ -11641,6 +11794,7 @@ async function listBounties(
       tags,
       min_proof_tier,
       minimum_proof_tier: toMinimumProofTier(min_proof_tier),
+      ...(assuranceParsed.value ? { assurance_requirements: assuranceParsed.value } : {}),
     });
   }
 
@@ -11710,6 +11864,10 @@ async function listWorkerBounties(
     const tags = parseJsonStringArray(tags_json);
     const metadata = parseJsonObject(metadata_json);
     if (!tags || !metadata) continue;
+    const assuranceParsed = parseAssuranceRequirementsFromMetadata(metadata);
+    if (!assuranceParsed.ok) {
+      throw new Error(`BOUNTY_ASSURANCE_REQUIREMENTS_INVALID:${bounty_id}:${assuranceParsed.message}`);
+    }
 
     const requested_raw = metadata.requested_worker_did;
     if (requested_raw !== undefined && requested_raw !== null) {
@@ -11735,6 +11893,7 @@ async function listWorkerBounties(
       tags,
       min_proof_tier,
       minimum_proof_tier: toMinimumProofTier(min_proof_tier),
+      ...(assuranceParsed.value ? { assurance_requirements: assuranceParsed.value } : {}),
     });
   }
 
@@ -12786,6 +12945,12 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
   }
 
+  const bountyAssuranceRequirementsParsed = parseAssuranceRequirementsFromMetadata(bounty.metadata);
+  if (!bountyAssuranceRequirementsParsed.ok) {
+    return errorResponse('BOUNTY_METADATA_INVALID', bountyAssuranceRequirementsParsed.message, 500, undefined, version);
+  }
+  const bountyAssuranceRequirements = bountyAssuranceRequirementsParsed.value;
+
   const requested = bounty.metadata.requested_worker_did;
   if (requested !== undefined && requested !== null) {
     if (!isNonEmptyString(requested) || !requested.trim().startsWith('did:')) {
@@ -13100,6 +13265,7 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
           worker_net_minor: bounty.fee_quote.quote.worker_net_minor,
           currency: 'USD',
         },
+        ...(bountyAssuranceRequirements ? { assurance_requirements: bountyAssuranceRequirements } : {}),
         next_actions: buildClaimNextActions(bounty.bounty_id),
       };
 
@@ -13208,6 +13374,7 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
       worker_net_minor: updated.fee_quote.quote.worker_net_minor,
       currency: 'USD',
     },
+    ...(bountyAssuranceRequirements ? { assurance_requirements: bountyAssuranceRequirements } : {}),
     next_actions: buildClaimNextActions(updated.bounty_id),
   };
 
@@ -14907,6 +15074,7 @@ async function handlePostBounty(
   const tags_raw = bodyRaw.tags;
   const min_proof_tier_raw = bodyRaw.min_proof_tier;
   const minimum_proof_tier_raw = bodyRaw.minimum_proof_tier;
+  const assurance_requirements_raw = bodyRaw.assurance_requirements;
   const require_owner_verified_votes_raw = bodyRaw.require_owner_verified_votes;
   const test_harness_id_raw = bodyRaw.test_harness_id;
   const idempotency_key_raw = bodyRaw.idempotency_key;
@@ -14988,6 +15156,15 @@ async function handlePostBounty(
     (minProofTierLegacy ? toMinimumProofTier(minProofTierLegacy) : 'none');
   const min_proof_tier = toStoredMinProofTier(minimum_proof_tier);
 
+  let assurance_requirements: AssuranceRequirementsV1 | null = null;
+  if (assurance_requirements_raw !== undefined && assurance_requirements_raw !== null) {
+    const parsedAssurance = parseAssuranceRequirementsV1(assurance_requirements_raw);
+    if (!parsedAssurance.ok) {
+      return errorResponse('UNSUPPORTED_ASSURANCE_REQUIREMENTS', parsedAssurance.message, 400, undefined, version);
+    }
+    assurance_requirements = parsedAssurance.value;
+  }
+
   let require_owner_verified_votes = false;
   if (require_owner_verified_votes_raw !== undefined) {
     if (typeof require_owner_verified_votes_raw !== 'boolean') {
@@ -15013,9 +15190,53 @@ async function handlePostBounty(
     }
   }
 
-  const metadata = metadata_raw === undefined || metadata_raw === null ? {} : metadata_raw;
-  if (!isRecord(metadata)) {
+  const metadataInput = metadata_raw === undefined || metadata_raw === null ? {} : metadata_raw;
+  if (!isRecord(metadataInput)) {
     return errorResponse('INVALID_REQUEST', 'metadata must be an object', 400, undefined, version);
+  }
+  const metadata: Record<string, unknown> = { ...metadataInput };
+
+  const metadataAssuranceRaw = metadata.assurance_requirements;
+  if (metadataAssuranceRaw !== undefined && metadataAssuranceRaw !== null) {
+    const parsedMetadataAssurance = parseAssuranceRequirementsV1(metadataAssuranceRaw);
+    if (!parsedMetadataAssurance.ok) {
+      return errorResponse('UNSUPPORTED_ASSURANCE_REQUIREMENTS', parsedMetadataAssurance.message, 400, undefined, version);
+    }
+
+    if (
+      assurance_requirements &&
+      stableStringify(assurance_requirements) !== stableStringify(parsedMetadataAssurance.value)
+    ) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'assurance_requirements conflicts with metadata.assurance_requirements',
+        400,
+        undefined,
+        version,
+      );
+    }
+
+    assurance_requirements = parsedMetadataAssurance.value;
+  }
+
+  if (assurance_requirements?.required_assurance_level) {
+    const requiredLevel = assurance_requirements.required_assurance_level;
+    if (requiredLevel !== minimum_proof_tier) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'assurance_requirements.required_assurance_level must match minimum_proof_tier',
+        400,
+        {
+          required_assurance_level: requiredLevel,
+          minimum_proof_tier,
+        },
+        version,
+      );
+    }
+  }
+
+  if (assurance_requirements) {
+    metadata.assurance_requirements = assurance_requirements;
   }
 
   const requested_worker_did = metadata.requested_worker_did;
@@ -15343,7 +15564,16 @@ async function handleListBounties(url: URL, env: Env, version: string): Promise<
 
   const tags = url.searchParams.getAll('tag').map((t) => t.trim()).filter((t) => t.length > 0);
 
-  const bounties = await listBounties(env.BOUNTIES_DB, { status, is_code_bounty, tags }, 100);
+  let bounties: BountyListItemV2[];
+  try {
+    bounties = await listBounties(env.BOUNTIES_DB, { status, is_code_bounty, tags }, 100);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.startsWith('BOUNTY_ASSURANCE_REQUIREMENTS_INVALID:')) {
+      return errorResponse('BOUNTY_METADATA_INVALID', message, 500, undefined, version);
+    }
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
   return jsonResponse({ bounties, next_actions: buildListNextActions(bounties) }, 200, version);
 }
 
@@ -15381,12 +15611,21 @@ async function handleListBountiesForWorker(request: Request, url: URL, env: Env,
 
   const tags = url.searchParams.getAll('tag').map((t) => t.trim()).filter((t) => t.length > 0);
 
-  const bounties = await listWorkerBounties(
-    env.BOUNTIES_DB,
-    auth.worker.worker_did,
-    { status, is_code_bounty, tags },
-    100
-  );
+  let bounties: WorkerBountyListItemV2[];
+  try {
+    bounties = await listWorkerBounties(
+      env.BOUNTIES_DB,
+      auth.worker.worker_did,
+      { status, is_code_bounty, tags },
+      100
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.startsWith('BOUNTY_ASSURANCE_REQUIREMENTS_INVALID:')) {
+      return errorResponse('BOUNTY_METADATA_INVALID', message, 500, undefined, version);
+    }
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
   return jsonResponse({ bounties, next_actions: buildListNextActions(bounties) }, 200, version);
 }
 

@@ -196,6 +196,13 @@ describe('runWorkClaim', () => {
           accepted_at: '2025-02-20T00:00:00.000Z',
           fee_policy_version: 'cuts_v1',
           payout: { worker_net_minor: '120', currency: 'USD' },
+          assurance_requirements: {
+            version: '1',
+            required_assurance_level: 'gateway',
+            required_privacy_posture: 'caution',
+            required_processors: ['openai'],
+            approval_policy: 'human_approval_receipt',
+          },
           task_spec: validTaskSpec,
         }),
         { status: 201, headers: { 'Content-Type': 'application/json' } },
@@ -230,6 +237,11 @@ describe('runWorkClaim', () => {
       expect(activeFromDisk['bounty_id']).toBe('bty_test');
       expect((activeFromDisk['task_spec'] as Record<string, unknown>)['version']).toBe('1');
       expect(result.taskSpec?.deliverables).toEqual(['pr', 'proof_bundle', 'did_signature']);
+      expect(result.claim?.assurance_requirements).toMatchObject({
+        version: '1',
+        required_assurance_level: 'gateway',
+        required_processors: ['openai'],
+      });
     } finally {
       restore();
     }
@@ -330,6 +342,59 @@ describe('runWorkClaim', () => {
       expect(result.status).toBe('error');
       expect(result.error?.code).toBe('BOUNTY_ALREADY_ACCEPTED');
       expect(result.error?.message).toContain('Bounty already accepted');
+      expect(process.exitCode).toBe(1);
+    } finally {
+      restore();
+    }
+  });
+
+  it('fails closed when claim response assurance requirements are unsupported', async () => {
+    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+
+    const config: WorkConfig = {
+      configVersion: '1',
+      workerDid: identity.did,
+      marketplaceUrl: 'https://market.example.com',
+      createdAt: '2025-01-01T00:00:00Z',
+      registration: {
+        workerId: 'w-123',
+        registeredAt: '2025-01-01T00:00:01Z',
+        auth: {
+          mode: 'token',
+          token: 'tok_abc123',
+        },
+      },
+    };
+    await saveWorkConfig(config, tmpDir);
+
+    const restore = __setFetch(async () =>
+      new Response(
+        JSON.stringify({
+          bounty_id: 'bty_test',
+          escrow_id: 'esc_001',
+          status: 'accepted',
+          worker_did: identity.did,
+          accepted_at: '2025-02-20T00:00:00.000Z',
+          assurance_requirements: {
+            version: '1',
+            required_processors: ['OpenAI'],
+          },
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkClaim({
+          bountyId: 'bty_test',
+          json: true,
+          projectDir: tmpDir,
+        }),
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.error?.code).toBe('UNSUPPORTED_ASSURANCE_REQUIREMENTS');
       expect(process.exitCode).toBe(1);
     } finally {
       restore();

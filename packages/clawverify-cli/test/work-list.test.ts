@@ -191,13 +191,27 @@ describe('renderTable', () => {
   });
 
   it('renders header + rows', () => {
-    const output = renderTable([makeBounty()]);
+    const output = renderTable([
+      makeBounty({
+        minimum_proof_tier: 'sandbox',
+        assurance_requirements: {
+          version: '1',
+          required_assurance_level: 'gateway',
+          required_privacy_posture: 'caution',
+          required_processors: ['openai', 'anthropic'],
+          approval_policy: 'human_approval_receipt',
+        },
+      }),
+    ]);
     expect(output).toContain('ID');
     expect(output).toContain('BUDGET');
     expect(output).toContain('REPO');
+    expect(output).toContain('ASSURANCE');
     expect(output).toContain('TITLE');
     expect(output).toContain('b-001');
     expect(output).toContain('200 USD');
+    expect(output).toContain('tier:gateway');
+    expect(output).toContain('proc:openai/anthropic');
     expect(output).toContain('Fix the widget');
   });
 
@@ -208,6 +222,21 @@ describe('renderTable', () => {
     expect(output).toContain('-'); // missing budget/repo
     expect(output).toContain('(untitled)');
   });
+
+  it('preserves proof tier visibility when assurance requirements omit a level', () => {
+    const output = renderTable([
+      makeBounty({
+        minimum_proof_tier: 'sandbox',
+        assurance_requirements: {
+          version: '1',
+          required_processors: ['openai'],
+        },
+      }),
+    ]);
+
+    expect(output).toContain('tier:sandbox');
+    expect(output).toContain('proc:openai');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -216,7 +245,19 @@ describe('renderTable', () => {
 
 describe('runWorkList: success', () => {
   it('returns bounties from marketplace', async () => {
-    const bounties = [makeBounty({ id: 'b-1' }), makeBounty({ id: 'b-2' })];
+    const bounties = [
+      makeBounty({
+        id: 'b-1',
+        assurance_requirements: {
+          version: '1',
+          required_assurance_level: 'gateway',
+          required_privacy_posture: 'good',
+          required_processors: ['openai', 'anthropic'],
+          approval_policy: 'none',
+        },
+      }),
+      makeBounty({ id: 'b-2' }),
+    ];
     const restore = mockBountyResponse(bounties);
     try {
       const result = await quietAsync(() =>
@@ -226,6 +267,11 @@ describe('runWorkList: success', () => {
       expect(result.total).toBe(2);
       expect(result.filtered).toBe(2);
       expect(result.bounties).toHaveLength(2);
+      expect(result.bounties[0]?.assurance_requirements).toMatchObject({
+        version: '1',
+        required_assurance_level: 'gateway',
+        required_privacy_posture: 'good',
+      });
     } finally {
       restore();
     }
@@ -571,6 +617,37 @@ describe('runWorkList: errors', () => {
       restore();
     }
   });
+
+  it('fails closed on malformed assurance requirements in list payload', async () => {
+    const restore = __setFetch(async () =>
+      new Response(
+        JSON.stringify({
+          bounties: [
+            {
+              bounty_id: 'b-malformed',
+              title: 'Bad contract',
+              assurance_requirements: {
+                version: '1',
+                required_processors: ['OpenAI'],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkList({ projectDir: tmpDir }),
+      );
+      expect(result.status).toBe('error');
+      expect(result.error?.code).toBe('UNSUPPORTED_ASSURANCE_REQUIREMENTS');
+      expect(process.exitCode).toBe(1);
+    } finally {
+      restore();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -697,6 +774,53 @@ describe('work-api: listBounties', () => {
         expect(result.bounties).toHaveLength(4);
         expect(result.bounties[2]!.id).toBe('b-ok');
         expect(result.bounties[0]!.id).toBe('');
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it('maps production-shaped bounty payloads with nested reward and proof tiers', async () => {
+    const restore = __setFetch(async () =>
+      new Response(
+        JSON.stringify({
+          bounties: [
+            {
+              bounty_id: 'b-service',
+              title: 'Service payload',
+              reward: {
+                amount_minor: '2500',
+                currency: 'USD',
+              },
+              min_proof_tier: 'gateway',
+              minimum_proof_tier: 'gateway',
+              assurance_requirements: {
+                version: '1',
+                required_processors: ['openai'],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    try {
+      const { listBounties } = await import('../src/work-api.js');
+      const result = await listBounties('https://example.com');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.bounties[0]).toMatchObject({
+          id: 'b-service',
+          budget: 2500,
+          currency: 'USD',
+          min_proof_tier: 'gateway',
+          minimum_proof_tier: 'gateway',
+          assurance_requirements: {
+            version: '1',
+            required_processors: ['openai'],
+          },
+        });
       }
     } finally {
       restore();
