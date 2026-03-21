@@ -64,6 +64,8 @@ type ProofRunnerAttestationReasonCode =
   | 'ATTESTED_TIER_GRANTED'
   | 'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION'
   | 'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED'
+  | 'ATTESTED_TIER_NOT_GRANTED_REVOKED_POLICY_ISSUER'
+  | 'ATTESTED_TIER_NOT_GRANTED_REVOKED_RUNNER'
   | 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
 
 type ProofReviewerSignoffDecision = 'approve' | 'reject' | 'needs_changes';
@@ -73,6 +75,8 @@ export interface ProofReviewerSignoffState {
   present: boolean;
   receipt_count: number;
   structured_receipt_count: number;
+  revoked_receipt_count: number;
+  revoked_reviewer_dids: string[];
   reviewer_dids: string[];
   decision_counts: {
     approve: number;
@@ -320,6 +324,8 @@ const DEFAULT_REVIEWER_SIGNOFF_STATE: ProofReviewerSignoffState = {
   present: false,
   receipt_count: 0,
   structured_receipt_count: 0,
+  revoked_receipt_count: 0,
+  revoked_reviewer_dids: [],
   reviewer_dids: [],
   decision_counts: {
     approve: 0,
@@ -659,6 +665,84 @@ interface StructuredRunnerAttestationReceiptEvidence {
   artifacts: RunnerMeasurementArtifacts;
 }
 
+interface ParsedTrustRootRevocationEvidence {
+  revoked_signer_did: string;
+  effective_at: string;
+  reason: string | null;
+}
+
+function parseTrustRootRevocationEvidence(
+  value: unknown,
+): ParsedTrustRootRevocationEvidence[] | null {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const parsed: ParsedTrustRootRevocationEvidence[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      return null;
+    }
+    if (
+      !hasOnlyAllowedKeys(entry, [
+        'revocation_version',
+        'revoked_signer_did',
+        'effective_at',
+        'reason',
+      ])
+    ) {
+      return null;
+    }
+
+    const version = asString(entry.revocation_version);
+    const revokedDid = asString(entry.revoked_signer_did);
+    const effectiveAt = asString(entry.effective_at);
+    const reason = asString(entry.reason);
+    if (
+      version !== '1' ||
+      revokedDid === null ||
+      !revokedDid.startsWith('did:') ||
+      effectiveAt === null ||
+      !isIsoTimestamp(effectiveAt)
+    ) {
+      return null;
+    }
+
+    parsed.push({
+      revoked_signer_did: revokedDid,
+      effective_at: effectiveAt,
+      reason,
+    });
+  }
+
+  return parsed;
+}
+
+function findMatchingTrustRootRevocation(
+  revocations: readonly ParsedTrustRootRevocationEvidence[],
+  signerDid: string | null,
+): ParsedTrustRootRevocationEvidence | null {
+  if (signerDid === null) {
+    return null;
+  }
+  for (const revocation of revocations) {
+    if (revocation.revoked_signer_did === signerDid) {
+      return revocation;
+    }
+  }
+  return null;
+}
+
+function describeTrustRootRevocation(
+  label: string,
+  revocation: ParsedTrustRootRevocationEvidence,
+): string {
+  return `${label} signer DID ${revocation.revoked_signer_did} is listed as revoked (effective_at=${revocation.effective_at}${revocation.reason ? `, reason=${revocation.reason}` : ''}).`;
+}
+
 function parseRunnerMeasurementArtifacts(
   value: Record<string, unknown> | null,
 ): RunnerMeasurementArtifacts | null {
@@ -933,6 +1017,7 @@ function renderPrivacyClaimsBoundaryMarkdown(report: ProofReport): string {
   lines.push(`Runner attestation posture: ${report.privacy_posture.runner_attestation.posture.toUpperCase()} (${report.privacy_posture.runner_attestation.reason_code})`);
   lines.push(`Reviewer signoff receipts: ${report.reviewer_signoff.receipt_count}`);
   lines.push(`Structured reviewer signoff receipts: ${report.reviewer_signoff.structured_receipt_count}`);
+  lines.push(`Revoked reviewer signoff receipts: ${report.reviewer_signoff.revoked_receipt_count}`);
   lines.push(`Reviewer dispute state: ${report.reviewer_signoff.dispute_present ? 'present' : 'none'}`);
   lines.push('');
   lines.push('## What This Pack Proves');
@@ -1155,6 +1240,7 @@ function renderExportPackViewerHtml(args: {
           <div class="row"><span class="label">Runner attestation bindings</span><strong>${report.privacy_posture.runner_attestation.evidence.binding_consistent ? 'consistent' : 'not established'}</strong></div>
           <div class="row"><span class="label">Reviewer signoff receipts</span><strong>${report.reviewer_signoff.receipt_count}</strong></div>
           <div class="row"><span class="label">Structured reviewer signoff</span><strong>${report.reviewer_signoff.structured_receipt_count}</strong></div>
+          <div class="row"><span class="label">Revoked reviewer signoff</span><strong>${report.reviewer_signoff.revoked_receipt_count}</strong></div>
           <div class="row"><span class="label">Reviewer decisions</span><strong>${escapeHtml(reviewerDecisionSummary)}</strong></div>
           <div class="row"><span class="label">Bound targets</span><strong>${escapeHtml(reviewerTargetSummary)}</strong></div>
           <div class="row"><span class="label">Latest reviewer timestamp</span><strong>${escapeHtml(report.reviewer_signoff.latest_timestamp ?? 'unknown')}</strong></div>
@@ -1567,6 +1653,8 @@ function summarizeReviewerSignoff(payload: Record<string, unknown>): ProofReview
   );
 
   let structuredCount = 0;
+  let revokedReceiptCount = 0;
+  const revokedReviewerDids = new Set<string>();
   let latestTimestamp: string | null = null;
   let latestTimestampMs = Number.NEGATIVE_INFINITY;
   let disputePresent = false;
@@ -1620,6 +1708,7 @@ function summarizeReviewerSignoff(payload: Record<string, unknown>): ProofReview
         'timestamp',
         'binding',
         'dispute',
+        'revoked_reviewer_keys',
       ]) ||
       bundleId === null ||
       expectedRunId === null ||
@@ -1664,6 +1753,18 @@ function summarizeReviewerSignoff(payload: Record<string, unknown>): ProofReview
         message: payloadHashB64u,
       })
     ) {
+      continue;
+    }
+
+    const reviewerRevocations = parseTrustRootRevocationEvidence(
+      receiptPayload.revoked_reviewer_keys,
+    );
+    if (reviewerRevocations === null) {
+      continue;
+    }
+    if (findMatchingTrustRootRevocation(reviewerRevocations, signerDid)) {
+      revokedReceiptCount += 1;
+      revokedReviewerDids.add(signerDid);
       continue;
     }
 
@@ -1747,6 +1848,8 @@ function summarizeReviewerSignoff(payload: Record<string, unknown>): ProofReview
     present: receiptsRaw !== undefined,
     receipt_count: Array.isArray(receiptsRaw) ? receiptsRaw.length : 0,
     structured_receipt_count: structuredCount,
+    revoked_receipt_count: revokedReceiptCount,
+    revoked_reviewer_dids: [...revokedReviewerDids].sort((a, b) => a.localeCompare(b)),
     reviewer_dids: [...reviewerDids].sort((a, b) => a.localeCompare(b)),
     decision_counts: decisionCounts,
     target_counts: targetCounts,
@@ -2397,11 +2500,14 @@ function normalizeReviewerSignoffState(value: unknown): ProofReviewerSignoffStat
   const targetCounts = isRecord(value.target_counts) ? value.target_counts : null;
   const receiptCount = asNonNegativeInteger(value.receipt_count) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.receipt_count;
   const structuredCount = asNonNegativeInteger(value.structured_receipt_count) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.structured_receipt_count;
+  const revokedCount = asNonNegativeInteger(value.revoked_receipt_count) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.revoked_receipt_count;
 
   return {
     present: asBoolean(value.present) ?? true,
     receipt_count: receiptCount,
     structured_receipt_count: Math.min(structuredCount, receiptCount),
+    revoked_receipt_count: Math.min(revokedCount, receiptCount),
+    revoked_reviewer_dids: dedupeStrings(asStringArray(value.revoked_reviewer_dids)).sort((a, b) => a.localeCompare(b)),
     reviewer_dids: dedupeStrings(asStringArray(value.reviewer_dids)).sort((a, b) => a.localeCompare(b)),
     decision_counts: {
       approve: asNonNegativeInteger(decisionCounts?.approve) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.decision_counts.approve,
@@ -2630,6 +2736,37 @@ function summarizePrivacyPosture(args: {
   );
   const policyBinding = metadata && isRecord(metadata.policy_binding) ? metadata.policy_binding : null;
   const policyBindingHash = asString(policyBinding?.effective_policy_hash_b64u);
+  const signedPolicyBundleEnvelope = policyBinding && isRecord(policyBinding.signed_policy_bundle_envelope)
+    ? policyBinding.signed_policy_bundle_envelope
+    : null;
+  const signedPolicyBundlePayload = signedPolicyBundleEnvelope && isRecord(signedPolicyBundleEnvelope.payload)
+    ? signedPolicyBundleEnvelope.payload
+    : null;
+  const signedPolicyBundleMetadata = signedPolicyBundlePayload && isRecord(signedPolicyBundlePayload.metadata)
+    ? signedPolicyBundlePayload.metadata
+    : null;
+  const policyIssuerRevocations = parseTrustRootRevocationEvidence(
+    signedPolicyBundleMetadata?.revoked_policy_issuer_keys,
+  );
+  const policyIssuerRevocationArtifactsMalformed =
+    signedPolicyBundleMetadata?.revoked_policy_issuer_keys !== undefined &&
+    policyIssuerRevocations === null;
+  const policySignerDid = asString(signedPolicyBundleEnvelope?.signer_did);
+  const policyIssuerRevocation = policyIssuerRevocations
+    ? findMatchingTrustRootRevocation(policyIssuerRevocations, policySignerDid)
+    : null;
+  const runnerRevocations = parseTrustRootRevocationEvidence(
+    isRecord(rawRunnerAttestationReceipt?.payload)
+      ? rawRunnerAttestationReceipt.payload.revoked_runner_keys
+      : undefined,
+  );
+  const runnerRevocationArtifactsMalformed =
+    isRecord(rawRunnerAttestationReceipt?.payload) &&
+    rawRunnerAttestationReceipt.payload.revoked_runner_keys !== undefined &&
+    runnerRevocations === null;
+  const runnerRevocation = runnerRevocations
+    ? findMatchingTrustRootRevocation(runnerRevocations, runnerAttestationReceipt?.signer_did ?? null)
+    : null;
   const eventChainEntries = asArray(payload.event_chain).filter((entry): entry is Record<string, unknown> => isRecord(entry));
   const expectedRunId = asString(eventChainEntries[0]?.run_id);
   const allowedEventHashes = new Set(
@@ -2660,7 +2797,11 @@ function summarizePrivacyPosture(args: {
   const runnerAttestationEvidencePresent = runnerMeasurementPresent || runnerAttestationReceiptPresent;
   const runnerAttestationReasonCode: ProofRunnerAttestationReasonCode = !runnerAttestationEvidencePresent
     ? 'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION'
-    : runnerMeasurement === null || runnerAttestationReceipt === null || !runnerAttestationBindingConsistent
+    : policyIssuerRevocation !== null
+      ? 'ATTESTED_TIER_NOT_GRANTED_REVOKED_POLICY_ISSUER'
+      : runnerRevocation !== null
+        ? 'ATTESTED_TIER_NOT_GRANTED_REVOKED_RUNNER'
+        : runnerMeasurement === null || runnerAttestationReceipt === null || !runnerAttestationBindingConsistent
       ? 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION'
       : attestedTierClaimed
         ? 'ATTESTED_TIER_GRANTED'
@@ -2755,6 +2896,16 @@ function summarizePrivacyPosture(args: {
   if (!evidence.runtime_hygiene_present) {
     cautionSignals.push('Runtime hygiene evidence is missing.');
   }
+  if (policyIssuerRevocationArtifactsMalformed) {
+    cautionSignals.push(
+      'Policy revocation metadata is present but malformed; canonical verifier is required to determine issuer revocation state.',
+    );
+  }
+  if (runnerRevocationArtifactsMalformed) {
+    cautionSignals.push(
+      'Runner revocation metadata is present but malformed; canonical verifier is required to determine runner trust-root revocation state.',
+    );
+  }
   if (sentinels.runtime_hygiene.reviewer_action_required) {
     reviewerActionSignals.push('Runtime hygiene marked reviewer_action_required=true.');
   }
@@ -2767,6 +2918,16 @@ function summarizePrivacyPosture(args: {
   if (sentinels.unmonitored_spawns > 0) {
     reviewerActionSignals.push(
       `${sentinels.unmonitored_spawns} unmonitored ${pluralize(sentinels.unmonitored_spawns, 'spawn')} were observed.`,
+    );
+  }
+  if (policyIssuerRevocation) {
+    reviewerActionSignals.push(
+      describeTrustRootRevocation('Policy issuer', policyIssuerRevocation),
+    );
+  }
+  if (runnerRevocation) {
+    reviewerActionSignals.push(
+      describeTrustRootRevocation('Runner attestation', runnerRevocation),
     );
   }
   if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION' && attestedTierClaimed) {
@@ -2836,6 +2997,14 @@ function summarizePrivacyPosture(args: {
   if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION') {
     notProvenClaims.push(
       'Cannot prove attested runner posture because runner measurement/attestation evidence is absent; treat this run as non-attested.',
+    );
+  } else if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_REVOKED_POLICY_ISSUER') {
+    notProvenClaims.push(
+      'Cannot prove attested runner posture because the signed policy issuer trust-root key is revoked.',
+    );
+  } else if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_REVOKED_RUNNER') {
+    notProvenClaims.push(
+      'Cannot prove attested runner posture because the runner attestation trust-root key is revoked.',
     );
   } else if (runnerAttestationReasonCode === 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION') {
     notProvenClaims.push(
@@ -3036,6 +3205,28 @@ function deriveReviewBuckets(report: ProofReportBase): ProofReviewBucket[] {
   if (report.sentinels.escapes_suspected) {
     reviewerActionItems.push('Resolve or explain the CLDD escape-suspected signal before using this as buyer-facing proof.');
   }
+  if (
+    report.privacy_posture.runner_attestation.reason_code ===
+    'ATTESTED_TIER_NOT_GRANTED_REVOKED_POLICY_ISSUER'
+  ) {
+    reviewerActionItems.push(
+      'Do not treat this run as attested because policy issuer trust-root metadata marks the signer key as revoked.',
+    );
+  }
+  if (
+    report.privacy_posture.runner_attestation.reason_code ===
+    'ATTESTED_TIER_NOT_GRANTED_REVOKED_RUNNER'
+  ) {
+    reviewerActionItems.push(
+      'Do not treat this run as attested because runner attestation metadata marks the signer key as revoked.',
+    );
+  }
+  if (report.reviewer_signoff.revoked_receipt_count > 0) {
+    const revokedVerb = report.reviewer_signoff.revoked_receipt_count === 1 ? 'was' : 'were';
+    reviewerActionItems.push(
+      `${report.reviewer_signoff.revoked_receipt_count} reviewer signoff ${pluralize(report.reviewer_signoff.revoked_receipt_count, 'receipt')} ${revokedVerb} marked revoked by reviewer trust-root metadata.`,
+    );
+  }
 
   const reviewerActionBucket: ProofReviewBucket = {
     key: 'reviewer_action_needed',
@@ -3084,11 +3275,29 @@ function deriveWarnings(report: ProofReportBase): string[] {
   } else if (report.privacy_posture.overall_verdict === 'caution') {
     warnings.push('Privacy posture verdict is CAUTION; verify missing/flagged privacy evidence before external sharing.');
   }
+  if (
+    report.privacy_posture.runner_attestation.reason_code ===
+    'ATTESTED_TIER_NOT_GRANTED_REVOKED_POLICY_ISSUER'
+  ) {
+    warnings.push('Policy issuer trust-root key is revoked in signed policy metadata.');
+  }
+  if (
+    report.privacy_posture.runner_attestation.reason_code ===
+    'ATTESTED_TIER_NOT_GRANTED_REVOKED_RUNNER'
+  ) {
+    warnings.push('Runner attestation trust-root key is revoked in runner metadata.');
+  }
   if (report.reviewer_signoff.structured_receipt_count < report.reviewer_signoff.receipt_count) {
     const invalidReceiptCount =
       report.reviewer_signoff.receipt_count - report.reviewer_signoff.structured_receipt_count;
     warnings.push(
       `${invalidReceiptCount} reviewer signoff ${pluralize(invalidReceiptCount, 'receipt')} failed local integrity or binding checks in the report summary.`,
+    );
+  }
+  if (report.reviewer_signoff.revoked_receipt_count > 0) {
+    const revokedVerb = report.reviewer_signoff.revoked_receipt_count === 1 ? 'was' : 'were';
+    warnings.push(
+      `${report.reviewer_signoff.revoked_receipt_count} reviewer signoff ${pluralize(report.reviewer_signoff.revoked_receipt_count, 'receipt')} ${revokedVerb} marked revoked by reviewer trust-root metadata.`,
     );
   }
   if (report.reviewer_signoff.decision_counts.reject > 0) {
@@ -3126,11 +3335,23 @@ function deriveNextSteps(
   }
   if (report.privacy_posture.runner_attestation.posture === 'attested') {
     steps.push('Runner attestation posture is ATTESTED in this report; still run canonical verification before relying on attested-tier claims.');
+  } else if (
+    report.privacy_posture.runner_attestation.reason_code ===
+    'ATTESTED_TIER_NOT_GRANTED_REVOKED_POLICY_ISSUER'
+  ) {
+    steps.push('Policy issuer trust-root key is revoked; rotate/reissue policy bundle signing keys before claiming attested posture.');
+  } else if (
+    report.privacy_posture.runner_attestation.reason_code ===
+    'ATTESTED_TIER_NOT_GRANTED_REVOKED_RUNNER'
+  ) {
+    steps.push('Runner attestation trust-root key is revoked; rotate runner attestation signer keys before claiming attested posture.');
   } else {
     steps.push('Runner attestation posture is NON-ATTESTED; avoid making attested-tier runtime integrity claims for this run.');
   }
   if (report.reviewer_signoff.dispute_present) {
     steps.push('Resolve reviewer dispute notes/evidence references before final signoff or payout decisions.');
+  } else if (report.reviewer_signoff.revoked_receipt_count > 0) {
+    steps.push('Reviewer signoff metadata marks one or more reviewer keys as revoked; replace those signoff receipts before relying on reviewer approvals.');
   } else if (report.reviewer_signoff.structured_receipt_count > 0) {
     steps.push('Reviewer signoff receipts are present; verify decisions and binding targets before external reliance.');
   } else if (report.reviewer_signoff.receipt_count > 0) {
@@ -3483,6 +3704,7 @@ export function renderProofReportHtml(report: ProofReport): string {
           ['Signoff receipts present', report.reviewer_signoff.present ? 'yes' : 'no'],
           ['Signoff receipt count', report.reviewer_signoff.receipt_count],
           ['Structured signoff count', report.reviewer_signoff.structured_receipt_count],
+          ['Revoked signoff count', report.reviewer_signoff.revoked_receipt_count],
           ['Decision counts', reviewerDecisionSummary],
           ['Target counts', reviewerTargetSummary],
           ['Latest signoff timestamp', report.reviewer_signoff.latest_timestamp],
@@ -3492,6 +3714,8 @@ export function renderProofReportHtml(report: ProofReport): string {
         ])}
         <div class="subheading">Reviewer DIDs</div>
         <ul>${renderList(report.reviewer_signoff.reviewer_dids)}</ul>
+        <div class="subheading">Revoked Reviewer DIDs</div>
+        <ul>${renderList(report.reviewer_signoff.revoked_reviewer_dids)}</ul>
       </article>
     </section>
 
@@ -3641,6 +3865,7 @@ export function renderProofReportText(report: ProofReport): string {
   lines.push(`  Runner attestation bindings : ${report.privacy_posture.runner_attestation.evidence.binding_consistent ? 'consistent' : 'not established'}`);
   lines.push(`  Reviewer signoff receipts   : ${report.reviewer_signoff.receipt_count}`);
   lines.push(`  Structured signoff receipts : ${report.reviewer_signoff.structured_receipt_count}`);
+  lines.push(`  Revoked signoff receipts    : ${report.reviewer_signoff.revoked_receipt_count}`);
   lines.push(`  Reviewer decisions          : approve=${report.reviewer_signoff.decision_counts.approve}, reject=${report.reviewer_signoff.decision_counts.reject}, needs_changes=${report.reviewer_signoff.decision_counts.needs_changes}`);
   lines.push(`  Reviewer target bindings    : run=${report.reviewer_signoff.target_counts.run}, export_pack=${report.reviewer_signoff.target_counts.export_pack}`);
   lines.push(`  Reviewer dispute present    : ${report.reviewer_signoff.dispute_present ? 'yes' : 'no'}`);
@@ -3652,6 +3877,14 @@ export function renderProofReportText(report: ProofReport): string {
     lines.push('    - none recorded');
   } else {
     for (const reviewerDid of report.reviewer_signoff.reviewer_dids) {
+      lines.push(`    - ${reviewerDid}`);
+    }
+  }
+  lines.push('  Revoked reviewer DIDs:');
+  if (report.reviewer_signoff.revoked_reviewer_dids.length === 0) {
+    lines.push('    - none recorded');
+  } else {
+    for (const reviewerDid of report.reviewer_signoff.revoked_reviewer_dids) {
       lines.push(`    - ${reviewerDid}`);
     }
   }

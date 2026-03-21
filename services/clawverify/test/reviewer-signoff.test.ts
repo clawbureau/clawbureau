@@ -118,6 +118,7 @@ async function buildEnvelope(options?: {
   dispute?: boolean;
   tamperEventHash?: boolean;
   tamperSignature?: boolean;
+  revokeReviewer?: boolean;
   transparencyMode?:
     | 'none'
     | 'valid'
@@ -153,6 +154,18 @@ async function buildEnvelope(options?: {
       event_hash_b64u: options?.tamperEventHash ? 'a'.repeat(43) : eventHash,
       target_kind: 'run',
     },
+    ...(options?.revokeReviewer
+      ? {
+          revoked_reviewer_keys: [
+            {
+              revocation_version: '1',
+              revoked_signer_did: reviewerDid,
+              effective_at: '2026-03-21T05:30:30.000Z',
+              reason: 'Reviewer signing key revoked by policy',
+            },
+          ],
+        }
+      : {}),
   };
 
   if (options?.dispute) {
@@ -353,6 +366,31 @@ describe('AF2-REV-003 service verifier reviewer signoff/dispute binding', () => 
     expect(out.error?.code).toBe('MALFORMED_ENVELOPE');
     expect(out.error?.field).toBe(
       'payload.metadata.reviewer_signoff_receipts[0].payload.transparency.anchor_uri',
+    );
+  });
+
+  it('fails closed when reviewer signoff signer key is revoked', async () => {
+    const envelope = await buildEnvelope({ revokeReviewer: true });
+    const out = await verifyProofBundle(envelope);
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('REVOKED');
+    expect(out.error?.field).toBe(
+      'payload.metadata.reviewer_signoff_receipts[0].payload.revoked_reviewer_keys[0].revoked_signer_did',
+    );
+  });
+
+  it('prioritizes signature failure over revocation claims in tampered reviewer receipts', async () => {
+    const envelope = await buildEnvelope({
+      revokeReviewer: true,
+      tamperSignature: true,
+    });
+    const out = await verifyProofBundle(envelope);
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('SIGNATURE_INVALID');
+    expect(out.error?.field).toBe(
+      'payload.metadata.reviewer_signoff_receipts[0].signature_b64u',
     );
   });
 });

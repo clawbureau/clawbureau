@@ -12,6 +12,7 @@ async function buildProofBundleEnvelope(options?: {
   dispute?: boolean;
   tamperRunId?: boolean;
   tamperSignoffSignature?: boolean;
+  revokeReviewer?: boolean;
 }) {
   const agentKey = await generateKeyPair();
   const reviewerKey = await generateKeyPair();
@@ -42,6 +43,18 @@ async function buildProofBundleEnvelope(options?: {
       target_kind: 'export_pack',
       export_pack_root_hash_b64u: await computeHash({ export_pack: 'pack_root' }, 'SHA-256'),
     },
+    ...(options?.revokeReviewer
+      ? {
+          revoked_reviewer_keys: [
+            {
+              revocation_version: '1',
+              revoked_signer_did: reviewerDid,
+              effective_at: '2026-03-21T05:10:30.000Z',
+              reason: 'Reviewer signing key revoked by policy',
+            },
+          ],
+        }
+      : {}),
   };
 
   if (options?.dispute) {
@@ -145,6 +158,20 @@ describe('AF2-REV-003 core verifier reviewer signoff/dispute binding', () => {
 
   it('fails closed when reviewer signoff signature verification fails', async () => {
     const envelope = await buildProofBundleEnvelope({ tamperSignoffSignature: true });
+
+    const out = await verifyProofBundle(envelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('SIGNATURE_INVALID');
+    expect(out.error?.field).toBe(
+      'payload.metadata.reviewer_signoff_receipts[0].signature_b64u',
+    );
+  });
+
+  it('prioritizes signature failure over revocation claims in tampered reviewer receipts', async () => {
+    const envelope = await buildProofBundleEnvelope({
+      revokeReviewer: true,
+      tamperSignoffSignature: true,
+    });
 
     const out = await verifyProofBundle(envelope);
     expect(out.result.status).toBe('INVALID');
