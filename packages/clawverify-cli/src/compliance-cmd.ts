@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 
 import {
-  compileAuthoritativeComplianceWave1,
+  compileAuthoritativeComplianceWave2,
   jcsCanonicalize,
   base64UrlEncode,
   type ComplianceFramework,
@@ -99,6 +99,22 @@ function extractPolicyInput(raw: unknown): CompliancePolicyInput | undefined {
   }
 
   return undefined;
+}
+
+function extractCompiledReportRefs(
+  raw: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (!isRecord(raw.compiled_report_refs)) return undefined;
+  return raw.compiled_report_refs;
+}
+
+function extractCompiledReportSigner(
+  raw: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (!isRecord(raw.compiled_report_signer)) return undefined;
+  return raw.compiled_report_signer;
 }
 
 function buildFactFromLooseObject(
@@ -205,6 +221,8 @@ async function buildCompilerInput(
   const bundle = tryExtractBundlePayload(raw);
   const verificationFact = extractVerificationFact(raw);
   const policy = extractPolicyInput(raw);
+  const compiledReportRefs = extractCompiledReportRefs(raw);
+  const compiledReportSigner = extractCompiledReportSigner(raw);
 
   const compilerInput: Record<string, unknown> = {
     compiler_input_version: '1',
@@ -222,6 +240,14 @@ async function buildCompilerInput(
 
   if (verificationFact) {
     compilerInput.verification_fact = verificationFact;
+  }
+
+  if (compiledReportRefs) {
+    compilerInput.compiled_report_refs = compiledReportRefs;
+  }
+
+  if (compiledReportSigner) {
+    compilerInput.compiled_report_signer = compiledReportSigner;
   }
 
   return compilerInput;
@@ -257,7 +283,7 @@ export async function runComplianceReport(
   }
 
   const compilerInput = await buildCompilerInput(raw, framework);
-  const compilation = compileAuthoritativeComplianceWave1(compilerInput);
+  const compilation = await compileAuthoritativeComplianceWave2(compilerInput);
 
   const json = JSON.stringify(compilation, null, 2) + '\n';
 

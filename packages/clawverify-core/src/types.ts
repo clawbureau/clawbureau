@@ -22,6 +22,7 @@ export const ENVELOPE_TYPES = [
   'audit_result_attestation',
   'export_bundle',
   'aggregate_bundle',
+  'compiled_evidence_report',
   'scoped_token',
   'policy_bundle',
 ] as const;

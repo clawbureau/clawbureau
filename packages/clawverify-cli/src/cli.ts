@@ -9,6 +9,7 @@ import {
   exitCodeForOutput,
   kindForSubcommand,
   verifyCommitSigFromFile,
+  verifyCompiledReportFromFile,
   verifyExportBundleFromFile,
   verifyProofBundleFromFile,
 } from './verify.js';
@@ -49,6 +50,7 @@ function usageText(): string {
     '               [--viewer-did <did>]... -- <command> [args...]',
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>] [--json]',
     '  clawverify verify export-bundle|aggregate-bundle --input <path> [--config <path>] [--json]',
+    '  clawverify verify compiled-report --input <path> [--json]',
     '  clawverify verify commit-sig   --input <path> [--json]',
     '  clawsig sign-commit <sha> [--repo-claim-id <claim_id>] [--json]',
     '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>] [--json]',
@@ -87,6 +89,7 @@ function usageText(): string {
     '  clawsig wrap --no-publish -- npx my-agent',
     '  clawverify verify proof-bundle --input bundle.json --config clawverify.config.v1.json',
     '  clawverify verify proof-bundle --input bundle.json --json',
+    '  clawverify verify compiled-report --input compiled-report-envelope.json',
     '  clawverify compliance bundle.json --framework soc2',
     '  clawverify init',
     '  clawsig fleet add codex-worker',
@@ -1032,17 +1035,24 @@ async function main() {
   const { kind, inputPath, configPath, urmPath } = parsed;
   const config = await resolveVerifierConfig({ configPath });
 
-  let out: CliOutput =
-    kind === 'commit_sig'
-      ? await verifyCommitSigFromFile({ inputPath })
-      : kind === 'proof_bundle'
-        ? await verifyProofBundleFromFile({
-            inputPath,
-            configPath,
-            urmPath,
-            config,
-          })
-        : await verifyExportBundleFromFile({ inputPath, configPath, config });
+  let out: CliOutput;
+  if (kind === 'commit_sig') {
+    out = await verifyCommitSigFromFile({ inputPath });
+  } else if (kind === 'proof_bundle') {
+    out = await verifyProofBundleFromFile({
+      inputPath,
+      configPath,
+      urmPath,
+      config,
+    });
+  } else if (kind === 'compiled_report') {
+    out = await verifyCompiledReportFromFile({
+      inputPath,
+      configPath,
+    });
+  } else {
+    out = await verifyExportBundleFromFile({ inputPath, configPath, config });
+  }
 
   out = attachHint(out);
 
@@ -1088,6 +1098,18 @@ async function main() {
         agent_did: agentDid,
         reason_codes: out.status === 'PASS' ? [] : [out.reason_code],
         receipt_count: receiptCount,
+        warnings: out.hint ? [out.hint] : [],
+      });
+    } else if (kind === 'compiled_report') {
+      const verification = (out as CliVerifyOutput).verification as
+        | Record<string, unknown>
+        | undefined;
+      printJson({
+        result: out.status,
+        schema_version: 'compiled_evidence_report_envelope.v1',
+        report_id: verification?.report_id ?? null,
+        matrix_hash_b64u: verification?.matrix_hash_b64u ?? null,
+        reason_codes: out.status === 'PASS' ? [] : [out.reason_code],
         warnings: out.hint ? [out.hint] : [],
       });
     } else {
