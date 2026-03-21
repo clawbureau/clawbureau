@@ -431,6 +431,96 @@ function computeJsonSha256B64u(value: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 }
 
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const ED25519_DID_KEY_PREFIX = 'did:key:z';
+const ED25519_MULTICODEC_PREFIX = Buffer.from([0xed, 0x01]);
+const ED25519_SPKI_DER_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+function base58Decode(value: string): Uint8Array {
+  const bytes: number[] = [0];
+
+  for (const char of value) {
+    const digit = BASE58_ALPHABET.indexOf(char);
+    if (digit === -1) {
+      throw new Error(`Invalid base58 character: ${char}`);
+    }
+
+    for (let index = 0; index < bytes.length; index++) {
+      bytes[index] *= 58;
+    }
+    bytes[0] += digit;
+
+    let carry = 0;
+    for (let index = 0; index < bytes.length; index++) {
+      bytes[index] += carry;
+      carry = bytes[index] >> 8;
+      bytes[index] &= 0xff;
+    }
+
+    while (carry > 0) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+
+  for (const char of value) {
+    if (char !== '1') {
+      break;
+    }
+    bytes.push(0);
+  }
+
+  return new Uint8Array(bytes.reverse());
+}
+
+function extractEd25519PublicKeyFromDidKey(did: string): Buffer | null {
+  if (!did.startsWith(ED25519_DID_KEY_PREFIX)) {
+    return null;
+  }
+
+  try {
+    const decoded = base58Decode(did.slice(ED25519_DID_KEY_PREFIX.length));
+    if (
+      decoded.length < ED25519_MULTICODEC_PREFIX.length + 32 ||
+      !decoded.subarray(0, ED25519_MULTICODEC_PREFIX.length).every((byte, index) => byte === ED25519_MULTICODEC_PREFIX[index])
+    ) {
+      return null;
+    }
+
+    return Buffer.from(decoded.subarray(ED25519_MULTICODEC_PREFIX.length));
+  } catch {
+    return null;
+  }
+}
+
+function verifyEd25519DidKeySignature(args: {
+  signerDid: string;
+  signatureB64u: string;
+  message: string;
+}): boolean {
+  const publicKey = extractEd25519PublicKeyFromDidKey(args.signerDid);
+  if (!publicKey) {
+    return false;
+  }
+
+  try {
+    const key = crypto.createPublicKey({
+      key: Buffer.concat([ED25519_SPKI_DER_PREFIX, publicKey]),
+      format: 'der',
+      type: 'spki',
+    });
+
+    return crypto.verify(
+      null,
+      Buffer.from(args.message),
+      key,
+      Buffer.from(args.signatureB64u, 'base64url'),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function describeAttestationEvidenceState(present: boolean, structured: boolean): string {
   if (!present) {
     return 'missing';
@@ -1486,6 +1576,8 @@ function summarizeReviewerSignoff(payload: Record<string, unknown>): ProofReview
   receiptLoop:
   for (const envelope of receipts) {
     const signerDid = asString(envelope.signer_did);
+    const payloadHashB64u = asString(envelope.payload_hash_b64u);
+    const signatureB64u = asString(envelope.signature_b64u);
     if (
       !hasOnlyAllowedKeys(envelope, [
         'envelope_version',
@@ -1503,9 +1595,11 @@ function summarizeReviewerSignoff(payload: Record<string, unknown>): ProofReview
       asString(envelope.hash_algorithm) !== 'SHA-256' ||
       asString(envelope.algorithm) !== 'Ed25519' ||
       signerDid === null ||
+      payloadHashB64u === null ||
+      signatureB64u === null ||
       !signerDid.startsWith('did:') ||
-      !isBase64UrlLike(asString(envelope.payload_hash_b64u)) ||
-      !isBase64UrlLike(asString(envelope.signature_b64u)) ||
+      !isBase64UrlLike(payloadHashB64u) ||
+      !isBase64UrlLike(signatureB64u) ||
       !isIsoTimestamp(asString(envelope.issued_at)) ||
       !isRecord(envelope.payload)
     ) {
@@ -1561,6 +1655,15 @@ function summarizeReviewerSignoff(payload: Record<string, unknown>): ProofReview
         continue;
       }
     } else if (binding.export_pack_root_hash_b64u !== undefined) {
+      continue;
+    }
+    if (
+      !verifyEd25519DidKeySignature({
+        signerDid,
+        signatureB64u,
+        message: payloadHashB64u,
+      })
+    ) {
       continue;
     }
 
@@ -2985,7 +3088,7 @@ function deriveWarnings(report: ProofReportBase): string[] {
     const invalidReceiptCount =
       report.reviewer_signoff.receipt_count - report.reviewer_signoff.structured_receipt_count;
     warnings.push(
-      `${invalidReceiptCount} reviewer signoff ${pluralize(invalidReceiptCount, 'receipt')} failed structural binding checks in the local report summary.`,
+      `${invalidReceiptCount} reviewer signoff ${pluralize(invalidReceiptCount, 'receipt')} failed local integrity or binding checks in the report summary.`,
     );
   }
   if (report.reviewer_signoff.decision_counts.reject > 0) {
@@ -3031,7 +3134,7 @@ function deriveNextSteps(
   } else if (report.reviewer_signoff.structured_receipt_count > 0) {
     steps.push('Reviewer signoff receipts are present; verify decisions and binding targets before external reliance.');
   } else if (report.reviewer_signoff.receipt_count > 0) {
-    steps.push('Reviewer signoff receipt objects are present, but some are not structurally bound to this bundle; inspect them before external reliance.');
+    steps.push('Reviewer signoff receipt objects are present, but some failed local integrity or binding validation; inspect them before external reliance.');
   }
   steps.push(`Canonical offline verifier command: ${report.verify_command}`);
   if (report.warnings.length > 0) {
