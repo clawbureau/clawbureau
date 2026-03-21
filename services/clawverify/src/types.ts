@@ -1541,6 +1541,18 @@ export interface ProofBundleVerificationResult {
     egress_policy_receipt_signature_verified?: boolean;
     /** PRV-EGR-003 full semantic verification status for egress policy receipt. */
     egress_policy_receipt_valid?: boolean;
+    /** AF2-DLP-002 data handling evidence presence in payload.metadata.data_handling. */
+    data_handling_evidence_present?: boolean;
+    /** AF2-DLP-002 data handling evidence verification status. */
+    data_handling_evidence_valid?: boolean;
+    /** AF2-DLP-002 total number of signed data handling receipts. */
+    data_handling_receipts_count?: number;
+    /** AF2-DLP-002 number of data handling receipts emitted in simulation mode. */
+    data_handling_simulated_receipts_count?: number;
+    /** AF2-DLP-002 number of data handling receipts emitted in enforced mode. */
+    data_handling_enforced_receipts_count?: number;
+    /** AF2-DLP-002 aggregated data handling enforcement mode across receipts. */
+    data_handling_enforcement_mode?: 'enforced' | 'simulated' | 'mixed';
     vir_receipts_valid?: boolean;
     web_receipts_valid?: boolean;
     coverage_attestations_valid?: boolean;

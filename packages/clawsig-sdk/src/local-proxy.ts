@@ -147,6 +147,8 @@ interface ProcessorPolicyState {
 }
 
 type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
+type DataHandlingEnforcementMode = 'enforced' | 'simulated';
+type DataHandlingRedactionStrategy = 'none' | 'text_regex' | 'json_structured';
 
 type DataHandlingClassId = string;
 type DataHandlingRuleSource = 'builtin' | 'custom';
@@ -176,9 +178,20 @@ interface DataHandlingClassMatch {
   match_count: number;
 }
 
+interface DataHandlingRedactionOperation {
+  class_id: DataHandlingClassId;
+  rule_id: string;
+  path: string;
+  match_count: number;
+  redaction_token: string;
+}
+
 interface DataHandlingDecision {
   action: DataHandlingAction;
   reason_code: string;
+  enforcement_mode: DataHandlingEnforcementMode;
+  would_action: DataHandlingAction;
+  would_reason_code: string;
   classes: DataHandlingClassMatch[];
   policy: DataHandlingPolicyEvidence | null;
   approval_required: boolean;
@@ -188,6 +201,8 @@ interface DataHandlingDecision {
   approval_receipt_signer_did: string | null;
   approval_receipt_envelope: SignedEnvelope<HumanApprovalReceiptPayload> | null;
   redaction_applied: boolean;
+  redaction_strategy: DataHandlingRedactionStrategy;
+  redaction_operations: DataHandlingRedactionOperation[];
   outboundBody: Buffer;
   original_payload_hash_b64u: string;
   outbound_payload_hash_b64u: string | null;
@@ -225,6 +240,14 @@ interface DataHandlingReceiptPayload {
   action: DataHandlingAction;
   reason_code: string;
   classes: DataHandlingClassMatch[];
+  enforcement: {
+    mode: DataHandlingEnforcementMode;
+    would_action: DataHandlingAction;
+    would_reason_code: string;
+    would_block: boolean;
+    would_require_approval: boolean;
+    would_redact: boolean;
+  };
   approval: {
     required: boolean;
     satisfied: boolean;
@@ -238,6 +261,8 @@ interface DataHandlingReceiptPayload {
     applied: boolean;
     original_payload_hash_b64u: string;
     outbound_payload_hash_b64u: string | null;
+    strategy: DataHandlingRedactionStrategy;
+    operations: DataHandlingRedactionOperation[];
   };
   timestamp: string;
 }
@@ -660,6 +685,9 @@ const DLP_APPROVER_DIDS_ENV = 'CLAWSIG_DLP_APPROVER_DIDS';
 const DLP_APPROVER_DID_ENV = 'CLAWSIG_DLP_APPROVER_DID';
 const DLP_CUSTOM_RULES_ENV = 'CLAWSIG_DLP_CUSTOM_RULES_JSON';
 const DLP_APPROVAL_SCOPE_VERSION = 'prv.dlp.approval_scope.v1';
+const DLP_MODE_ENV = 'CLAWSIG_DLP_MODE';
+const DLP_SIMULATE_ENV = 'CLAWSIG_DLP_SIMULATE';
+const DLP_SIMULATION_ALLOW_REASON_CODE = 'PRV_DLP_SIMULATION_ALLOW';
 
 const BASE58_ALPHABET =
   '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -685,6 +713,27 @@ interface DataHandlingCustomRuleInput {
 interface DataHandlingPolicyConfig extends DataHandlingPolicyEvidence {
   policy_version: typeof DLP_POLICY_VERSION;
   rules: readonly DataHandlingRule[];
+}
+
+function resolveDataHandlingEnforcementMode(
+  proofedMode: boolean,
+): DataHandlingEnforcementMode {
+  if (!proofedMode) return 'enforced';
+
+  const normalizedMode = process.env[DLP_MODE_ENV]?.trim().toLowerCase();
+  if (
+    normalizedMode === 'simulate' ||
+    normalizedMode === 'simulated' ||
+    normalizedMode === 'preview'
+  ) {
+    return 'simulated';
+  }
+
+  if (parseBooleanEnv(process.env[DLP_SIMULATE_ENV])) {
+    return 'simulated';
+  }
+
+  return 'enforced';
 }
 
 function isDataHandlingAction(value: unknown): value is DataHandlingAction {
@@ -986,6 +1035,143 @@ function cloneRegex(regex: RegExp): RegExp {
   return new RegExp(regex.source, regex.flags);
 }
 
+function cloneRegexForGlobalScan(regex: RegExp): RegExp {
+  return regex.flags.includes('g')
+    ? cloneRegex(regex)
+    : new RegExp(regex.source, `${regex.flags}g`);
+}
+
+function countMatches(text: string, pattern: RegExp): number {
+  const matcher = cloneRegexForGlobalScan(pattern);
+  let count = 0;
+  let result: RegExpExecArray | null;
+
+  while ((result = matcher.exec(text)) !== null) {
+    count += 1;
+    if (result[0].length === 0) {
+      matcher.lastIndex += 1;
+    }
+  }
+
+  return count;
+}
+
+function redactionOperationComparator(
+  left: DataHandlingRedactionOperation,
+  right: DataHandlingRedactionOperation,
+): number {
+  const classOrder = left.class_id.localeCompare(right.class_id);
+  if (classOrder !== 0) return classOrder;
+  const ruleOrder = left.rule_id.localeCompare(right.rule_id);
+  if (ruleOrder !== 0) return ruleOrder;
+  return left.path.localeCompare(right.path);
+}
+
+function escapeJsonPathSegment(segment: string): string {
+  if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(segment)) return `.${segment}`;
+  return `[${JSON.stringify(segment)}]`;
+}
+
+function applyRegexRedaction(args: {
+  originalText: string;
+  redactionRules: readonly DataHandlingRule[];
+}): {
+  text: string;
+  strategy: DataHandlingRedactionStrategy;
+  operations: DataHandlingRedactionOperation[];
+} {
+  let redactedText = args.originalText;
+  const operations: DataHandlingRedactionOperation[] = [];
+
+  for (const rule of args.redactionRules) {
+    const replacement = rule.redaction_token ?? '[REDACTED]';
+    const matchCount = countMatches(redactedText, rule.pattern);
+    if (matchCount === 0) continue;
+    redactedText = redactedText.replace(
+      cloneRegexForGlobalScan(rule.pattern),
+      replacement,
+    );
+    operations.push({
+      class_id: rule.class_id,
+      rule_id: rule.rule_id,
+      path: '$',
+      match_count: matchCount,
+      redaction_token: replacement,
+    });
+  }
+
+  operations.sort(redactionOperationComparator);
+  return {
+    text: redactedText,
+    strategy: operations.length > 0 ? 'text_regex' : 'none',
+    operations,
+  };
+}
+
+function tryApplyStructuredJsonRedaction(args: {
+  originalText: string;
+  redactionRules: readonly DataHandlingRule[];
+}): {
+  text: string;
+  strategy: DataHandlingRedactionStrategy;
+  operations: DataHandlingRedactionOperation[];
+} | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(args.originalText);
+  } catch {
+    return null;
+  }
+
+  const operations: DataHandlingRedactionOperation[] = [];
+  const sortedRules = [...args.redactionRules].sort((a, b) =>
+    a.rule_id.localeCompare(b.rule_id),
+  );
+
+  const redactNode = (value: unknown, path: string): unknown => {
+    if (typeof value === 'string') {
+      let next = value;
+      for (const rule of sortedRules) {
+        const matchCount = countMatches(next, rule.pattern);
+        if (matchCount === 0) continue;
+        const replacement = rule.redaction_token ?? '[REDACTED]';
+        next = next.replace(cloneRegexForGlobalScan(rule.pattern), replacement);
+        operations.push({
+          class_id: rule.class_id,
+          rule_id: rule.rule_id,
+          path,
+          match_count: matchCount,
+          redaction_token: replacement,
+        });
+      }
+      return next;
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((entry, index) => redactNode(entry, `${path}[${index}]`));
+    }
+
+    if (value !== null && typeof value === 'object') {
+      const input = value as Record<string, unknown>;
+      const output: Record<string, unknown> = {};
+      for (const key of Object.keys(input).sort((a, b) => a.localeCompare(b))) {
+        output[key] = redactNode(input[key], `${path}${escapeJsonPathSegment(key)}`);
+      }
+      return output;
+    }
+
+    return value;
+  };
+
+  const redacted = redactNode(parsed, '$');
+  operations.sort(redactionOperationComparator);
+  return {
+    text: JSON.stringify(redacted),
+    strategy: operations.length > 0 ? 'json_structured' : 'none',
+    operations,
+  };
+}
+
 function readSingleHeader(
   headers: Record<string, string | string[] | undefined>,
   key: string,
@@ -999,11 +1185,15 @@ function readSingleHeader(
   return undefined;
 }
 
-function buildDataHandlingReasonCode(decision: DataHandlingDecision): string {
-  if (decision.action === 'block') return 'PRV_DLP_BLOCKED';
-  if (decision.action === 'redact') return 'PRV_DLP_REDACTED';
-  if (decision.action === 'require_approval') return 'PRV_DLP_APPROVAL_REQUIRED';
-  if (decision.approval_required && decision.approval_satisfied) return 'PRV_DLP_APPROVAL_GRANTED';
+function buildDataHandlingReasonCode(args: {
+  action: DataHandlingAction;
+  approval_required: boolean;
+  approval_satisfied: boolean;
+}): string {
+  if (args.action === 'block') return 'PRV_DLP_BLOCKED';
+  if (args.action === 'redact') return 'PRV_DLP_REDACTED';
+  if (args.action === 'require_approval') return 'PRV_DLP_APPROVAL_REQUIRED';
+  if (args.approval_required && args.approval_satisfied) return 'PRV_DLP_APPROVAL_GRANTED';
   return 'PRV_DLP_ALLOW';
 }
 
@@ -1349,6 +1539,7 @@ async function validateApprovalReceipt(args: {
 async function evaluateDataHandlingPolicy(args: {
   bodyBuffer: Buffer;
   policyConfig: DataHandlingPolicyConfig;
+  enforcementMode: DataHandlingEnforcementMode;
   provider: string;
   runId: string;
   eventHashB64u: string;
@@ -1359,13 +1550,10 @@ async function evaluateDataHandlingPolicy(args: {
   decisionTimestampMs: number;
 }): Promise<DataHandlingDecision> {
   const originalText = args.bodyBuffer.toString('utf-8');
-  let redactedText = originalText;
   const classes: DataHandlingClassMatch[] = [];
 
   for (const rule of args.policyConfig.rules) {
-    const matcher = cloneRegex(rule.pattern);
-    const matches = originalText.match(matcher);
-    const matchCount = matches?.length ?? 0;
+    const matchCount = countMatches(originalText, rule.pattern);
     if (matchCount === 0) continue;
 
     classes.push({
@@ -1374,12 +1562,6 @@ async function evaluateDataHandlingPolicy(args: {
       action: rule.action,
       match_count: matchCount,
     });
-
-    if (rule.action === 'redact') {
-      const redactor = cloneRegex(rule.pattern);
-      const replacement = rule.redaction_token ?? '[REDACTED]';
-      redactedText = redactedText.replace(redactor, replacement);
-    }
   }
 
   classes.sort((a, b) => {
@@ -1419,29 +1601,81 @@ async function evaluateDataHandlingPolicy(args: {
         };
   const approvalSatisfied = approvalRequired && approvalReceiptValidation.valid;
 
-  let action: DataHandlingAction = 'allow';
+  let wouldAction: DataHandlingAction = 'allow';
   if (classes.some((c) => c.action === 'block')) {
-    action = 'block';
+    wouldAction = 'block';
   } else if (approvalRequired && !approvalSatisfied) {
-    action = 'require_approval';
+    wouldAction = 'require_approval';
   } else if (classes.some((c) => c.action === 'redact')) {
-    action = 'redact';
+    wouldAction = 'redact';
   }
 
+  if (
+    approvalRequired &&
+    approvalScopeHashB64u === null &&
+    wouldAction !== 'block'
+  ) {
+    wouldAction = 'require_approval';
+  }
+
+  const redactionRules = args.policyConfig.rules
+    .filter((rule) => rule.action === 'redact')
+    .sort((a, b) => a.rule_id.localeCompare(b.rule_id));
+  const redactionResult =
+    redactionRules.length > 0
+      ? tryApplyStructuredJsonRedaction({
+          originalText,
+          redactionRules,
+        }) ??
+        applyRegexRedaction({
+          originalText,
+          redactionRules,
+        })
+      : {
+          text: originalText,
+          strategy: 'none' as const,
+          operations: [] as DataHandlingRedactionOperation[],
+        };
+
+  const wouldReasonCode = buildDataHandlingReasonCode({
+    action: wouldAction,
+    approval_required: approvalRequired,
+    approval_satisfied: approvalSatisfied,
+  });
+
+  const isSimulation = args.enforcementMode === 'simulated';
+  const action: DataHandlingAction = isSimulation ? 'allow' : wouldAction;
+  const reasonCode = isSimulation
+    ? DLP_SIMULATION_ALLOW_REASON_CODE
+    : wouldReasonCode;
+
   const outboundBody =
-    action === 'redact'
-      ? Buffer.from(redactedText, 'utf-8')
-      : args.bodyBuffer;
-  const redactionApplied = action === 'redact' && outboundBody.toString('utf-8') !== originalText;
+    isSimulation
+      ? args.bodyBuffer
+      : action === 'redact'
+        ? Buffer.from(redactionResult.text, 'utf-8')
+        : args.bodyBuffer;
+  const redactionApplied =
+    !isSimulation &&
+    action === 'redact' &&
+    outboundBody.toString('utf-8') !== originalText;
   const originalHash = await sha256B64u(new Uint8Array(args.bodyBuffer));
   const outboundHash =
     action === 'block' || action === 'require_approval'
       ? null
       : await sha256B64u(new Uint8Array(outboundBody));
 
-  const decision: DataHandlingDecision = {
+  const redactionStrategy: DataHandlingRedactionStrategy =
+    isSimulation ? 'none' : redactionResult.strategy;
+  const redactionOperations =
+    isSimulation ? [] : redactionResult.operations;
+
+  return {
     action,
-    reason_code: 'PRV_DLP_ALLOW',
+    reason_code: reasonCode,
+    enforcement_mode: args.enforcementMode,
+    would_action: wouldAction,
+    would_reason_code: wouldReasonCode,
     classes,
     policy: {
       taxonomy_version: args.policyConfig.taxonomy_version,
@@ -1456,12 +1690,81 @@ async function evaluateDataHandlingPolicy(args: {
     approval_receipt_signer_did: approvalReceiptValidation.receiptSignerDid,
     approval_receipt_envelope: approvalReceiptValidation.receiptEnvelope,
     redaction_applied: redactionApplied,
+    redaction_strategy: redactionStrategy,
+    redaction_operations: redactionOperations,
     outboundBody,
     original_payload_hash_b64u: originalHash,
     outbound_payload_hash_b64u: outboundHash,
   };
-  decision.reason_code = buildDataHandlingReasonCode(decision);
-  return decision;
+}
+
+async function buildFallbackDataHandlingReceiptPayload(args: {
+  runId: string;
+  provider: string;
+  classifierTimestamp: string;
+  bodyBuffer: Buffer;
+  effectivePolicyHashB64u: string | null;
+  policyConfig: DataHandlingPolicyConfig | null;
+  enforcementMode: DataHandlingEnforcementMode;
+}): Promise<DataHandlingReceiptPayload> {
+  const originalPayloadHash = await sha256B64u(new Uint8Array(args.bodyBuffer));
+  const isSimulation = args.enforcementMode === 'simulated';
+  const fallbackScopeHash =
+    args.effectivePolicyHashB64u
+      ? await computeApprovalScopeHashB64u({
+          provider: args.provider,
+          classes: [],
+          effectivePolicyHashB64u: args.effectivePolicyHashB64u,
+        })
+      : null;
+  return {
+    receipt_version: '1',
+    receipt_id: `dhr_${randomUUID()}`,
+    policy_version: DLP_POLICY_VERSION,
+    effective_policy_hash_b64u: args.effectivePolicyHashB64u ?? 'unknown_policy_hash',
+    ...(args.policyConfig
+      ? {
+          policy: {
+            taxonomy_version: args.policyConfig.taxonomy_version,
+            ruleset_hash_b64u: args.policyConfig.ruleset_hash_b64u,
+            built_in_rule_count: args.policyConfig.built_in_rule_count,
+            custom_rule_count: args.policyConfig.custom_rule_count,
+          },
+        }
+      : {}),
+    run_id: args.runId,
+    provider: args.provider,
+    action: isSimulation ? 'allow' : 'require_approval',
+    reason_code: isSimulation
+      ? DLP_SIMULATION_ALLOW_REASON_CODE
+      : 'PRV_DLP_CLASSIFIER_ERROR',
+    classes: [],
+    enforcement: {
+      mode: args.enforcementMode,
+      would_action: 'require_approval',
+      would_reason_code: 'PRV_DLP_CLASSIFIER_ERROR',
+      would_block: false,
+      would_require_approval: true,
+      would_redact: false,
+    },
+    approval: {
+      required: true,
+      satisfied: false,
+      mechanism: 'signed_receipt',
+      scope_hash_b64u: fallbackScopeHash,
+      receipt_hash_b64u: null,
+      receipt_signer_did: null,
+      receipt_envelope: null,
+    },
+    redaction: {
+      applied: false,
+      original_payload_hash_b64u: originalPayloadHash,
+      outbound_payload_hash_b64u: isSimulation ? originalPayloadHash : null,
+      strategy: 'none',
+      operations: [],
+    },
+    timestamp: args.classifierTimestamp,
+  };
 }
 
 async function signDataHandlingReceipt(
@@ -1951,6 +2254,8 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     ? { enforce: true, allowlist: normalizedEgressAllowlist }
     : undefined;
   const proofedMode = parseBooleanEnv(process.env['CLAWSIG_PROOFED']);
+  const dataHandlingEnforcementMode =
+    resolveDataHandlingEnforcementMode(proofedMode);
   const processorPolicy = resolveProcessorPolicy(proofedMode);
   const processorPolicyState: ProcessorPolicyState = {
     allowed_count: 0,
@@ -2057,6 +2362,12 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
       const incomingKey = extractProviderKey(reqHeaders) ?? providerApiKey;
       let outboundBodyBuffer = bodyBuffer;
+      let simulationPreview:
+        | {
+            wouldAction: DataHandlingAction;
+            wouldReasonCode: string;
+          }
+        | null = null;
 
       if (egressPolicy?.enforce) {
         const approvalReceiptHeader = readSingleHeader(reqHeaders, DLP_APPROVAL_HEADER);
@@ -2086,6 +2397,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
           const decision = await evaluateDataHandlingPolicy({
             bodyBuffer,
             policyConfig: dataHandlingPolicyConfig,
+            enforcementMode: dataHandlingEnforcementMode,
             provider,
             runId,
             eventHashB64u: eventHash,
@@ -2097,13 +2409,11 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
               Number.isFinite(classifierTimestampMs) ? classifierTimestampMs : Date.now(),
           });
           outboundBodyBuffer = decision.outboundBody;
-          if (
-            decision.approval_required &&
-            decision.approval_scope_hash_b64u === null &&
-            decision.action !== 'block'
-          ) {
-            decision.action = 'require_approval';
-            decision.reason_code = 'PRV_DLP_APPROVAL_REQUIRED';
+          if (decision.enforcement_mode === 'simulated') {
+            simulationPreview = {
+              wouldAction: decision.would_action,
+              wouldReasonCode: decision.would_reason_code,
+            };
           }
 
           const receiptPayload: DataHandlingReceiptPayload = {
@@ -2118,6 +2428,15 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             action: decision.action,
             reason_code: decision.reason_code,
             classes: decision.classes,
+            enforcement: {
+              mode: decision.enforcement_mode,
+              would_action: decision.would_action,
+              would_reason_code: decision.would_reason_code,
+              would_block: decision.would_action === 'block',
+              would_require_approval:
+                decision.would_action === 'require_approval',
+              would_redact: decision.would_action === 'redact',
+            },
             approval: {
               required: decision.approval_required,
               satisfied: decision.approval_satisfied,
@@ -2131,6 +2450,8 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
               applied: decision.redaction_applied,
               original_payload_hash_b64u: decision.original_payload_hash_b64u,
               outbound_payload_hash_b64u: decision.outbound_payload_hash_b64u,
+              strategy: decision.redaction_strategy,
+              operations: decision.redaction_operations,
             },
             timestamp: classifierTimestamp,
           };
@@ -2157,43 +2478,15 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             return;
           }
         } catch (err) {
-          const fallbackPayload: DataHandlingReceiptPayload = {
-            receipt_version: '1',
-            receipt_id: `dhr_${randomUUID()}`,
-            policy_version: DLP_POLICY_VERSION,
-            effective_policy_hash_b64u:
-              normalizedEffectivePolicyHash ?? 'unknown_policy_hash',
-            ...(dataHandlingPolicyConfig
-              ? {
-                  policy: {
-                    taxonomy_version: dataHandlingPolicyConfig.taxonomy_version,
-                    ruleset_hash_b64u: dataHandlingPolicyConfig.ruleset_hash_b64u,
-                    built_in_rule_count: dataHandlingPolicyConfig.built_in_rule_count,
-                    custom_rule_count: dataHandlingPolicyConfig.custom_rule_count,
-                  },
-                }
-              : {}),
-            run_id: runId,
+          const fallbackPayload = await buildFallbackDataHandlingReceiptPayload({
+            runId,
             provider,
-            action: 'require_approval',
-            reason_code: 'PRV_DLP_CLASSIFIER_ERROR',
-            classes: [],
-            approval: {
-              required: true,
-              satisfied: false,
-              mechanism: 'signed_receipt',
-              scope_hash_b64u: null,
-              receipt_hash_b64u: null,
-              receipt_signer_did: null,
-              receipt_envelope: null,
-            },
-            redaction: {
-              applied: false,
-              original_payload_hash_b64u: await sha256B64u(new Uint8Array(bodyBuffer)),
-              outbound_payload_hash_b64u: null,
-            },
-            timestamp: classifierTimestamp,
-          };
+            classifierTimestamp,
+            bodyBuffer,
+            effectivePolicyHashB64u: normalizedEffectivePolicyHash,
+            policyConfig: dataHandlingPolicyConfig,
+            enforcementMode: dataHandlingEnforcementMode,
+          });
 
           try {
             dataHandlingReceipts.push(
@@ -2206,14 +2499,22 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             // best effort; return fail-closed even if nested receipt signing fails
           }
 
-          res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            error: 'PRV_DLP_CLASSIFIER_ERROR',
-            reason_code: 'PRV_DLP_CLASSIFIER_ERROR',
-            action: 'require_approval',
-            message: err instanceof Error ? err.message : 'Data handling classifier failed closed.',
-          }));
-          return;
+          if (dataHandlingEnforcementMode === 'simulated') {
+            simulationPreview = {
+              wouldAction: 'require_approval',
+              wouldReasonCode: 'PRV_DLP_CLASSIFIER_ERROR',
+            };
+            outboundBodyBuffer = bodyBuffer;
+          } else {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: 'PRV_DLP_CLASSIFIER_ERROR',
+              reason_code: 'PRV_DLP_CLASSIFIER_ERROR',
+              action: 'require_approval',
+              message: err instanceof Error ? err.message : 'Data handling classifier failed closed.',
+            }));
+            return;
+          }
         }
       }
 
@@ -2275,6 +2576,13 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       // This is crucial to prevent the consumer from expecting chunked boundaries.
       if (!upstream.isStream) {
         upstream.headers['content-length'] = String(upstream.body.length);
+      }
+      if (simulationPreview) {
+        upstream.headers['x-clawsig-dlp-mode'] = 'simulated';
+        upstream.headers['x-clawsig-dlp-would-action'] =
+          simulationPreview.wouldAction;
+        upstream.headers['x-clawsig-dlp-would-reason'] =
+          simulationPreview.wouldReasonCode;
       }
 
       res.writeHead(upstream.status, upstream.headers);
@@ -2491,10 +2799,23 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     }
 
     if (dataHandlingReceipts.length > 0) {
+      const simulatedReceiptCount = dataHandlingReceipts.filter(
+        (receipt) => receipt.payload.enforcement.mode === 'simulated',
+      ).length;
+      const enforcedReceiptCount = dataHandlingReceipts.length - simulatedReceiptCount;
+      const metadataMode =
+        simulatedReceiptCount === 0
+          ? 'enforced'
+          : enforcedReceiptCount === 0
+            ? 'simulated'
+            : 'mixed';
       payload.metadata = {
         ...payload.metadata,
         data_handling: {
           policy_version: DLP_POLICY_VERSION,
+          enforcement_mode: metadataMode,
+          simulated_receipt_count: simulatedReceiptCount,
+          enforced_receipt_count: enforcedReceiptCount,
           ...(dataHandlingPolicyConfig
             ? {
                 taxonomy_version: dataHandlingPolicyConfig.taxonomy_version,

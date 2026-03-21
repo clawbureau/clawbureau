@@ -911,6 +911,105 @@ describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
       };
       const actions = extractDataHandlingActions(bundle);
       expect(actions.some((entry) => entry.action === 'redact' && entry.reason_code === 'PRV_DLP_REDACTED')).toBe(true);
+      const dataHandling = (bundle.payload?.metadata?.data_handling ?? null) as
+        | {
+            receipts?: Array<{
+              payload?: {
+                redaction?: {
+                  strategy?: string;
+                  operations?: Array<{
+                    class_id?: string;
+                    rule_id?: string;
+                    path?: string;
+                    match_count?: number;
+                    redaction_token?: string;
+                  }>;
+                };
+              };
+            }>;
+          }
+        | null;
+      const redaction = dataHandling?.receipts?.[0]?.payload?.redaction;
+      expect(redaction?.strategy).toBe('json_structured');
+      expect(redaction?.operations?.length).toBeGreaterThan(0);
+      expect(redaction?.operations?.[0]?.class_id).toBe('secret.api_key');
+      expect(redaction?.operations?.[0]?.rule_id).toBe('prv.dlp.secret.api_key.v1');
+      expect(redaction?.operations?.[0]?.path).toBe('$.messages[0].content');
+      expect(redaction?.operations?.[0]?.match_count).toBeGreaterThan(0);
+      expect(redaction?.operations?.[0]?.redaction_token).toBe('[REDACTED_SECRET]');
+    } finally {
+      await mock.stop();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('simulation mode reports would-block decisions without silently bypassing receipt evidence', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-simulated-'));
+    const mock = await startMockClawproxy();
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'customer_restricted export dump'}]})" +
+        "});" +
+        "const mode=res.headers.get('x-clawsig-dlp-mode');" +
+        "const wouldAction=res.headers.get('x-clawsig-dlp-would-action');" +
+        "const wouldReason=res.headers.get('x-clawsig-dlp-would-reason');" +
+        "if(res.status===200&&mode==='simulated'&&wouldAction==='block'&&wouldReason==='PRV_DLP_BLOCKED'){process.exit(0);}"+
+        "console.error(JSON.stringify({status:res.status,mode,wouldAction,wouldReason,body:await res.text()}));process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_DLP_MODE: 'simulated',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests).toHaveLength(1);
+      expect(mock.requests[0]?.body).toContain('customer_restricted');
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: {
+              enforcement_mode?: string;
+              simulated_receipt_count?: number;
+              enforced_receipt_count?: number;
+              receipts?: Array<{
+                payload?: {
+                  action?: string;
+                  reason_code?: string;
+                  enforcement?: {
+                    mode?: string;
+                    would_action?: string;
+                    would_reason_code?: string;
+                  };
+                };
+              }>;
+            };
+          };
+        };
+      };
+
+      const dataHandling = bundle.payload?.metadata?.data_handling;
+      expect(dataHandling?.enforcement_mode).toBe('simulated');
+      expect(dataHandling?.simulated_receipt_count).toBe(1);
+      expect(dataHandling?.enforced_receipt_count).toBe(0);
+      const receiptPayload = dataHandling?.receipts?.[0]?.payload;
+      expect(receiptPayload?.action).toBe('allow');
+      expect(receiptPayload?.reason_code).toBe('PRV_DLP_SIMULATION_ALLOW');
+      expect(receiptPayload?.enforcement?.mode).toBe('simulated');
+      expect(receiptPayload?.enforcement?.would_action).toBe('block');
+      expect(receiptPayload?.enforcement?.would_reason_code).toBe('PRV_DLP_BLOCKED');
     } finally {
       await mock.stop();
       await rm(workdir, { recursive: true, force: true });
@@ -1393,6 +1492,88 @@ describe('proofed mode data handling controls (PRV-DLP-001/002)', () => {
     expect(first.rulesetHash).toBe(second.rulesetHash);
     expect(first.customRuleCount).toBe(1);
     expect(first.taxonomyVersion).toBe('prv.dlp.taxonomy.v2');
+  });
+
+  it('custom redact rules scan globally even when the author omits the g flag', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-proofed-dlp-custom-redact-'));
+    const mock = await startMockClawproxy();
+    const customRulesJson = JSON.stringify([
+      {
+        class_id: 'customer.account_id',
+        action: 'redact',
+        pattern: 'acct_[0-9]{4}',
+        redaction_token: '[MASKED_ACCOUNT]',
+      },
+    ]);
+
+    try {
+      const childScript =
+        "(async()=>{" +
+        "const port=process.env.CLAWSIG_PROXY_PORT;" +
+        "const res=await fetch(`http://127.0.0.1:${port}/v1/proxy/openai`,{" +
+        "method:'POST'," +
+        "headers:{'content-type':'application/json','authorization':'Bearer sk-test'}," +
+        "body:JSON.stringify({model:'gpt-4o-mini',messages:[{role:'user',content:'acct_1234 then acct_5678'}]})" +
+        "});" +
+        "if(res.status===200){process.exit(0);}"+
+        "console.error(await res.text());process.exit(1);" +
+        "})().catch((err)=>{console.error(err);process.exit(1);});";
+
+      const result = await runWrapRaw(workdir, {
+        childArgs: [process.execPath, '-e', childScript],
+        extraEnv: {
+          CLAWSIG_PROOFED: '1',
+          CLAWSIG_CLAWPROXY_URL: mock.url,
+          CLAWSIG_DLP_CUSTOM_RULES_JSON: customRulesJson,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(mock.requests).toHaveLength(1);
+      const forwardedBody = mock.requests[0]!.body;
+      expect(forwardedBody).not.toContain('acct_1234');
+      expect(forwardedBody).not.toContain('acct_5678');
+      expect(forwardedBody.match(/\[MASKED_ACCOUNT\]/g)?.length).toBe(2);
+
+      const bundleRaw = await readFile(result.bundlePath, 'utf-8');
+      const bundle = JSON.parse(bundleRaw) as {
+        payload?: {
+          metadata?: {
+            data_handling?: {
+              receipts?: Array<{
+                payload?: {
+                  classes?: Array<{
+                    class_id?: string;
+                    match_count?: number;
+                  }>;
+                  redaction?: {
+                    strategy?: string;
+                    operations?: Array<{
+                      class_id?: string;
+                      path?: string;
+                      match_count?: number;
+                      redaction_token?: string;
+                    }>;
+                  };
+                };
+              }>;
+            };
+          };
+        };
+      };
+
+      const receiptPayload = bundle.payload?.metadata?.data_handling?.receipts?.[0]?.payload;
+      expect(receiptPayload?.classes?.[0]?.class_id).toBe('customer.account_id');
+      expect(receiptPayload?.classes?.[0]?.match_count).toBe(2);
+      expect(receiptPayload?.redaction?.strategy).toBe('json_structured');
+      expect(receiptPayload?.redaction?.operations?.[0]?.class_id).toBe('customer.account_id');
+      expect(receiptPayload?.redaction?.operations?.[0]?.path).toBe('$.messages[0].content');
+      expect(receiptPayload?.redaction?.operations?.[0]?.match_count).toBe(2);
+      expect(receiptPayload?.redaction?.operations?.[0]?.redaction_token).toBe('[MASKED_ACCOUNT]');
+    } finally {
+      await mock.stop();
+      await rm(workdir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -1272,9 +1272,12 @@ interface ProcessorPolicyEvidence {
 }
 
 type DataHandlingAction = 'allow' | 'redact' | 'block' | 'require_approval';
+type DataHandlingEnforcementMode = 'enforced' | 'simulated';
+type DataHandlingRedactionStrategy = 'none' | 'text_regex' | 'json_structured';
 
 const DLP_POLICY_VERSION = 'prv.dlp.v1' as const;
 const DLP_TAXONOMY_VERSION = 'prv.dlp.taxonomy.v2' as const;
+const DLP_SIMULATION_ALLOW_REASON_CODE = 'PRV_DLP_SIMULATION_ALLOW' as const;
 const DLP_CLASS_ID_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const DLP_RULE_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const DLP_CUSTOM_RULE_ID_PATTERN =
@@ -1294,6 +1297,23 @@ interface DataHandlingClassMatch {
   match_count: number;
 }
 
+interface DataHandlingRedactionOperation {
+  class_id: string;
+  rule_id: string;
+  path: string;
+  match_count: number;
+  redaction_token: string;
+}
+
+interface DataHandlingReceiptEnforcement {
+  mode: DataHandlingEnforcementMode;
+  would_action: DataHandlingAction;
+  would_reason_code: string;
+  would_block: boolean;
+  would_require_approval: boolean;
+  would_redact: boolean;
+}
+
 interface DataHandlingReceiptPayload {
   receipt_version: '1';
   receipt_id: string;
@@ -1305,6 +1325,7 @@ interface DataHandlingReceiptPayload {
   action: DataHandlingAction;
   reason_code: string;
   classes: DataHandlingClassMatch[];
+  enforcement?: DataHandlingReceiptEnforcement;
   approval: {
     required: boolean;
     satisfied: boolean;
@@ -1318,6 +1339,8 @@ interface DataHandlingReceiptPayload {
     applied: boolean;
     original_payload_hash_b64u: string;
     outbound_payload_hash_b64u: string | null;
+    strategy?: DataHandlingRedactionStrategy;
+    operations?: DataHandlingRedactionOperation[];
   };
   timestamp: string;
 }
@@ -1520,36 +1543,53 @@ function validateDataHandlingClassMatch(args: {
   };
 }
 
-function isValidDataHandlingReasonCode(payload: Record<string, unknown>): boolean {
-  if (typeof payload.reason_code !== 'string') return false;
-
-  if (payload.action === 'block') {
-    return payload.reason_code === 'PRV_DLP_BLOCKED';
+function isValidDataHandlingReasonCodeForAction(args: {
+  action: DataHandlingAction;
+  reason_code: string;
+  approval_required: boolean;
+  approval_satisfied: boolean;
+}): boolean {
+  if (args.action === 'block') {
+    return args.reason_code === 'PRV_DLP_BLOCKED';
   }
 
-  if (payload.action === 'redact') {
-    return payload.reason_code === 'PRV_DLP_REDACTED';
+  if (args.action === 'redact') {
+    return args.reason_code === 'PRV_DLP_REDACTED';
   }
 
-  if (payload.action === 'allow') {
-    if (
-      isObjectRecord(payload.approval) &&
-      payload.approval.required === true &&
-      payload.approval.satisfied === true
-    ) {
-      return payload.reason_code === 'PRV_DLP_APPROVAL_GRANTED';
+  if (args.action === 'allow') {
+    if (args.approval_required && args.approval_satisfied) {
+      return args.reason_code === 'PRV_DLP_APPROVAL_GRANTED';
     }
-    return payload.reason_code === 'PRV_DLP_ALLOW';
+    return args.reason_code === 'PRV_DLP_ALLOW';
   }
 
-  if (payload.action === 'require_approval') {
+  if (args.action === 'require_approval') {
     return (
-      payload.reason_code === 'PRV_DLP_APPROVAL_REQUIRED' ||
-      payload.reason_code === 'PRV_DLP_CLASSIFIER_ERROR'
+      args.reason_code === 'PRV_DLP_APPROVAL_REQUIRED' ||
+      args.reason_code === 'PRV_DLP_CLASSIFIER_ERROR'
     );
   }
 
   return false;
+}
+
+function isDataHandlingEnforcementMode(
+  value: unknown,
+): value is DataHandlingEnforcementMode {
+  return value === 'enforced' || value === 'simulated';
+}
+
+function isDataHandlingRedactionStrategy(
+  value: unknown,
+): value is DataHandlingRedactionStrategy {
+  return value === 'none' || value === 'text_regex' || value === 'json_structured';
+}
+
+function dataHandlingRedactionOperationSortKey(
+  operation: DataHandlingRedactionOperation,
+): string {
+  return `${operation.class_id}\u0000${operation.rule_id}\u0000${operation.path}`;
 }
 
 function buildDataHandlingApprovalScope(payload: DataHandlingReceiptPayload): DataHandlingApprovalScope {
@@ -1865,7 +1905,12 @@ async function verifyDataHandlingReceiptEnvelope(args: {
   field: string;
 }):
   Promise<
-    | { ok: true; signature_valid: boolean; policy: DataHandlingPolicyEvidence | null }
+    | {
+        ok: true;
+        signature_valid: boolean;
+        policy: DataHandlingPolicyEvidence | null;
+        enforcement_mode: DataHandlingEnforcementMode;
+      }
     | {
         ok: false;
         code: VerificationError['code'];
@@ -2069,19 +2114,88 @@ async function verifyDataHandlingReceiptEnvelope(args: {
       signature_valid: false,
     };
   }
-  if (
-    typeof payload.reason_code !== 'string' ||
-    !payload.reason_code.startsWith('PRV_DLP_') ||
-    !isValidDataHandlingReasonCode(payload)
-  ) {
-    return {
-      ok: false,
-      code: 'MALFORMED_ENVELOPE',
-      message: 'data handling receipt payload.reason_code is inconsistent with payload.action/approval state',
-      field: `${args.field}.payload.reason_code`,
-      signature_valid: false,
-    };
+
+  let enforcementMode: DataHandlingEnforcementMode = 'enforced';
+  let wouldAction: DataHandlingAction = payload.action;
+  let wouldReasonCode: string =
+    typeof payload.reason_code === 'string' ? payload.reason_code : '';
+  if (payload.enforcement !== undefined) {
+    if (!isObjectRecord(payload.enforcement)) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'data handling receipt payload.enforcement must be an object when present',
+        field: `${args.field}.payload.enforcement`,
+        signature_valid: false,
+      };
+    }
+    if (!isDataHandlingEnforcementMode(payload.enforcement.mode)) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'data handling receipt payload.enforcement.mode must be "enforced" or "simulated"',
+        field: `${args.field}.payload.enforcement.mode`,
+        signature_valid: false,
+      };
+    }
+    if (!isDataHandlingAction(payload.enforcement.would_action)) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'data handling receipt payload.enforcement.would_action is invalid',
+        field: `${args.field}.payload.enforcement.would_action`,
+        signature_valid: false,
+      };
+    }
+    if (
+      typeof payload.enforcement.would_reason_code !== 'string' ||
+      !payload.enforcement.would_reason_code.startsWith('PRV_DLP_')
+    ) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'data handling receipt payload.enforcement.would_reason_code must be a PRV_DLP_* reason code',
+        field: `${args.field}.payload.enforcement.would_reason_code`,
+        signature_valid: false,
+      };
+    }
+    if (
+      typeof payload.enforcement.would_block !== 'boolean' ||
+      typeof payload.enforcement.would_require_approval !== 'boolean' ||
+      typeof payload.enforcement.would_redact !== 'boolean'
+    ) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'data handling receipt payload.enforcement boolean flags are required',
+        field: `${args.field}.payload.enforcement`,
+        signature_valid: false,
+      };
+    }
+    const expectedWouldBlock = payload.enforcement.would_action === 'block';
+    const expectedWouldRequireApproval =
+      payload.enforcement.would_action === 'require_approval';
+    const expectedWouldRedact = payload.enforcement.would_action === 'redact';
+    if (
+      payload.enforcement.would_block !== expectedWouldBlock ||
+      payload.enforcement.would_require_approval !== expectedWouldRequireApproval ||
+      payload.enforcement.would_redact !== expectedWouldRedact
+    ) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'data handling receipt payload.enforcement would_* booleans must match enforcement.would_action',
+        field: `${args.field}.payload.enforcement`,
+        signature_valid: false,
+      };
+    }
+    enforcementMode = payload.enforcement.mode;
+    wouldAction = payload.enforcement.would_action;
+    wouldReasonCode = payload.enforcement.would_reason_code;
   }
+
   if (typeof payload.timestamp !== 'string' || !isValidIsoDate(payload.timestamp)) {
     return {
       ok: false,
@@ -2308,6 +2422,183 @@ async function verifyDataHandlingReceiptEnvelope(args: {
       signature_valid: false,
     };
   }
+  let redactionStrategy: DataHandlingRedactionStrategy | null = null;
+  if (
+    payload.redaction.strategy !== undefined ||
+    payload.redaction.operations !== undefined
+  ) {
+    if (!isDataHandlingRedactionStrategy(payload.redaction.strategy)) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'data handling receipt payload.redaction.strategy must be one of: none, text_regex, json_structured',
+        field: `${args.field}.payload.redaction.strategy`,
+        signature_valid: false,
+      };
+    }
+    if (!Array.isArray(payload.redaction.operations)) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'data handling receipt payload.redaction.operations must be an array when strategy is present',
+        field: `${args.field}.payload.redaction.operations`,
+        signature_valid: false,
+      };
+    }
+    redactionStrategy = payload.redaction.strategy;
+    const seenOperationKeys = new Set<string>();
+    let previousOperationKey: string | null = null;
+    const normalizedOperations: DataHandlingRedactionOperation[] = [];
+
+    for (let i = 0; i < payload.redaction.operations.length; i++) {
+      const operation = payload.redaction.operations[i];
+      const field = `${args.field}.payload.redaction.operations[${i}]`;
+      if (!isObjectRecord(operation)) {
+        return {
+          ok: false,
+          code: 'MALFORMED_ENVELOPE',
+          message: 'redaction operation entries must be objects',
+          field,
+          signature_valid: false,
+        };
+      }
+
+      const opClassValidation = validateDataHandlingClassMatch({
+        value: {
+          class_id: operation.class_id,
+          rule_id: operation.rule_id,
+          action: 'allow',
+          match_count: operation.match_count,
+        },
+        field,
+      });
+      if (!opClassValidation.ok) {
+        return {
+          ok: false,
+          code: opClassValidation.code,
+          message: opClassValidation.message,
+          field: opClassValidation.field,
+          signature_valid: false,
+        };
+      }
+      if (opClassValidation.value.match_count <= 0) {
+        return {
+          ok: false,
+          code: 'EVIDENCE_MISMATCH',
+          message: 'redaction operation match_count must be a positive integer',
+          field: `${field}.match_count`,
+          signature_valid: false,
+        };
+      }
+      if (
+        typeof operation.path !== 'string' ||
+        operation.path.length === 0 ||
+        !operation.path.startsWith('$')
+      ) {
+        return {
+          ok: false,
+          code: 'MALFORMED_ENVELOPE',
+          message: 'redaction operation path must be a non-empty JSONPath-like string',
+          field: `${field}.path`,
+          signature_valid: false,
+        };
+      }
+      if (
+        typeof operation.redaction_token !== 'string' ||
+        operation.redaction_token.length === 0
+      ) {
+        return {
+          ok: false,
+          code: 'MALFORMED_ENVELOPE',
+          message: 'redaction operation redaction_token must be a non-empty string',
+          field: `${field}.redaction_token`,
+          signature_valid: false,
+        };
+      }
+
+      const normalizedOperation: DataHandlingRedactionOperation = {
+        class_id: opClassValidation.value.class_id,
+        rule_id: opClassValidation.value.rule_id,
+        path: operation.path,
+        match_count: opClassValidation.value.match_count,
+        redaction_token: operation.redaction_token,
+      };
+      const operationKey = dataHandlingRedactionOperationSortKey(
+        normalizedOperation,
+      );
+      if (seenOperationKeys.has(operationKey)) {
+        return {
+          ok: false,
+          code: 'EVIDENCE_MISMATCH',
+          message:
+            'data handling receipt payload.redaction.operations must not contain duplicate class_id/rule_id/path entries',
+          field,
+          signature_valid: false,
+        };
+      }
+      seenOperationKeys.add(operationKey);
+      if (
+        previousOperationKey !== null &&
+        operationKey.localeCompare(previousOperationKey) < 0
+      ) {
+        return {
+          ok: false,
+          code: 'EVIDENCE_MISMATCH',
+          message:
+            'data handling receipt payload.redaction.operations must be sorted by class_id then rule_id then path',
+          field,
+          signature_valid: false,
+        };
+      }
+      previousOperationKey = operationKey;
+      normalizedOperations.push(normalizedOperation);
+    }
+
+    if (redactionStrategy === 'none' && normalizedOperations.length > 0) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message: 'redaction.strategy="none" requires an empty redaction.operations array',
+        field: `${args.field}.payload.redaction.operations`,
+        signature_valid: false,
+      };
+    }
+    if (redactionStrategy !== 'none' && normalizedOperations.length === 0) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'redaction.strategy other than "none" requires at least one deterministic redaction operation',
+        field: `${args.field}.payload.redaction.operations`,
+        signature_valid: false,
+      };
+    }
+    if (payload.redaction.applied === false && normalizedOperations.length > 0) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'redaction.operations must be empty when payload.redaction.applied=false',
+        field: `${args.field}.payload.redaction.operations`,
+        signature_valid: false,
+      };
+    }
+    if (
+      enforcementMode === 'simulated' &&
+      (redactionStrategy !== 'none' || normalizedOperations.length > 0)
+    ) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'simulated data handling receipts must not claim applied redaction operations',
+        field: `${args.field}.payload.redaction`,
+        signature_valid: false,
+      };
+    }
+  }
 
   if (payload.action === 'redact' && payload.redaction.applied !== true) {
     return {
@@ -2335,6 +2626,107 @@ async function verifyDataHandlingReceiptEnvelope(args: {
       field: `${args.field}.payload.approval.satisfied`,
       signature_valid: false,
     };
+  }
+  if (
+    typeof payload.reason_code !== 'string' ||
+    !payload.reason_code.startsWith('PRV_DLP_')
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'data handling receipt payload.reason_code must be a PRV_DLP_* reason code',
+      field: `${args.field}.payload.reason_code`,
+      signature_valid: false,
+    };
+  }
+  if (
+    enforcementMode !== 'simulated' &&
+    !isValidDataHandlingReasonCodeForAction({
+      action: payload.action,
+      reason_code: payload.reason_code,
+      approval_required: payload.approval.required,
+      approval_satisfied: payload.approval.satisfied,
+    })
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'data handling receipt payload.reason_code is inconsistent with payload.action/approval state',
+      field: `${args.field}.payload.reason_code`,
+      signature_valid: false,
+    };
+  }
+  if (
+    !isValidDataHandlingReasonCodeForAction({
+      action: wouldAction,
+      reason_code: wouldReasonCode,
+      approval_required: payload.approval.required,
+      approval_satisfied: payload.approval.satisfied,
+    })
+  ) {
+    return {
+      ok: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'data handling receipt payload.enforcement.would_reason_code is inconsistent with enforcement.would_action/approval state',
+      field: `${args.field}.payload.enforcement.would_reason_code`,
+      signature_valid: false,
+    };
+  }
+  if (
+    payload.reason_code === DLP_SIMULATION_ALLOW_REASON_CODE &&
+    enforcementMode !== 'simulated'
+  ) {
+    return {
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'PRV_DLP_SIMULATION_ALLOW reason_code requires payload.enforcement.mode="simulated"',
+      field: `${args.field}.payload.reason_code`,
+      signature_valid: false,
+    };
+  }
+  if (enforcementMode === 'simulated') {
+    if (payload.action !== 'allow') {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message: 'simulated data handling receipts must set payload.action="allow"',
+        field: `${args.field}.payload.action`,
+        signature_valid: false,
+      };
+    }
+    if (payload.reason_code !== DLP_SIMULATION_ALLOW_REASON_CODE) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'simulated data handling receipts must set payload.reason_code="PRV_DLP_SIMULATION_ALLOW"',
+        field: `${args.field}.payload.reason_code`,
+        signature_valid: false,
+      };
+    }
+  } else {
+    if (payload.action !== wouldAction) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message: 'enforced data handling receipts must set payload.action=enforcement.would_action',
+        field: `${args.field}.payload.action`,
+        signature_valid: false,
+      };
+    }
+    if (payload.reason_code !== wouldReasonCode) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'enforced data handling receipts must set payload.reason_code=enforcement.would_reason_code',
+        field: `${args.field}.payload.reason_code`,
+        signature_valid: false,
+      };
+    }
   }
 
   const approvalScopeHash = await computeHash(
@@ -2564,7 +2956,20 @@ async function verifyDataHandlingReceiptEnvelope(args: {
     };
   }
 
-  return { ok: true, signature_valid: true, policy: payloadPolicy };
+  return {
+    ok: true,
+    signature_valid: true,
+    policy: payloadPolicy,
+    enforcement_mode: enforcementMode,
+  };
+}
+
+interface DataHandlingEvidenceSummary {
+  present: boolean;
+  receipt_count: number;
+  simulated_receipt_count: number;
+  enforced_receipt_count: number;
+  enforcement_mode: 'enforced' | 'simulated' | 'mixed' | null;
 }
 
 async function verifyDataHandlingEvidence(args: {
@@ -2575,13 +2980,35 @@ async function verifyDataHandlingEvidence(args: {
   allowedEventHashes: ReadonlySet<string> | null;
 }):
   Promise<
-    | { ok: true }
+    | { ok: true; summary: DataHandlingEvidenceSummary }
     | { ok: false; code: VerificationError['code']; message: string; field: string }
   > {
-  if (!args.metadataRecord) return { ok: true };
+  if (!args.metadataRecord) {
+    return {
+      ok: true,
+      summary: {
+        present: false,
+        receipt_count: 0,
+        simulated_receipt_count: 0,
+        enforced_receipt_count: 0,
+        enforcement_mode: null,
+      },
+    };
+  }
 
   const dataHandling = args.metadataRecord.data_handling;
-  if (dataHandling === undefined) return { ok: true };
+  if (dataHandling === undefined) {
+    return {
+      ok: true,
+      summary: {
+        present: false,
+        receipt_count: 0,
+        simulated_receipt_count: 0,
+        enforced_receipt_count: 0,
+        enforcement_mode: null,
+      },
+    };
+  }
   if (!isObjectRecord(dataHandling)) {
     return {
       ok: false,
@@ -2687,6 +3114,8 @@ async function verifyDataHandlingEvidence(args: {
     };
   }
 
+  let simulatedReceiptCount = 0;
+
   for (let i = 0; i < dataHandling.receipts.length; i++) {
     const result = await verifyDataHandlingReceiptEnvelope({
       envelope: dataHandling.receipts[i],
@@ -2704,6 +3133,9 @@ async function verifyDataHandlingEvidence(args: {
         message: result.message,
         field: result.field,
       };
+    }
+    if (result.enforcement_mode === 'simulated') {
+      simulatedReceiptCount += 1;
     }
 
     if (metadataPolicy) {
@@ -2746,7 +3178,100 @@ async function verifyDataHandlingEvidence(args: {
     }
   }
 
-  return { ok: true };
+  const receiptCount = dataHandling.receipts.length;
+  const enforcedReceiptCount = receiptCount - simulatedReceiptCount;
+  const actualEnforcementMode: 'enforced' | 'simulated' | 'mixed' =
+    simulatedReceiptCount === 0
+      ? 'enforced'
+      : enforcedReceiptCount === 0
+        ? 'simulated'
+        : 'mixed';
+
+  if (dataHandling.enforcement_mode !== undefined) {
+    if (
+      dataHandling.enforcement_mode !== 'enforced' &&
+      dataHandling.enforcement_mode !== 'simulated' &&
+      dataHandling.enforcement_mode !== 'mixed'
+    ) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'payload.metadata.data_handling.enforcement_mode must be one of: enforced, simulated, mixed',
+        field: 'payload.metadata.data_handling.enforcement_mode',
+      };
+    }
+    if (dataHandling.enforcement_mode !== actualEnforcementMode) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'payload.metadata.data_handling.enforcement_mode must match signed receipt enforcement modes',
+        field: 'payload.metadata.data_handling.enforcement_mode',
+      };
+    }
+  }
+
+  if (dataHandling.simulated_receipt_count !== undefined) {
+    if (
+      typeof dataHandling.simulated_receipt_count !== 'number' ||
+      !Number.isInteger(dataHandling.simulated_receipt_count) ||
+      dataHandling.simulated_receipt_count < 0
+    ) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'payload.metadata.data_handling.simulated_receipt_count must be a non-negative integer',
+        field: 'payload.metadata.data_handling.simulated_receipt_count',
+      };
+    }
+    if (dataHandling.simulated_receipt_count !== simulatedReceiptCount) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'payload.metadata.data_handling.simulated_receipt_count must match signed receipt evidence',
+        field: 'payload.metadata.data_handling.simulated_receipt_count',
+      };
+    }
+  }
+
+  if (dataHandling.enforced_receipt_count !== undefined) {
+    if (
+      typeof dataHandling.enforced_receipt_count !== 'number' ||
+      !Number.isInteger(dataHandling.enforced_receipt_count) ||
+      dataHandling.enforced_receipt_count < 0
+    ) {
+      return {
+        ok: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'payload.metadata.data_handling.enforced_receipt_count must be a non-negative integer',
+        field: 'payload.metadata.data_handling.enforced_receipt_count',
+      };
+    }
+    if (dataHandling.enforced_receipt_count !== enforcedReceiptCount) {
+      return {
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'payload.metadata.data_handling.enforced_receipt_count must match signed receipt evidence',
+        field: 'payload.metadata.data_handling.enforced_receipt_count',
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    summary: {
+      present: true,
+      receipt_count: receiptCount,
+      simulated_receipt_count: simulatedReceiptCount,
+      enforced_receipt_count: enforcedReceiptCount,
+      enforcement_mode: actualEnforcementMode,
+    },
+  };
 }
 
 interface ClddDiscrepancySummary {
@@ -8626,6 +9151,21 @@ export async function verifyProofBundle(
         field: dataHandlingEvidence.field,
       },
     };
+  }
+  const dataHandlingComponent = componentResults as unknown as Record<string, unknown>;
+  dataHandlingComponent['data_handling_evidence_present'] =
+    dataHandlingEvidence.summary.present;
+  dataHandlingComponent['data_handling_evidence_valid'] = true;
+  dataHandlingComponent['data_handling_receipts_count'] =
+    dataHandlingEvidence.summary.receipt_count;
+  dataHandlingComponent['data_handling_simulated_receipts_count'] =
+    dataHandlingEvidence.summary.simulated_receipt_count;
+  dataHandlingComponent['data_handling_enforced_receipts_count'] =
+    dataHandlingEvidence.summary.enforced_receipt_count;
+  dataHandlingComponent['data_handling_enforcement_mode'] =
+    dataHandlingEvidence.summary.enforcement_mode;
+  if (dataHandlingEvidence.summary.simulated_receipt_count > 0) {
+    modelIdentityRiskFlags.add('DLP_SIMULATION_MODE_PRESENT');
   }
 
   const runnerMeasurementVerification = await validateRunnerMeasurementMetadata({
