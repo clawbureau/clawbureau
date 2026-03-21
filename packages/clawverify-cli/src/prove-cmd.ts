@@ -66,6 +66,29 @@ type ProofRunnerAttestationReasonCode =
   | 'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED'
   | 'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
 
+type ProofReviewerSignoffDecision = 'approve' | 'reject' | 'needs_changes';
+type ProofReviewerSignoffTargetKind = 'run' | 'export_pack';
+
+export interface ProofReviewerSignoffState {
+  present: boolean;
+  receipt_count: number;
+  structured_receipt_count: number;
+  reviewer_dids: string[];
+  decision_counts: {
+    approve: number;
+    reject: number;
+    needs_changes: number;
+  };
+  target_counts: {
+    run: number;
+    export_pack: number;
+  };
+  latest_timestamp: string | null;
+  dispute_present: boolean;
+  dispute_note_count: number;
+  dispute_evidence_refs_count: number;
+}
+
 export interface ProofPrivacyProcessorRoute {
   provider: string;
   model: string;
@@ -199,6 +222,7 @@ export interface ProofReport {
     classification_counts: Record<string, number>;
     top_processes: Array<{ process_name: string; count: number }>;
   };
+  reviewer_signoff: ProofReviewerSignoffState;
   privacy_posture: ProofPrivacyPosture;
   review_buckets: ProofReviewBucket[];
   warnings: string[];
@@ -292,6 +316,26 @@ type ProofReportBase = Omit<
   'input_path' | 'run_summary_path' | 'generated_at' | 'review_buckets' | 'warnings' | 'next_steps' | 'verify_command' | 'html_path'
 >;
 
+const DEFAULT_REVIEWER_SIGNOFF_STATE: ProofReviewerSignoffState = {
+  present: false,
+  receipt_count: 0,
+  structured_receipt_count: 0,
+  reviewer_dids: [],
+  decision_counts: {
+    approve: 0,
+    reject: 0,
+    needs_changes: 0,
+  },
+  target_counts: {
+    run: 0,
+    export_pack: 0,
+  },
+  latest_timestamp: null,
+  dispute_present: false,
+  dispute_note_count: 0,
+  dispute_evidence_refs_count: 0,
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -306,6 +350,14 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asNonNegativeInteger(value: unknown): number | null {
+  const parsed = asNumber(value);
+  if (parsed === null || !Number.isInteger(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
 }
 
 function asBoolean(value: unknown): boolean | null {
@@ -328,6 +380,10 @@ function dedupeStrings(values: string[]): string[] {
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
   return [...new Set(normalized)];
+}
+
+function hasOnlyAllowedKeys(record: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  return Object.keys(record).every((key) => allowedKeys.includes(key));
 }
 
 function isDataHandlingAction(value: unknown): value is DataHandlingAction {
@@ -770,6 +826,7 @@ function buildExportPackReport(report: ProofReport): ProofReport {
     warnings: packReport.warnings,
     verify_command: verifyCommand,
     privacy_posture: packReport.privacy_posture,
+    reviewer_signoff: packReport.reviewer_signoff,
   });
 
   return packReport;
@@ -784,6 +841,9 @@ function renderPrivacyClaimsBoundaryMarkdown(report: ProofReport): string {
   lines.push(`Agent DID: ${report.public_layer.agent_did ?? 'unknown'}`);
   lines.push(`Privacy verdict: ${report.privacy_posture.overall_verdict.toUpperCase()}`);
   lines.push(`Runner attestation posture: ${report.privacy_posture.runner_attestation.posture.toUpperCase()} (${report.privacy_posture.runner_attestation.reason_code})`);
+  lines.push(`Reviewer signoff receipts: ${report.reviewer_signoff.receipt_count}`);
+  lines.push(`Structured reviewer signoff receipts: ${report.reviewer_signoff.structured_receipt_count}`);
+  lines.push(`Reviewer dispute state: ${report.reviewer_signoff.dispute_present ? 'present' : 'none'}`);
   lines.push('');
   lines.push('## What This Pack Proves');
   if (report.privacy_posture.proven_claims.length === 0) {
@@ -818,6 +878,7 @@ function renderPrivacyExportPackReadme(report: ProofReport, hasComparison: boole
   lines.push('- `proof-bundle/proof_bundle.json`: proof bundle included in this export pack.');
   lines.push('- `privacy-evidence/*.json`: privacy policy receipts/evidence extracted from bundle metadata when present.');
   lines.push('- Runner measurement / runner attestation evidence is copied into `privacy-evidence/` when present so reviewers can inspect the exact posture inputs.');
+  lines.push('- Reviewer signoff/dispute receipt evidence is copied into `privacy-evidence/` when present.');
   lines.push('- `reports/proof-report.json`: machine-readable prove report (includes privacy + runner-attestation posture).');
   lines.push('- `reports/proof-report.txt`: human-readable prove report.');
   lines.push('- `reports/proof-report.html`: pre-rendered proof report HTML using the same prove/export posture language.');
@@ -890,6 +951,8 @@ function renderExportPackViewerHtml(args: {
     report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_present,
     report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_structured,
   );
+  const reviewerDecisionSummary = `approve=${report.reviewer_signoff.decision_counts.approve}, reject=${report.reviewer_signoff.decision_counts.reject}, needs_changes=${report.reviewer_signoff.decision_counts.needs_changes}`;
+  const reviewerTargetSummary = `run=${report.reviewer_signoff.target_counts.run}, export_pack=${report.reviewer_signoff.target_counts.export_pack}`;
   const hasComparison = args.comparison !== undefined;
   const comparisonHighlights = args.comparison?.reviewer_highlights ?? [];
   const comparisonPrimaryLinks = hasComparison
@@ -1000,6 +1063,12 @@ function renderExportPackViewerHtml(args: {
           <div class="row"><span class="label">Runner measurement evidence</span><strong>${escapeHtml(runnerMeasurementEvidence)}</strong></div>
           <div class="row"><span class="label">Runner attestation receipt</span><strong>${escapeHtml(runnerAttestationReceiptEvidence)}</strong></div>
           <div class="row"><span class="label">Runner attestation bindings</span><strong>${report.privacy_posture.runner_attestation.evidence.binding_consistent ? 'consistent' : 'not established'}</strong></div>
+          <div class="row"><span class="label">Reviewer signoff receipts</span><strong>${report.reviewer_signoff.receipt_count}</strong></div>
+          <div class="row"><span class="label">Structured reviewer signoff</span><strong>${report.reviewer_signoff.structured_receipt_count}</strong></div>
+          <div class="row"><span class="label">Reviewer decisions</span><strong>${escapeHtml(reviewerDecisionSummary)}</strong></div>
+          <div class="row"><span class="label">Bound targets</span><strong>${escapeHtml(reviewerTargetSummary)}</strong></div>
+          <div class="row"><span class="label">Latest reviewer timestamp</span><strong>${escapeHtml(report.reviewer_signoff.latest_timestamp ?? 'unknown')}</strong></div>
+          <div class="row"><span class="label">Dispute state</span><strong>${report.reviewer_signoff.dispute_present ? 'present' : 'none'}</strong></div>
         </div>
       </article>
 
@@ -1086,6 +1155,12 @@ function collectPrivacyEvidenceFiles(bundle: Record<string, unknown>): Array<{
     files.push({
       relative_path: 'privacy-evidence/runner_attestation_receipt.json',
       payload: metadata.runner_attestation_receipt,
+    });
+  }
+  if (metadata && metadata.reviewer_signoff_receipts !== undefined) {
+    files.push({
+      relative_path: 'privacy-evidence/reviewer_signoff_receipts.json',
+      payload: metadata.reviewer_signoff_receipts,
     });
   }
 
@@ -1368,6 +1443,217 @@ function summarizeSentinels(payload: Record<string, unknown>): ProofReport['sent
   };
 }
 
+function isReviewerSignoffDecision(value: unknown): value is ProofReviewerSignoffDecision {
+  return value === 'approve' || value === 'reject' || value === 'needs_changes';
+}
+
+function isReviewerSignoffTargetKind(value: unknown): value is ProofReviewerSignoffTargetKind {
+  return value === 'run' || value === 'export_pack';
+}
+
+function summarizeReviewerSignoff(payload: Record<string, unknown>): ProofReviewerSignoffState {
+  const metadata = isRecord(payload.metadata) ? payload.metadata : null;
+  const receiptsRaw = metadata?.reviewer_signoff_receipts;
+  const receipts = Array.isArray(receiptsRaw)
+    ? receiptsRaw.filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    : [];
+  const decisionCounts: ProofReviewerSignoffState['decision_counts'] = {
+    approve: 0,
+    reject: 0,
+    needs_changes: 0,
+  };
+  const targetCounts: ProofReviewerSignoffState['target_counts'] = {
+    run: 0,
+    export_pack: 0,
+  };
+  const reviewerDids = new Set<string>();
+  const bundleId = asString(payload.bundle_id);
+  const eventChain = asArray(payload.event_chain).filter((entry): entry is Record<string, unknown> => isRecord(entry));
+  const expectedRunId = asString(eventChain[0]?.run_id);
+  const allowedEventHashes = new Set(
+    eventChain
+      .map((entry) => asString(entry.event_hash_b64u))
+      .filter((entry): entry is string => entry !== null),
+  );
+
+  let structuredCount = 0;
+  let latestTimestamp: string | null = null;
+  let latestTimestampMs = Number.NEGATIVE_INFINITY;
+  let disputePresent = false;
+  let disputeNoteCount = 0;
+  let disputeEvidenceRefCount = 0;
+
+  receiptLoop:
+  for (const envelope of receipts) {
+    const signerDid = asString(envelope.signer_did);
+    if (
+      !hasOnlyAllowedKeys(envelope, [
+        'envelope_version',
+        'envelope_type',
+        'payload',
+        'payload_hash_b64u',
+        'hash_algorithm',
+        'signature_b64u',
+        'algorithm',
+        'signer_did',
+        'issued_at',
+      ]) ||
+      asString(envelope.envelope_version) !== '1' ||
+      asString(envelope.envelope_type) !== 'reviewer_signoff_receipt' ||
+      asString(envelope.hash_algorithm) !== 'SHA-256' ||
+      asString(envelope.algorithm) !== 'Ed25519' ||
+      signerDid === null ||
+      !signerDid.startsWith('did:') ||
+      !isBase64UrlLike(asString(envelope.payload_hash_b64u)) ||
+      !isBase64UrlLike(asString(envelope.signature_b64u)) ||
+      !isIsoTimestamp(asString(envelope.issued_at)) ||
+      !isRecord(envelope.payload)
+    ) {
+      continue;
+    }
+
+    const receiptPayload = envelope.payload;
+    const binding = isRecord(receiptPayload.binding) ? receiptPayload.binding : null;
+    const reviewerDid = asString(receiptPayload.reviewer_did);
+    const timestamp = asString(receiptPayload.timestamp);
+    const eventHash = asString(binding?.event_hash_b64u);
+    if (
+      !hasOnlyAllowedKeys(receiptPayload, [
+        'receipt_version',
+        'receipt_id',
+        'reviewer_did',
+        'decision',
+        'timestamp',
+        'binding',
+        'dispute',
+      ]) ||
+      bundleId === null ||
+      expectedRunId === null ||
+      allowedEventHashes.size === 0 ||
+      computeJsonSha256B64u(receiptPayload) !== asString(envelope.payload_hash_b64u) ||
+      asString(receiptPayload.receipt_version) !== '1' ||
+      asString(receiptPayload.receipt_id) === null ||
+      reviewerDid === null ||
+      reviewerDid !== signerDid ||
+      !isReviewerSignoffDecision(receiptPayload.decision) ||
+      !isIsoTimestamp(timestamp) ||
+      !binding ||
+      !hasOnlyAllowedKeys(binding, [
+        'run_id',
+        'bundle_id',
+        'proof_bundle_hash_b64u',
+        'event_hash_b64u',
+        'target_kind',
+        'export_pack_root_hash_b64u',
+      ]) ||
+      asString(binding.run_id) !== expectedRunId ||
+      asString(binding.bundle_id) !== bundleId ||
+      (binding.proof_bundle_hash_b64u !== undefined &&
+        !isBase64UrlLike(asString(binding.proof_bundle_hash_b64u))) ||
+      !isBase64UrlLike(eventHash) ||
+      !allowedEventHashes.has(eventHash!) ||
+      !isReviewerSignoffTargetKind(binding.target_kind)
+    ) {
+      continue;
+    }
+    if (binding.target_kind === 'export_pack') {
+      if (!isBase64UrlLike(asString(binding.export_pack_root_hash_b64u))) {
+        continue;
+      }
+    } else if (binding.export_pack_root_hash_b64u !== undefined) {
+      continue;
+    }
+
+    let receiptDisputePresent = false;
+    let receiptDisputeNoteCount = 0;
+    let receiptDisputeEvidenceRefCount = 0;
+
+    if (receiptPayload.dispute !== undefined) {
+      const dispute = isRecord(receiptPayload.dispute) ? receiptPayload.dispute : null;
+      if (!dispute || !hasOnlyAllowedKeys(dispute, ['status', 'notes'])) {
+        continue;
+      }
+      const status = asString(dispute.status);
+      if (status !== 'none' && status !== 'raised' && status !== 'resolved') {
+        continue;
+      }
+      const notesRaw = dispute.notes;
+      if (notesRaw !== undefined && !Array.isArray(notesRaw)) {
+        continue;
+      }
+      const notes = Array.isArray(notesRaw) ? notesRaw : [];
+      if (status !== 'none' && notes.length === 0) {
+        continue;
+      }
+      if (status === 'none' && notes.length > 0) {
+        continue;
+      }
+      for (const note of notes) {
+        if (
+          !isRecord(note) ||
+          !hasOnlyAllowedKeys(note, ['note_id', 'note', 'evidence_refs']) ||
+          asString(note.note_id) === null ||
+          asString(note.note) === null
+        ) {
+          continue receiptLoop;
+        }
+        const evidenceRefsRaw = note.evidence_refs;
+        if (evidenceRefsRaw !== undefined && !Array.isArray(evidenceRefsRaw)) {
+          continue receiptLoop;
+        }
+        receiptDisputeNoteCount += 1;
+        for (const ref of evidenceRefsRaw ?? []) {
+          const uri = isRecord(ref) ? asString(ref.uri) : null;
+          const sha256 = isRecord(ref) ? asString(ref.sha256_b64u) : null;
+          if (
+            !isRecord(ref) ||
+            !hasOnlyAllowedKeys(ref, ['ref_id', 'uri', 'sha256_b64u']) ||
+            (ref.ref_id !== undefined && asString(ref.ref_id) === null) ||
+            (ref.uri !== undefined && uri === null) ||
+            (ref.sha256_b64u !== undefined && !isBase64UrlLike(sha256)) ||
+            (uri === null && !isBase64UrlLike(sha256))
+          ) {
+            continue receiptLoop;
+          }
+          receiptDisputeEvidenceRefCount += 1;
+        }
+      }
+      if (status === 'raised' || status === 'resolved') {
+        receiptDisputePresent = true;
+      }
+    }
+
+    structuredCount += 1;
+    decisionCounts[receiptPayload.decision] += 1;
+    targetCounts[binding.target_kind] += 1;
+    reviewerDids.add(reviewerDid);
+
+    if (timestamp) {
+      const timestampMs = Date.parse(timestamp);
+      if (Number.isFinite(timestampMs) && timestampMs >= latestTimestampMs) {
+        latestTimestampMs = timestampMs;
+        latestTimestamp = timestamp;
+      }
+    }
+    disputePresent ||= receiptDisputePresent;
+    disputeNoteCount += receiptDisputeNoteCount;
+    disputeEvidenceRefCount += receiptDisputeEvidenceRefCount;
+  }
+
+  return {
+    present: receiptsRaw !== undefined,
+    receipt_count: Array.isArray(receiptsRaw) ? receiptsRaw.length : 0,
+    structured_receipt_count: structuredCount,
+    reviewer_dids: [...reviewerDids].sort((a, b) => a.localeCompare(b)),
+    decision_counts: decisionCounts,
+    target_counts: targetCounts,
+    latest_timestamp: latestTimestamp,
+    dispute_present: disputePresent,
+    dispute_note_count: disputeNoteCount,
+    dispute_evidence_refs_count: disputeEvidenceRefCount,
+  };
+}
+
 const DATA_HANDLING_ACTION_ORDER: DataHandlingAction[] = ['allow', 'redact', 'block', 'require_approval'];
 
 function buildComparisonDeltaRow(
@@ -1471,6 +1757,20 @@ function buildRunComparisonReviewerHighlights(args: {
   if (baseline.privacy_posture.overall_verdict !== candidate.privacy_posture.overall_verdict) {
     highlights.push(
       `Privacy verdict changed: ${baseline.privacy_posture.overall_verdict.toUpperCase()} -> ${candidate.privacy_posture.overall_verdict.toUpperCase()}.`,
+    );
+    privacyHighlights += 1;
+  }
+
+  if (baseline.reviewer_signoff.receipt_count !== candidate.reviewer_signoff.receipt_count) {
+    highlights.push(
+      `Reviewer signoff receipt count changed: ${baseline.reviewer_signoff.receipt_count} -> ${candidate.reviewer_signoff.receipt_count}.`,
+    );
+    privacyHighlights += 1;
+  }
+
+  if (baseline.reviewer_signoff.dispute_present !== candidate.reviewer_signoff.dispute_present) {
+    highlights.push(
+      `Reviewer dispute state changed: ${baseline.reviewer_signoff.dispute_present ? 'present' : 'none'} -> ${candidate.reviewer_signoff.dispute_present ? 'present' : 'none'}.`,
     );
     privacyHighlights += 1;
   }
@@ -1635,6 +1935,16 @@ function buildProofRunComparison(args: {
       candidate.privacy_posture.evidence.runner_attestation_receipt_present,
     ),
     buildComparisonDeltaRow(
+      'Reviewer signoff receipts',
+      baseline.reviewer_signoff.receipt_count,
+      candidate.reviewer_signoff.receipt_count,
+    ),
+    buildComparisonDeltaRow(
+      'Reviewer dispute notes',
+      baseline.reviewer_signoff.dispute_note_count,
+      candidate.reviewer_signoff.dispute_note_count,
+    ),
+    buildComparisonDeltaRow(
       'Blocked egress attempts',
       baseline.privacy_posture.egress.blocked_attempt_count,
       candidate.privacy_posture.egress.blocked_attempt_count,
@@ -1756,6 +2066,11 @@ function buildProofRunComparison(args: {
       'Runner attestation bindings consistent',
       baseline.privacy_posture.runner_attestation.evidence.binding_consistent,
       candidate.privacy_posture.runner_attestation.evidence.binding_consistent,
+    ),
+    buildComparisonDeltaRow(
+      'Reviewer dispute present',
+      baseline.reviewer_signoff.dispute_present,
+      candidate.reviewer_signoff.dispute_present,
     ),
   ];
 
@@ -1970,6 +2285,45 @@ function isProofReportLike(value: unknown): value is ProofReport {
   );
 }
 
+function normalizeReviewerSignoffState(value: unknown): ProofReviewerSignoffState {
+  if (!isRecord(value)) {
+    return DEFAULT_REVIEWER_SIGNOFF_STATE;
+  }
+
+  const decisionCounts = isRecord(value.decision_counts) ? value.decision_counts : null;
+  const targetCounts = isRecord(value.target_counts) ? value.target_counts : null;
+  const receiptCount = asNonNegativeInteger(value.receipt_count) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.receipt_count;
+  const structuredCount = asNonNegativeInteger(value.structured_receipt_count) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.structured_receipt_count;
+
+  return {
+    present: asBoolean(value.present) ?? true,
+    receipt_count: receiptCount,
+    structured_receipt_count: Math.min(structuredCount, receiptCount),
+    reviewer_dids: dedupeStrings(asStringArray(value.reviewer_dids)).sort((a, b) => a.localeCompare(b)),
+    decision_counts: {
+      approve: asNonNegativeInteger(decisionCounts?.approve) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.decision_counts.approve,
+      reject: asNonNegativeInteger(decisionCounts?.reject) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.decision_counts.reject,
+      needs_changes: asNonNegativeInteger(decisionCounts?.needs_changes) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.decision_counts.needs_changes,
+    },
+    target_counts: {
+      run: asNonNegativeInteger(targetCounts?.run) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.target_counts.run,
+      export_pack: asNonNegativeInteger(targetCounts?.export_pack) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.target_counts.export_pack,
+    },
+    latest_timestamp: asString(value.latest_timestamp),
+    dispute_present: asBoolean(value.dispute_present) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.dispute_present,
+    dispute_note_count: asNonNegativeInteger(value.dispute_note_count) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.dispute_note_count,
+    dispute_evidence_refs_count: asNonNegativeInteger(value.dispute_evidence_refs_count) ?? DEFAULT_REVIEWER_SIGNOFF_STATE.dispute_evidence_refs_count,
+  };
+}
+
+function normalizeProofReportForComparison(report: ProofReport): ProofReport {
+  const reportRecord = report as unknown as Record<string, unknown>;
+  return {
+    ...report,
+    reviewer_signoff: normalizeReviewerSignoffState(reportRecord.reviewer_signoff),
+  };
+}
+
 async function loadRunComparisonBaseline(compareWithPath: string): Promise<{
   report: ProofReport;
   sourceType: ProofRunComparison['baseline_source']['type'];
@@ -1984,7 +2338,7 @@ async function loadRunComparisonBaseline(compareWithPath: string): Promise<{
       throw new Error(`Comparison export-pack report is not a valid proof report: ${reportPath}`);
     }
     return {
-      report: parsed,
+      report: normalizeProofReportForComparison(parsed),
       sourceType: 'export_pack',
     };
   }
@@ -1992,7 +2346,7 @@ async function loadRunComparisonBaseline(compareWithPath: string): Promise<{
   const parsed = await readJsonObject(resolvedComparePath);
   if (isProofReportLike(parsed)) {
     return {
-      report: parsed,
+      report: normalizeProofReportForComparison(parsed),
       sourceType: 'proof_report',
     };
   }
@@ -2627,6 +2981,23 @@ function deriveWarnings(report: ProofReportBase): string[] {
   } else if (report.privacy_posture.overall_verdict === 'caution') {
     warnings.push('Privacy posture verdict is CAUTION; verify missing/flagged privacy evidence before external sharing.');
   }
+  if (report.reviewer_signoff.structured_receipt_count < report.reviewer_signoff.receipt_count) {
+    const invalidReceiptCount =
+      report.reviewer_signoff.receipt_count - report.reviewer_signoff.structured_receipt_count;
+    warnings.push(
+      `${invalidReceiptCount} reviewer signoff ${pluralize(invalidReceiptCount, 'receipt')} failed structural binding checks in the local report summary.`,
+    );
+  }
+  if (report.reviewer_signoff.decision_counts.reject > 0) {
+    warnings.push(
+      `${report.reviewer_signoff.decision_counts.reject} reviewer signoff ${pluralize(report.reviewer_signoff.decision_counts.reject, 'receipt')} recorded decision=reject.`,
+    );
+  }
+  if (report.reviewer_signoff.dispute_present) {
+    warnings.push(
+      `Reviewer dispute notes are present (${report.reviewer_signoff.dispute_note_count} notes, ${report.reviewer_signoff.dispute_evidence_refs_count} evidence refs).`,
+    );
+  }
   for (const signal of report.privacy_posture.signal_buckets.reviewer_action_required.slice(0, 3)) {
     warnings.push(`Privacy signal: ${signal}`);
   }
@@ -2635,7 +3006,7 @@ function deriveWarnings(report: ProofReportBase): string[] {
 }
 
 function deriveNextSteps(
-  report: Pick<ProofReport, 'gateway' | 'warnings' | 'verify_command' | 'privacy_posture'>,
+  report: Pick<ProofReport, 'gateway' | 'warnings' | 'verify_command' | 'privacy_posture' | 'reviewer_signoff'>,
 ): string[] {
   const steps: string[] = [];
   if (report.gateway.signed_count > 0) {
@@ -2654,6 +3025,13 @@ function deriveNextSteps(
     steps.push('Runner attestation posture is ATTESTED in this report; still run canonical verification before relying on attested-tier claims.');
   } else {
     steps.push('Runner attestation posture is NON-ATTESTED; avoid making attested-tier runtime integrity claims for this run.');
+  }
+  if (report.reviewer_signoff.dispute_present) {
+    steps.push('Resolve reviewer dispute notes/evidence references before final signoff or payout decisions.');
+  } else if (report.reviewer_signoff.structured_receipt_count > 0) {
+    steps.push('Reviewer signoff receipts are present; verify decisions and binding targets before external reliance.');
+  } else if (report.reviewer_signoff.receipt_count > 0) {
+    steps.push('Reviewer signoff receipt objects are present, but some are not structurally bound to this bundle; inspect them before external reliance.');
   }
   steps.push(`Canonical offline verifier command: ${report.verify_command}`);
   if (report.warnings.length > 0) {
@@ -2674,6 +3052,7 @@ export function buildProofReport(args: {
   const gateway = summarizeGateway(payload);
   const sentinels = summarizeSentinels(payload);
   const network = summarizeNetwork(payload);
+  const reviewerSignoff = summarizeReviewerSignoff(payload);
   const harnessStatus = asString(runSummary?.status);
   const harnessTier = asString(runSummary?.tier);
   const harnessTrustTier = asString(runSummary?.trust_tier);
@@ -2706,6 +3085,7 @@ export function buildProofReport(args: {
     gateway,
     sentinels,
     network,
+    reviewer_signoff: reviewerSignoff,
     privacy_posture: privacyPosture,
     decrypted_payload_keys: decryptedPayload ? Object.keys(decryptedPayload) : undefined,
   };
@@ -2726,6 +3106,7 @@ export function buildProofReport(args: {
       warnings,
       verify_command: verifyCommand,
       privacy_posture: privacyPosture,
+      reviewer_signoff: reviewerSignoff,
     }),
     verify_command: verifyCommand,
   };
@@ -2809,6 +3190,8 @@ export function renderProofReportHtml(report: ProofReport): string {
     ...report.privacy_posture.egress.allowed_proxy_destinations.map((host) => formatAllowedEgressDestination('proxy', host)),
     ...report.privacy_posture.egress.allowed_child_destinations.map((host) => formatAllowedEgressDestination('child', host)),
   ];
+  const reviewerDecisionSummary = `approve=${report.reviewer_signoff.decision_counts.approve}, reject=${report.reviewer_signoff.decision_counts.reject}, needs_changes=${report.reviewer_signoff.decision_counts.needs_changes}`;
+  const reviewerTargetSummary = `run=${report.reviewer_signoff.target_counts.run}, export_pack=${report.reviewer_signoff.target_counts.export_pack}`;
   const runComparisonCard = report.run_comparison
     ? `<article class="card">
         <h2>Side-by-side run comparison</h2>
@@ -2990,6 +3373,23 @@ export function renderProofReportHtml(report: ProofReport): string {
         <div class="subheading">Allowed egress destinations</div>
         <ul>${renderList(allowedEgressItems)}</ul>
       </article>
+
+      <article class="card">
+        <h2>Reviewer signoff/dispute</h2>
+        ${renderKeyValueRows([
+          ['Signoff receipts present', report.reviewer_signoff.present ? 'yes' : 'no'],
+          ['Signoff receipt count', report.reviewer_signoff.receipt_count],
+          ['Structured signoff count', report.reviewer_signoff.structured_receipt_count],
+          ['Decision counts', reviewerDecisionSummary],
+          ['Target counts', reviewerTargetSummary],
+          ['Latest signoff timestamp', report.reviewer_signoff.latest_timestamp],
+          ['Dispute present', report.reviewer_signoff.dispute_present ? 'yes' : 'no'],
+          ['Dispute note count', report.reviewer_signoff.dispute_note_count],
+          ['Dispute evidence refs', report.reviewer_signoff.dispute_evidence_refs_count],
+        ])}
+        <div class="subheading">Reviewer DIDs</div>
+        <ul>${renderList(report.reviewer_signoff.reviewer_dids)}</ul>
+      </article>
     </section>
 
     <section class="grid">
@@ -3136,6 +3536,22 @@ export function renderProofReportText(report: ProofReport): string {
     report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_structured,
   )}`);
   lines.push(`  Runner attestation bindings : ${report.privacy_posture.runner_attestation.evidence.binding_consistent ? 'consistent' : 'not established'}`);
+  lines.push(`  Reviewer signoff receipts   : ${report.reviewer_signoff.receipt_count}`);
+  lines.push(`  Structured signoff receipts : ${report.reviewer_signoff.structured_receipt_count}`);
+  lines.push(`  Reviewer decisions          : approve=${report.reviewer_signoff.decision_counts.approve}, reject=${report.reviewer_signoff.decision_counts.reject}, needs_changes=${report.reviewer_signoff.decision_counts.needs_changes}`);
+  lines.push(`  Reviewer target bindings    : run=${report.reviewer_signoff.target_counts.run}, export_pack=${report.reviewer_signoff.target_counts.export_pack}`);
+  lines.push(`  Reviewer dispute present    : ${report.reviewer_signoff.dispute_present ? 'yes' : 'no'}`);
+  lines.push(`  Reviewer dispute notes      : ${report.reviewer_signoff.dispute_note_count}`);
+  lines.push(`  Reviewer dispute evidence   : ${report.reviewer_signoff.dispute_evidence_refs_count}`);
+  lines.push(`  Latest reviewer timestamp   : ${report.reviewer_signoff.latest_timestamp ?? 'unknown'}`);
+  lines.push('  Reviewer DIDs:');
+  if (report.reviewer_signoff.reviewer_dids.length === 0) {
+    lines.push('    - none recorded');
+  } else {
+    for (const reviewerDid of report.reviewer_signoff.reviewer_dids) {
+      lines.push(`    - ${reviewerDid}`);
+    }
+  }
   lines.push(`  Blocked egress attempts     : ${report.privacy_posture.egress.blocked_attempt_count ?? 0}`);
   lines.push(`  Direct providers blocked    : ${report.privacy_posture.egress.direct_provider_access_blocked === null ? 'unknown' : report.privacy_posture.egress.direct_provider_access_blocked ? 'true' : 'false'}`);
   lines.push(`  Proofed mode                : ${report.privacy_posture.egress.proofed_mode === null ? 'unknown' : report.privacy_posture.egress.proofed_mode ? 'true' : 'false'}`);

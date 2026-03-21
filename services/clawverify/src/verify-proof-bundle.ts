@@ -41,6 +41,8 @@ import type {
   PolicyBindingMetadata,
   RunnerMeasurementBindingMetadata,
   RunnerAttestationReceiptPayload,
+  ReviewerSignoffReceiptEnvelope,
+  ReviewerSignoffReceiptPayload,
   SignedPolicyBundlePayload,
   SignedPolicyLayer,
   SignedPolicyStatement,
@@ -3373,6 +3375,13 @@ function extractRunnerAttestationReceiptEnvelope(
   return metadataRecord.runner_attestation_receipt;
 }
 
+function extractReviewerSignoffReceipts(
+  metadataRecord: Record<string, unknown> | null,
+): unknown {
+  if (!metadataRecord) return undefined;
+  return metadataRecord.reviewer_signoff_receipts;
+}
+
 interface EgressPolicyReceiptVerificationOutcome {
   valid: boolean;
   signature_valid: boolean;
@@ -3387,6 +3396,25 @@ interface RunnerAttestationReceiptVerificationOutcome {
   code?: VerificationError['code'];
   message?: string;
   field?: string;
+}
+
+interface ReviewerSignoffVerificationOutcome {
+  valid: boolean;
+  code?: VerificationError['code'];
+  message?: string;
+  field?: string;
+  summary?: {
+    present: boolean;
+    receipts_count: number;
+    decision_counts: {
+      approve: number;
+      reject: number;
+      needs_changes: number;
+    };
+    dispute_present: boolean;
+    dispute_note_count: number;
+    dispute_evidence_refs_count: number;
+  };
 }
 
 interface PolicyBindingVerificationOutcome {
@@ -5455,6 +5483,584 @@ async function verifyRunnerAttestationReceiptEnvelope(args: {
   }
 
   return { valid: true, signature_valid: true };
+}
+
+async function verifyReviewerSignoffReceipts(args: {
+  receipts: unknown;
+  bundleId: string;
+  expectedRunId: string | null;
+  allowedEventHashes: Set<string> | null;
+}): Promise<ReviewerSignoffVerificationOutcome> {
+  const summary: NonNullable<ReviewerSignoffVerificationOutcome['summary']> = {
+    present: false,
+    receipts_count: 0,
+    decision_counts: {
+      approve: 0,
+      reject: 0,
+      needs_changes: 0,
+    },
+    dispute_present: false,
+    dispute_note_count: 0,
+    dispute_evidence_refs_count: 0,
+  };
+
+  if (args.receipts === undefined) {
+    return { valid: true, summary };
+  }
+
+  summary.present = true;
+  if (!Array.isArray(args.receipts) || args.receipts.length === 0) {
+    return {
+      valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'payload.metadata.reviewer_signoff_receipts must be a non-empty array',
+      field: 'payload.metadata.reviewer_signoff_receipts',
+      summary,
+    };
+  }
+  if (!args.expectedRunId || !args.allowedEventHashes) {
+    return {
+      valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'reviewer signoff receipts require a valid payload.event_chain for run/event binding',
+      field: 'payload.metadata.reviewer_signoff_receipts',
+      summary,
+    };
+  }
+
+  for (let i = 0; i < args.receipts.length; i++) {
+    const receiptRaw = args.receipts[i];
+    const fieldPrefix = `payload.metadata.reviewer_signoff_receipts[${i}]`;
+
+    if (!isObjectRecord(receiptRaw)) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt must be an object',
+        field: fieldPrefix,
+        summary,
+      };
+    }
+    if (
+      !hasOnlyAllowedKeys(receiptRaw, [
+        'envelope_version',
+        'envelope_type',
+        'payload',
+        'payload_hash_b64u',
+        'hash_algorithm',
+        'signature_b64u',
+        'algorithm',
+        'signer_did',
+        'issued_at',
+      ])
+    ) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt envelope has unsupported fields',
+        field: fieldPrefix,
+        summary,
+      };
+    }
+
+    const envelope = receiptRaw as unknown as ReviewerSignoffReceiptEnvelope;
+    if (envelope.envelope_version !== '1') {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt envelope_version must be "1"',
+        field: `${fieldPrefix}.envelope_version`,
+        summary,
+      };
+    }
+    if (envelope.envelope_type !== 'reviewer_signoff_receipt') {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt envelope_type must be "reviewer_signoff_receipt"',
+        field: `${fieldPrefix}.envelope_type`,
+        summary,
+      };
+    }
+    if (envelope.hash_algorithm !== 'SHA-256') {
+      return {
+        valid: false,
+        code: 'UNKNOWN_HASH_ALGORITHM',
+        message: 'reviewer signoff receipt hash_algorithm must be SHA-256',
+        field: `${fieldPrefix}.hash_algorithm`,
+        summary,
+      };
+    }
+    if (envelope.algorithm !== 'Ed25519') {
+      return {
+        valid: false,
+        code: 'UNKNOWN_ALGORITHM',
+        message: 'reviewer signoff receipt algorithm must be Ed25519',
+        field: `${fieldPrefix}.algorithm`,
+        summary,
+      };
+    }
+    if (
+      typeof envelope.payload_hash_b64u !== 'string' ||
+      !isBase64Url(envelope.payload_hash_b64u)
+    ) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt payload_hash_b64u must be base64url',
+        field: `${fieldPrefix}.payload_hash_b64u`,
+        summary,
+      };
+    }
+    if (
+      typeof envelope.signature_b64u !== 'string' ||
+      !isBase64Url(envelope.signature_b64u)
+    ) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt signature_b64u must be base64url',
+        field: `${fieldPrefix}.signature_b64u`,
+        summary,
+      };
+    }
+    if (!isValidDidFormat(envelope.signer_did)) {
+      return {
+        valid: false,
+        code: 'INVALID_DID_FORMAT',
+        message: 'reviewer signoff receipt signer_did must be a valid DID',
+        field: `${fieldPrefix}.signer_did`,
+        summary,
+      };
+    }
+    if (!isValidIsoDate(envelope.issued_at)) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt issued_at must be ISO-8601',
+        field: `${fieldPrefix}.issued_at`,
+        summary,
+      };
+    }
+    if (!isObjectRecord(envelope.payload)) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt payload must be an object',
+        field: `${fieldPrefix}.payload`,
+        summary,
+      };
+    }
+
+    const payload = envelope.payload as ReviewerSignoffReceiptPayload;
+    if (
+      !hasOnlyAllowedKeys(envelope.payload, [
+        'receipt_version',
+        'receipt_id',
+        'reviewer_did',
+        'decision',
+        'timestamp',
+        'binding',
+        'dispute',
+      ])
+    ) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt payload has unsupported fields',
+        field: `${fieldPrefix}.payload`,
+        summary,
+      };
+    }
+    if (payload.receipt_version !== '1') {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt payload.receipt_version must be "1"',
+        field: `${fieldPrefix}.payload.receipt_version`,
+        summary,
+      };
+    }
+    if (!isNonEmptyString(payload.receipt_id)) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt payload.receipt_id must be non-empty',
+        field: `${fieldPrefix}.payload.receipt_id`,
+        summary,
+      };
+    }
+    if (!isValidDidFormat(payload.reviewer_did)) {
+      return {
+        valid: false,
+        code: 'INVALID_DID_FORMAT',
+        message: 'reviewer signoff receipt payload.reviewer_did must be a valid DID',
+        field: `${fieldPrefix}.payload.reviewer_did`,
+        summary,
+      };
+    }
+    if (payload.reviewer_did !== envelope.signer_did) {
+      return {
+        valid: false,
+        code: 'EVIDENCE_MISMATCH',
+        message: 'reviewer signoff receipt payload.reviewer_did must match signer_did',
+        field: `${fieldPrefix}.payload.reviewer_did`,
+        summary,
+      };
+    }
+    if (
+      payload.decision !== 'approve' &&
+      payload.decision !== 'reject' &&
+      payload.decision !== 'needs_changes'
+    ) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'reviewer signoff receipt payload.decision must be approve/reject/needs_changes',
+        field: `${fieldPrefix}.payload.decision`,
+        summary,
+      };
+    }
+    if (!isValidIsoDate(payload.timestamp)) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt payload.timestamp must be ISO-8601',
+        field: `${fieldPrefix}.payload.timestamp`,
+        summary,
+      };
+    }
+    if (!isObjectRecord(payload.binding)) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt payload.binding must be an object',
+        field: `${fieldPrefix}.payload.binding`,
+        summary,
+      };
+    }
+    if (
+      !hasOnlyAllowedKeys(payload.binding, [
+        'run_id',
+        'bundle_id',
+        'proof_bundle_hash_b64u',
+        'event_hash_b64u',
+        'target_kind',
+        'export_pack_root_hash_b64u',
+      ])
+    ) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt payload.binding has unsupported fields',
+        field: `${fieldPrefix}.payload.binding`,
+        summary,
+      };
+    }
+    if (!isNonEmptyString(payload.binding.run_id) || payload.binding.run_id !== args.expectedRunId) {
+      return {
+        valid: false,
+        code: 'EVIDENCE_MISMATCH',
+        message: 'reviewer signoff receipt binding.run_id does not match proof bundle run_id',
+        field: `${fieldPrefix}.payload.binding.run_id`,
+        summary,
+      };
+    }
+    if (!isNonEmptyString(payload.binding.bundle_id) || payload.binding.bundle_id !== args.bundleId) {
+      return {
+        valid: false,
+        code: 'EVIDENCE_MISMATCH',
+        message: 'reviewer signoff receipt binding.bundle_id does not match payload.bundle_id',
+        field: `${fieldPrefix}.payload.binding.bundle_id`,
+        summary,
+      };
+    }
+    if (
+      payload.binding.proof_bundle_hash_b64u !== undefined &&
+      (typeof payload.binding.proof_bundle_hash_b64u !== 'string' ||
+        !isBase64Url(payload.binding.proof_bundle_hash_b64u))
+    ) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'reviewer signoff receipt binding.proof_bundle_hash_b64u must be base64url when present',
+        field: `${fieldPrefix}.payload.binding.proof_bundle_hash_b64u`,
+        summary,
+      };
+    }
+    if (
+      typeof payload.binding.event_hash_b64u !== 'string' ||
+      !isBase64Url(payload.binding.event_hash_b64u) ||
+      !args.allowedEventHashes.has(payload.binding.event_hash_b64u)
+    ) {
+      return {
+        valid: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          'reviewer signoff receipt binding.event_hash_b64u must reference payload.event_chain',
+        field: `${fieldPrefix}.payload.binding.event_hash_b64u`,
+        summary,
+      };
+    }
+    if (
+      payload.binding.target_kind !== 'run' &&
+      payload.binding.target_kind !== 'export_pack'
+    ) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message: 'reviewer signoff receipt binding.target_kind must be run/export_pack',
+        field: `${fieldPrefix}.payload.binding.target_kind`,
+        summary,
+      };
+    }
+    if (payload.binding.target_kind === 'export_pack') {
+      if (
+        typeof payload.binding.export_pack_root_hash_b64u !== 'string' ||
+        !isBase64Url(payload.binding.export_pack_root_hash_b64u)
+      ) {
+        return {
+          valid: false,
+          code: 'MALFORMED_ENVELOPE',
+          message:
+            'reviewer signoff receipt export_pack target requires binding.export_pack_root_hash_b64u',
+          field: `${fieldPrefix}.payload.binding.export_pack_root_hash_b64u`,
+          summary,
+        };
+      }
+    } else if (payload.binding.export_pack_root_hash_b64u !== undefined) {
+      return {
+        valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          'reviewer signoff receipt run target must not set binding.export_pack_root_hash_b64u',
+        field: `${fieldPrefix}.payload.binding.export_pack_root_hash_b64u`,
+        summary,
+      };
+    }
+
+    if (payload.dispute !== undefined) {
+      if (!isObjectRecord(payload.dispute)) {
+        return {
+          valid: false,
+          code: 'MALFORMED_ENVELOPE',
+          message: 'reviewer signoff receipt payload.dispute must be an object',
+          field: `${fieldPrefix}.payload.dispute`,
+          summary,
+        };
+      }
+      if (!hasOnlyAllowedKeys(payload.dispute, ['status', 'notes'])) {
+        return {
+          valid: false,
+          code: 'MALFORMED_ENVELOPE',
+          message: 'reviewer signoff receipt payload.dispute has unsupported fields',
+          field: `${fieldPrefix}.payload.dispute`,
+          summary,
+        };
+      }
+      const disputeStatus = payload.dispute.status;
+      if (
+        disputeStatus !== 'none' &&
+        disputeStatus !== 'raised' &&
+        disputeStatus !== 'resolved'
+      ) {
+        return {
+          valid: false,
+          code: 'MALFORMED_ENVELOPE',
+          message: 'reviewer signoff receipt dispute.status must be none/raised/resolved',
+          field: `${fieldPrefix}.payload.dispute.status`,
+          summary,
+        };
+      }
+      const notes = Array.isArray(payload.dispute.notes) ? payload.dispute.notes : [];
+      if (disputeStatus !== 'none' && notes.length === 0) {
+        return {
+          valid: false,
+          code: 'MALFORMED_ENVELOPE',
+          message: 'reviewer signoff dispute notes are required when dispute.status is raised/resolved',
+          field: `${fieldPrefix}.payload.dispute.notes`,
+          summary,
+        };
+      }
+      if (disputeStatus === 'none' && notes.length > 0) {
+        return {
+          valid: false,
+          code: 'MALFORMED_ENVELOPE',
+          message: 'reviewer signoff dispute notes must be empty when dispute.status is none',
+          field: `${fieldPrefix}.payload.dispute.notes`,
+          summary,
+        };
+      }
+      for (let noteIdx = 0; noteIdx < notes.length; noteIdx++) {
+        const noteRaw = notes[noteIdx];
+        const noteField = `${fieldPrefix}.payload.dispute.notes[${noteIdx}]`;
+        if (!isObjectRecord(noteRaw)) {
+          return {
+            valid: false,
+            code: 'MALFORMED_ENVELOPE',
+            message: 'reviewer signoff dispute note must be an object',
+            field: noteField,
+            summary,
+          };
+        }
+        if (!hasOnlyAllowedKeys(noteRaw, ['note_id', 'note', 'evidence_refs'])) {
+          return {
+            valid: false,
+            code: 'MALFORMED_ENVELOPE',
+            message: 'reviewer signoff dispute note has unsupported fields',
+            field: noteField,
+            summary,
+          };
+        }
+        if (!isNonEmptyString(noteRaw.note_id)) {
+          return {
+            valid: false,
+            code: 'MALFORMED_ENVELOPE',
+            message: 'reviewer signoff dispute note.note_id must be non-empty',
+            field: `${noteField}.note_id`,
+            summary,
+          };
+        }
+        if (!isNonEmptyString(noteRaw.note)) {
+          return {
+            valid: false,
+            code: 'MALFORMED_ENVELOPE',
+            message: 'reviewer signoff dispute note.note must be non-empty',
+            field: `${noteField}.note`,
+            summary,
+          };
+        }
+        summary.dispute_note_count += 1;
+
+        if (noteRaw.evidence_refs !== undefined) {
+          if (!Array.isArray(noteRaw.evidence_refs)) {
+            return {
+              valid: false,
+              code: 'MALFORMED_ENVELOPE',
+              message: 'reviewer signoff dispute note.evidence_refs must be an array when present',
+              field: `${noteField}.evidence_refs`,
+              summary,
+            };
+          }
+          for (let refIdx = 0; refIdx < noteRaw.evidence_refs.length; refIdx++) {
+            const refRaw = noteRaw.evidence_refs[refIdx];
+            const refField = `${noteField}.evidence_refs[${refIdx}]`;
+            if (!isObjectRecord(refRaw)) {
+              return {
+                valid: false,
+                code: 'MALFORMED_ENVELOPE',
+                message: 'reviewer signoff dispute evidence ref must be an object',
+                field: refField,
+                summary,
+              };
+            }
+            if (!hasOnlyAllowedKeys(refRaw, ['ref_id', 'uri', 'sha256_b64u'])) {
+              return {
+                valid: false,
+                code: 'MALFORMED_ENVELOPE',
+                message: 'reviewer signoff dispute evidence ref has unsupported fields',
+                field: refField,
+                summary,
+              };
+            }
+            if (refRaw.ref_id !== undefined && !isNonEmptyString(refRaw.ref_id)) {
+              return {
+                valid: false,
+                code: 'MALFORMED_ENVELOPE',
+                message: 'reviewer signoff dispute evidence ref_id must be non-empty when present',
+                field: `${refField}.ref_id`,
+                summary,
+              };
+            }
+            if (refRaw.uri !== undefined && !isNonEmptyString(refRaw.uri)) {
+              return {
+                valid: false,
+                code: 'MALFORMED_ENVELOPE',
+                message: 'reviewer signoff dispute evidence uri must be non-empty when present',
+                field: `${refField}.uri`,
+                summary,
+              };
+            }
+            if (
+              refRaw.sha256_b64u !== undefined &&
+              (typeof refRaw.sha256_b64u !== 'string' || !isBase64Url(refRaw.sha256_b64u))
+            ) {
+              return {
+                valid: false,
+                code: 'MALFORMED_ENVELOPE',
+                message:
+                  'reviewer signoff dispute evidence sha256_b64u must be base64url when present',
+                field: `${refField}.sha256_b64u`,
+                summary,
+              };
+            }
+            if (refRaw.uri === undefined && refRaw.sha256_b64u === undefined) {
+              return {
+                valid: false,
+                code: 'MALFORMED_ENVELOPE',
+                message: 'reviewer signoff dispute evidence ref must include uri or sha256_b64u',
+                field: refField,
+                summary,
+              };
+            }
+            summary.dispute_evidence_refs_count += 1;
+          }
+        }
+      }
+
+      if (disputeStatus === 'raised' || disputeStatus === 'resolved') {
+        summary.dispute_present = true;
+      }
+    }
+
+    const computedPayloadHash = await computeHash(payload, 'SHA-256');
+    if (computedPayloadHash !== envelope.payload_hash_b64u) {
+      return {
+        valid: false,
+        code: 'HASH_MISMATCH',
+        message: 'reviewer signoff receipt payload_hash_b64u mismatch',
+        field: `${fieldPrefix}.payload_hash_b64u`,
+        summary,
+      };
+    }
+
+    const publicKeyBytes = extractPublicKeyFromDidKey(envelope.signer_did);
+    if (!publicKeyBytes) {
+      return {
+        valid: false,
+        code: 'INVALID_DID_FORMAT',
+        message: 'Unable to extract Ed25519 public key from reviewer signoff signer DID',
+        field: `${fieldPrefix}.signer_did`,
+        summary,
+      };
+    }
+    const signatureValid = await verifySignature(
+      envelope.algorithm,
+      publicKeyBytes,
+      base64UrlDecode(envelope.signature_b64u),
+      new TextEncoder().encode(envelope.payload_hash_b64u),
+    );
+    if (!signatureValid) {
+      return {
+        valid: false,
+        code: 'SIGNATURE_INVALID',
+        message: 'reviewer signoff receipt signature verification failed',
+        field: `${fieldPrefix}.signature_b64u`,
+        summary,
+      };
+    }
+
+    summary.receipts_count += 1;
+    summary.decision_counts[payload.decision] += 1;
+  }
+
+  return {
+    valid: true,
+    summary,
+  };
 }
 
 function parseClddMetricsClaim(
@@ -8558,6 +9164,9 @@ export async function verifyProofBundle(
     runner_attestation_valid: false,
     attested_assurance_reason_code:
       'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION',
+    reviewer_signoff_present: false,
+    reviewer_signoff_valid: false,
+    reviewer_dispute_present: false,
     causal_policy_profile: resolvedCausalPolicy.profile,
     causal_policy_snapshot: {
       profile: resolvedCausalPolicy.profile,
@@ -9099,6 +9708,7 @@ export async function verifyProofBundle(
   const egressPolicyReceiptEnvelope = extractEgressPolicyReceiptEnvelope(metadataRecord);
   const hasEgressPolicyReceipt = egressPolicyReceiptEnvelope !== undefined;
   componentResults.egress_policy_receipt_present = hasEgressPolicyReceipt;
+  const reviewerSignoffReceipts = extractReviewerSignoffReceipts(metadataRecord);
 
   const policyBindingVerification = await validatePolicyBindingMetadata({
     payload,
@@ -9319,6 +9929,50 @@ export async function verifyProofBundle(
     }
     componentResults.runner_attestation_valid = true;
     componentResults.attested_assurance_reason_code = 'ATTESTED_TIER_GRANTED';
+  }
+
+  const reviewerSignoffVerification = await verifyReviewerSignoffReceipts({
+    receipts: reviewerSignoffReceipts,
+    bundleId: payload.bundle_id,
+    expectedRunId: bindingContext?.expectedRunId ?? null,
+    allowedEventHashes: bindingContext?.allowedEventHashes ?? null,
+  });
+  if (!reviewerSignoffVerification.valid) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason:
+          reviewerSignoffVerification.message ??
+          'Invalid reviewer signoff receipt evidence',
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+        component_results: componentResults,
+      },
+      error: {
+        code: reviewerSignoffVerification.code ?? 'EVIDENCE_MISMATCH',
+        message:
+          reviewerSignoffVerification.message ??
+          'Invalid reviewer signoff receipt evidence',
+        field:
+          reviewerSignoffVerification.field ??
+          'payload.metadata.reviewer_signoff_receipts',
+      },
+    };
+  }
+  if (reviewerSignoffVerification.summary?.present) {
+    componentResults.reviewer_signoff_present = true;
+    componentResults.reviewer_signoff_valid = true;
+    componentResults.reviewer_signoff_receipts_count =
+      reviewerSignoffVerification.summary.receipts_count;
+    componentResults.reviewer_signoff_decision_counts =
+      reviewerSignoffVerification.summary.decision_counts;
+    componentResults.reviewer_dispute_present =
+      reviewerSignoffVerification.summary.dispute_present;
+    componentResults.reviewer_dispute_note_count =
+      reviewerSignoffVerification.summary.dispute_note_count;
+    componentResults.reviewer_dispute_evidence_refs_count =
+      reviewerSignoffVerification.summary.dispute_evidence_refs_count;
   }
 
   if (!hasEgressPolicyReceipt) {
