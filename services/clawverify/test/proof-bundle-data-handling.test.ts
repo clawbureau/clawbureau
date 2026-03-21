@@ -309,7 +309,7 @@ async function makeDataHandlingReceipt(args: {
     action: 'allow' | 'redact' | 'block' | 'require_approval';
     reason_code: string;
     classes: Array<{
-      class_id: 'secret' | 'credential' | 'pii_email' | 'customer_restricted';
+      class_id: string;
       rule_id: string;
       action: 'allow' | 'redact' | 'block' | 'require_approval';
       match_count: number;
@@ -323,17 +323,27 @@ async function makeDataHandlingReceipt(args: {
       receipt_signer_did: string | null;
       receipt_envelope: Record<string, unknown> | null;
     };
+    enforcement: {
+      mode: 'enforced' | 'simulated';
+      would_action: 'allow' | 'redact' | 'block' | 'require_approval';
+      would_reason_code: string;
+      would_block: boolean;
+      would_require_approval: boolean;
+      would_redact: boolean;
+    };
     redaction: {
       applied: boolean;
       original_payload_hash_b64u: string;
       outbound_payload_hash_b64u: string | null;
+      strategy: 'none' | 'text_regex' | 'json_structured';
+      operations: Array<{
+        class_id: string;
+        rule_id: string;
+        path: string;
+        match_count: number;
+        redaction_token: string;
+      }>;
     };
-    classes: Array<{
-      class_id: string;
-      rule_id: string;
-      action: 'allow' | 'redact' | 'block' | 'require_approval';
-      match_count: number;
-    }>;
     policy: {
       taxonomy_version: 'prv.dlp.taxonomy.v2';
       ruleset_hash_b64u: string;
@@ -345,6 +355,85 @@ async function makeDataHandlingReceipt(args: {
   const originalPayloadHash = await computeHash({ raw: 'secret' }, 'SHA-256');
   const redactedPayloadHash = await computeHash({ raw: '[REDACTED_SECRET]' }, 'SHA-256');
   const policy = args.overrides?.policy ?? (await makeDataHandlingPolicyEvidence('default'));
+  const action = args.overrides?.action ?? ('redact' as const);
+  const classes = args.overrides?.classes ?? [
+    {
+      class_id: 'secret.api_key',
+      rule_id: 'prv.dlp.secret.api_key.v1',
+      action: 'redact' as const,
+      match_count: 1,
+    },
+  ];
+  const defaultApprovalRequired = action === 'require_approval';
+  const defaultApprovalScopeHash = defaultApprovalRequired
+    ? await computeHash(
+        canonicalize({
+          scope_version: 'prv.dlp.approval_scope.v1',
+          provider: 'openai',
+          policy_version: 'prv.dlp.v1',
+          effective_policy_hash_b64u: args.effectivePolicyHashB64u,
+          class_ids: [...new Set(
+            classes
+              .filter((entry) => entry.action === 'require_approval')
+              .map((entry) => entry.class_id),
+          )].sort((a, b) => a.localeCompare(b)),
+        }),
+        'SHA-256',
+      )
+    : null;
+  const approval = args.overrides?.approval ?? {
+    required: defaultApprovalRequired,
+    satisfied: false,
+    mechanism: 'signed_receipt',
+    scope_hash_b64u: defaultApprovalScopeHash,
+    receipt_hash_b64u: null,
+    receipt_signer_did: null,
+    receipt_envelope: null,
+  };
+  const reasonCode =
+    args.overrides?.reason_code ??
+    (action === 'block'
+      ? 'PRV_DLP_BLOCKED'
+      : action === 'redact'
+        ? 'PRV_DLP_REDACTED'
+        : action === 'require_approval'
+          ? 'PRV_DLP_APPROVAL_REQUIRED'
+          : approval.required && approval.satisfied
+            ? 'PRV_DLP_APPROVAL_GRANTED'
+            : 'PRV_DLP_ALLOW');
+  const enforcement = args.overrides?.enforcement ?? {
+    mode: 'enforced' as const,
+    would_action: action,
+    would_reason_code: reasonCode,
+    would_block: action === 'block',
+    would_require_approval: action === 'require_approval',
+    would_redact: action === 'redact',
+  };
+  const redaction = args.overrides?.redaction ?? (
+    action === 'redact'
+      ? {
+          applied: true,
+          original_payload_hash_b64u: originalPayloadHash,
+          outbound_payload_hash_b64u: redactedPayloadHash,
+          strategy: 'json_structured' as const,
+          operations: [
+            {
+              class_id: 'secret.api_key',
+              rule_id: 'prv.dlp.secret.api_key.v1',
+              path: '$.raw',
+              match_count: 1,
+              redaction_token: '[REDACTED_SECRET]',
+            },
+          ],
+        }
+      : {
+          applied: false,
+          original_payload_hash_b64u: originalPayloadHash,
+          outbound_payload_hash_b64u: action === 'allow' ? originalPayloadHash : null,
+          strategy: 'none' as const,
+          operations: [],
+        }
+  );
   const payload = {
     receipt_version: '1' as const,
     receipt_id: 'dhr_001',
@@ -353,30 +442,12 @@ async function makeDataHandlingReceipt(args: {
     policy,
     run_id: args.runId,
     provider: 'openai',
-    action: args.overrides?.action ?? ('redact' as const),
-    reason_code: args.overrides?.reason_code ?? 'PRV_DLP_REDACTED',
-    classes: args.overrides?.classes ?? [
-      {
-        class_id: 'secret.api_key',
-        rule_id: 'prv.dlp.secret.api_key.v1',
-        action: 'redact' as const,
-        match_count: 1,
-      },
-    ],
-    approval: args.overrides?.approval ?? {
-      required: false,
-      satisfied: false,
-      mechanism: 'signed_receipt',
-      scope_hash_b64u: null,
-      receipt_hash_b64u: null,
-      receipt_signer_did: null,
-      receipt_envelope: null,
-    },
-    redaction: args.overrides?.redaction ?? {
-      applied: true,
-      original_payload_hash_b64u: originalPayloadHash,
-      outbound_payload_hash_b64u: redactedPayloadHash,
-    },
+    action,
+    reason_code: reasonCode,
+    classes,
+    enforcement,
+    approval,
+    redaction,
     timestamp: '2026-03-20T00:00:02Z',
   };
 
@@ -1116,5 +1187,260 @@ describe('proof bundle data handling evidence verification', () => {
     expect(out.result.status).toBe('INVALID');
     expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
     expect(out.error?.field).toBe('payload.metadata.data_handling.receipts[0].payload.policy');
+  });
+
+  it('accepts simulated data-handling receipts and surfaces simulation mode distinctly', async () => {
+    const signer = await makeDidKeyEd25519();
+    const runId = 'run_dlp_simulated_valid_001';
+    const eventChain = await makeEventChain(runId);
+    const policyBinding = await makePolicyBinding({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+    });
+    const egressPolicyReceipt = await makeEgressPolicyReceipt({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      runId,
+      eventHashB64u: eventChain[0]!.event_hash_b64u,
+      effectivePolicyHashB64u: policyBinding.effectivePolicyHashB64u,
+    });
+    const originalPayloadHash = await computeHash({ raw: 'secret' }, 'SHA-256');
+    const dataHandlingReceipt = await makeDataHandlingReceipt({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      runId,
+      effectivePolicyHashB64u: policyBinding.effectivePolicyHashB64u,
+      overrides: {
+        action: 'allow',
+        reason_code: 'PRV_DLP_SIMULATION_ALLOW',
+        classes: [
+          {
+            class_id: 'secret.api_key',
+            rule_id: 'prv.dlp.secret.api_key.v1',
+            action: 'redact',
+            match_count: 1,
+          },
+        ],
+        enforcement: {
+          mode: 'simulated',
+          would_action: 'redact',
+          would_reason_code: 'PRV_DLP_REDACTED',
+          would_block: false,
+          would_require_approval: false,
+          would_redact: true,
+        },
+        redaction: {
+          applied: false,
+          original_payload_hash_b64u: originalPayloadHash,
+          outbound_payload_hash_b64u: originalPayloadHash,
+          strategy: 'none',
+          operations: [],
+        },
+      },
+    });
+
+    const payload = {
+      bundle_version: '1' as const,
+      bundle_id: 'bundle_dlp_simulated_valid_001',
+      agent_did: signer.did,
+      event_chain: eventChain,
+      metadata: {
+        policy_binding: policyBinding.policyBinding,
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: egressPolicyReceipt,
+        },
+        data_handling: {
+          policy_version: 'prv.dlp.v1',
+          taxonomy_version: dataHandlingReceipt.payload.policy.taxonomy_version,
+          ruleset_hash_b64u: dataHandlingReceipt.payload.policy.ruleset_hash_b64u,
+          built_in_rule_count: dataHandlingReceipt.payload.policy.built_in_rule_count,
+          custom_rule_count: dataHandlingReceipt.payload.policy.custom_rule_count,
+          effective_policy_hash_b64u: policyBinding.effectivePolicyHashB64u,
+          enforcement_mode: 'simulated',
+          simulated_receipt_count: 1,
+          enforced_receipt_count: 0,
+          receipts: [dataHandlingReceipt],
+        },
+      },
+    };
+
+    const bundleEnvelope = await signEnvelope({
+      envelopeType: 'proof_bundle',
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      payload,
+      issuedAt: '2026-03-20T00:00:03Z',
+    });
+
+    const out = await verifyProofBundle(bundleEnvelope);
+    expect(out.result.status).toBe('VALID');
+    expect(
+      (out.result.component_results as Record<string, unknown> | undefined)
+        ?.data_handling_enforcement_mode,
+    ).toBe('simulated');
+    expect(out.result.risk_flags).toContain('DLP_SIMULATION_MODE_PRESENT');
+  });
+
+  it('fails closed when simulated mode receipts do not use PRV_DLP_SIMULATION_ALLOW', async () => {
+    const signer = await makeDidKeyEd25519();
+    const runId = 'run_dlp_simulated_reason_mismatch_001';
+    const eventChain = await makeEventChain(runId);
+    const policyBinding = await makePolicyBinding({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+    });
+    const egressPolicyReceipt = await makeEgressPolicyReceipt({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      runId,
+      eventHashB64u: eventChain[0]!.event_hash_b64u,
+      effectivePolicyHashB64u: policyBinding.effectivePolicyHashB64u,
+    });
+    const originalPayloadHash = await computeHash({ raw: 'secret' }, 'SHA-256');
+    const dataHandlingReceipt = await makeDataHandlingReceipt({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      runId,
+      effectivePolicyHashB64u: policyBinding.effectivePolicyHashB64u,
+      overrides: {
+        action: 'allow',
+        reason_code: 'PRV_DLP_ALLOW',
+        enforcement: {
+          mode: 'simulated',
+          would_action: 'redact',
+          would_reason_code: 'PRV_DLP_REDACTED',
+          would_block: false,
+          would_require_approval: false,
+          would_redact: true,
+        },
+        redaction: {
+          applied: false,
+          original_payload_hash_b64u: originalPayloadHash,
+          outbound_payload_hash_b64u: originalPayloadHash,
+          strategy: 'none',
+          operations: [],
+        },
+      },
+    });
+
+    const payload = {
+      bundle_version: '1' as const,
+      bundle_id: 'bundle_dlp_simulated_reason_mismatch_001',
+      agent_did: signer.did,
+      event_chain: eventChain,
+      metadata: {
+        policy_binding: policyBinding.policyBinding,
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: egressPolicyReceipt,
+        },
+        data_handling: {
+          policy_version: 'prv.dlp.v1',
+          effective_policy_hash_b64u: policyBinding.effectivePolicyHashB64u,
+          receipts: [dataHandlingReceipt],
+        },
+      },
+    };
+
+    const bundleEnvelope = await signEnvelope({
+      envelopeType: 'proof_bundle',
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      payload,
+      issuedAt: '2026-03-20T00:00:03Z',
+    });
+
+    const out = await verifyProofBundle(bundleEnvelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe(
+      'payload.metadata.data_handling.receipts[0].payload.reason_code',
+    );
+  });
+
+  it('fails closed when structured redaction operations are not deterministically sorted', async () => {
+    const signer = await makeDidKeyEd25519();
+    const runId = 'run_dlp_redaction_unsorted_001';
+    const eventChain = await makeEventChain(runId);
+    const policyBinding = await makePolicyBinding({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+    });
+    const egressPolicyReceipt = await makeEgressPolicyReceipt({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      runId,
+      eventHashB64u: eventChain[0]!.event_hash_b64u,
+      effectivePolicyHashB64u: policyBinding.effectivePolicyHashB64u,
+    });
+    const originalPayloadHash = await computeHash({ raw: 'secret' }, 'SHA-256');
+    const redactedPayloadHash = await computeHash({ raw: '[REDACTED]' }, 'SHA-256');
+    const dataHandlingReceipt = await makeDataHandlingReceipt({
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      runId,
+      effectivePolicyHashB64u: policyBinding.effectivePolicyHashB64u,
+      overrides: {
+        action: 'redact',
+        reason_code: 'PRV_DLP_REDACTED',
+        redaction: {
+          applied: true,
+          original_payload_hash_b64u: originalPayloadHash,
+          outbound_payload_hash_b64u: redactedPayloadHash,
+          strategy: 'json_structured',
+          operations: [
+            {
+              class_id: 'secret.api_key',
+              rule_id: 'prv.dlp.secret.api_key.v1',
+              path: '$.a',
+              match_count: 1,
+              redaction_token: '[REDACTED_SECRET]',
+            },
+            {
+              class_id: 'financial.card_pan',
+              rule_id: 'prv.dlp.financial.card_pan.v1',
+              path: '$.z',
+              match_count: 1,
+              redaction_token: '[REDACTED_CARD_PAN]',
+            },
+          ],
+        },
+      },
+    });
+
+    const payload = {
+      bundle_version: '1' as const,
+      bundle_id: 'bundle_dlp_redaction_unsorted_001',
+      agent_did: signer.did,
+      event_chain: eventChain,
+      metadata: {
+        policy_binding: policyBinding.policyBinding,
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: egressPolicyReceipt,
+        },
+        data_handling: {
+          policy_version: 'prv.dlp.v1',
+          effective_policy_hash_b64u: policyBinding.effectivePolicyHashB64u,
+          receipts: [dataHandlingReceipt],
+        },
+      },
+    };
+
+    const bundleEnvelope = await signEnvelope({
+      envelopeType: 'proof_bundle',
+      signerDid: signer.did,
+      privateKey: signer.privateKey,
+      payload,
+      issuedAt: '2026-03-20T00:00:03Z',
+    });
+
+    const out = await verifyProofBundle(bundleEnvelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe(
+      'payload.metadata.data_handling.receipts[0].payload.redaction.operations[1]',
+    );
   });
 });
