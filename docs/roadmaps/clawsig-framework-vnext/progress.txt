@@ -46,3 +46,20 @@ Started: 2026-03-20T22:40:00Z
   - Reviewer fixes required proofed-mode signed policy bundles, restored explicit effective-policy hash binding, and added service-side enforcement parity.
   - Post-review CI fixes updated `wrap-quiet` test helpers to provision signed bundles for proofed-mode guardrails and corrected service verifier helper return-shape typing.
 ---
+
+## 2026-03-21T00:27:28Z - Wave 1 runner-measurement lane merged
+- What was implemented
+  - Closed `AF2-ATT-001` via PR #487.
+  - Added deterministic proofed-run runner measurement metadata, binding it into proof-bundle output and validating it fail-closed in both offline and service verifier paths.
+- Validation
+  - `packages/clawsig-sdk`: `npm run typecheck && npm run build`
+  - `packages/clawverify-core`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm run typecheck && npm run build`
+  - `packages/clawverify-cli`: `npm test -- test/policy-binding.test.ts test/wrap-policy-binding.test.ts test/wrap-sigterm.test.ts`
+  - `packages/clawverify-cli`: `npm run test:proof-reliability`
+  - `services/clawverify`: `npm ci && npm run typecheck`
+  - `services/clawverify`: `vitest run test/policy-binding.test.ts`
+- Notes
+  - Reviewer fixes required proofed runs to fail closed when mandatory runner assets could not be hashed and required both verifier surfaces to validate `runner_measurement` instead of treating it as opaque metadata.
+  - Wave 1 foundations are now complete; attestation receipt issuance/trust-tier uplift remains for later lanes.
+---
