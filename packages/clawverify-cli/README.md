@@ -53,8 +53,8 @@ clawsig prove --input .clawsig/proof_bundle.json --export-pack ./privacy-pack
 
 The export pack is a reviewer-facing directory with:
 - proof bundle copy
-- privacy evidence extracted from bundle metadata when present (egress policy receipt, runtime profile/hygiene, data handling, processor policy)
-- `reports/proof-report.json` + `reports/proof-report.txt`
+- privacy/runtime evidence extracted from bundle metadata when present (egress policy receipt, runtime profile/hygiene, data handling, processor policy, runner measurement, runner attestation receipt)
+- `reports/proof-report.json` + `reports/proof-report.txt` (includes attested vs non-attested runner-attestation posture and reason codes)
 - `reports/claims-boundary.md` (what is proven vs not proven)
 - `manifest.json` (file digests for sharing/tamper checks)
 
