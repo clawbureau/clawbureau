@@ -1022,6 +1022,220 @@ describe('runProveReport export pack', () => {
     }
   });
 
+  it('emits pack-local side-by-side comparison artifacts for reviewer deltas', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'clawsig-prove-export-pack-compare-'));
+    const baselineBundlePath = join(tempDir, 'baseline_bundle.json');
+    const candidateBundlePath = join(tempDir, 'candidate_bundle.json');
+    const baselineSummaryPath = join(tempDir, 'baseline_run_summary.json');
+    const candidateSummaryPath = join(tempDir, 'candidate_run_summary.json');
+    const baselinePackPath = join(tempDir, 'baseline-pack');
+    const comparedPackPath = join(tempDir, 'compared-pack');
+
+    await writeFile(baselineBundlePath, JSON.stringify(makeCleanBundle(), null, 2) + '\n', 'utf-8');
+    await writeFile(candidateBundlePath, JSON.stringify(makeBundle(), null, 2) + '\n', 'utf-8');
+    await writeFile(
+      baselineSummaryPath,
+      JSON.stringify({ status: 'PASS', tier: 'gateway', trust_tier: 'gateway' }, null, 2) + '\n',
+      'utf-8',
+    );
+    await writeFile(
+      candidateSummaryPath,
+      JSON.stringify({ status: 'PASS', tier: 'attested', trust_tier: 'attested' }, null, 2) + '\n',
+      'utf-8',
+    );
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await runProveReport({
+        inputPath: baselineBundlePath,
+        runSummaryPath: baselineSummaryPath,
+        exportPackPath: baselinePackPath,
+        decrypt: false,
+        json: false,
+      });
+
+      await runProveReport({
+        inputPath: candidateBundlePath,
+        runSummaryPath: candidateSummaryPath,
+        exportPackPath: comparedPackPath,
+        compareWithPath: baselinePackPath,
+        decrypt: false,
+        json: false,
+      });
+
+      const comparisonJsonRaw = await readFile(
+        join(comparedPackPath, 'reports/run-comparison.json'),
+        'utf-8',
+      );
+      const comparisonMarkdown = await readFile(
+        join(comparedPackPath, 'reports/run-comparison.md'),
+        'utf-8',
+      );
+      const viewerHtml = await readFile(join(comparedPackPath, 'viewer/index.html'), 'utf-8');
+      const manifestRaw = await readFile(join(comparedPackPath, 'manifest.json'), 'utf-8');
+      const manifest = JSON.parse(manifestRaw) as {
+        entries: Array<{ path: string }>;
+      };
+      const comparison = JSON.parse(comparisonJsonRaw) as {
+        generated_at: string;
+        baseline_source: { type: string };
+        deltas: {
+          assurance: { rows: Array<{ label: string; baseline: unknown; candidate: unknown; changed: boolean }> };
+          evidence: { rows: Array<{ label: string; baseline: unknown; candidate: unknown; changed: boolean }> };
+          policy: { rows: Array<{ label: string; baseline: unknown; candidate: unknown; changed: boolean }> };
+          processor: {
+            blocked_attempts: { added: string[]; removed: string[] };
+            used_processor_count_deltas: Array<{ key: string; baseline_count: number; candidate_count: number }>;
+          };
+          privacy: {
+            rows: Array<{ label: string; changed: boolean }>;
+            claim_deltas: { proven_claims: { added: string[]; removed: string[] } };
+          };
+        };
+        reviewer_highlights: string[];
+      };
+
+      expect(comparison.baseline_source.type).toBe('export_pack');
+      expect(comparison.generated_at).toBe('2026-03-20T19:16:58.121Z');
+      expect(comparison.reviewer_highlights.join(' ')).toContain('Assurance tier changed');
+      expect(comparison.deltas.assurance.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'Harness tier',
+            baseline: 'gateway',
+            candidate: 'attested',
+            changed: true,
+          }),
+        ]),
+      );
+      expect(comparison.deltas.evidence.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'Blocked egress attempts',
+            baseline: 0,
+            candidate: 2,
+            changed: true,
+          }),
+        ]),
+      );
+      expect(comparison.deltas.policy.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'Processor denied routes',
+            baseline: 0,
+            candidate: 1,
+            changed: true,
+          }),
+        ]),
+      );
+      expect(comparison.deltas.processor.blocked_attempts.added.length).toBeGreaterThan(0);
+      expect(comparison.deltas.processor.used_processor_count_deltas).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: 'google / gemini-2.5-flash (eu, no-store)',
+            baseline_count: 1,
+            candidate_count: 3,
+          }),
+        ]),
+      );
+      expect(comparison.deltas.privacy.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'Privacy verdict',
+            changed: true,
+          }),
+        ]),
+      );
+      expect(comparison.deltas.privacy.claim_deltas.proven_claims.added.length).toBeGreaterThan(0);
+
+      expect(comparisonMarkdown).toContain('# Side-by-side Run Comparison');
+      expect(comparisonMarkdown).toContain('## Evidence Deltas');
+      expect(comparisonMarkdown).toContain('## Privacy Deltas');
+      expect(comparisonMarkdown).toContain('Blocked egress attempts');
+
+      expect(viewerHtml).toContain('../reports/run-comparison.json');
+      expect(viewerHtml).toContain('../reports/run-comparison.md');
+      expect(viewerHtml).toContain('Side-by-side run comparison');
+
+      expect(manifest.entries.map((entry) => entry.path)).toEqual(
+        expect.arrayContaining([
+          'reports/run-comparison.json',
+          'reports/run-comparison.md',
+        ]),
+      );
+
+      expect(comparisonJsonRaw).not.toContain(tempDir);
+      expect(comparisonJsonRaw).not.toContain(candidateBundlePath);
+      expect(comparisonJsonRaw).not.toContain(baselinePackPath);
+      expect(comparisonMarkdown).not.toContain(tempDir);
+      expect(comparisonMarkdown).not.toContain(candidateBundlePath);
+      expect(comparisonMarkdown).not.toContain(baselinePackPath);
+      expect(viewerHtml).not.toContain(tempDir);
+      expect(viewerHtml).not.toContain(candidateBundlePath);
+      expect(viewerHtml).not.toContain(baselinePackPath);
+    } finally {
+      stdoutSpy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('summarizes evidence-only comparisons without a misleading no-delta fallback', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'clawsig-prove-export-pack-evidence-compare-'));
+    const baselineBundlePath = join(tempDir, 'baseline_bundle.json');
+    const candidateBundlePath = join(tempDir, 'candidate_bundle.json');
+    const baselinePackPath = join(tempDir, 'baseline-pack');
+    const comparedPackPath = join(tempDir, 'compared-pack');
+    const candidateBundle = JSON.parse(JSON.stringify(makeCleanBundle())) as Record<string, unknown>;
+    const candidatePayload = candidateBundle.payload as { tool_receipts?: unknown[] };
+    candidatePayload.tool_receipts = [{ tool_name: 'scanner', receipt_id: 'tool_1' }];
+
+    await writeFile(baselineBundlePath, JSON.stringify(makeCleanBundle(), null, 2) + '\n', 'utf-8');
+    await writeFile(candidateBundlePath, JSON.stringify(candidateBundle, null, 2) + '\n', 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await runProveReport({
+        inputPath: baselineBundlePath,
+        exportPackPath: baselinePackPath,
+        decrypt: false,
+        json: false,
+      });
+
+      await runProveReport({
+        inputPath: candidateBundlePath,
+        exportPackPath: comparedPackPath,
+        compareWithPath: baselinePackPath,
+        decrypt: false,
+        json: false,
+      });
+
+      const comparison = JSON.parse(
+        await readFile(join(comparedPackPath, 'reports/run-comparison.json'), 'utf-8'),
+      ) as {
+        reviewer_highlights: string[];
+        deltas: {
+          evidence: { rows: Array<{ label: string; baseline: unknown; candidate: unknown; changed: boolean }> };
+        };
+      };
+
+      expect(comparison.deltas.evidence.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'Tool receipts',
+            baseline: 0,
+            candidate: 1,
+            changed: true,
+          }),
+        ]),
+      );
+      expect(comparison.reviewer_highlights).toContain('Evidence delta summary: 1 evidence field changed.');
+      expect(comparison.reviewer_highlights.join(' ')).not.toContain('No assurance, evidence, policy, processor, or privacy deltas were detected');
+    } finally {
+      stdoutSpy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('fails closed when the export-pack directory is not empty', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'clawsig-prove-export-pack-stale-'));
     const bundlePath = join(tempDir, 'proof_bundle.json');

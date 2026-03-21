@@ -59,6 +59,17 @@ The export pack is a reviewer-facing directory with:
 - `viewer/index.html` (portable hosted/local reviewer surface with pack-local artifact navigation)
 - `manifest.json` (file digests for sharing/tamper checks)
 
+To generate side-by-side deltas against another run/export pack/report:
+
+```bash
+clawsig prove --input .clawsig/proof_bundle.json --export-pack ./privacy-pack --compare-with ./previous-pack
+```
+
+When `--compare-with` is provided, the export pack also includes:
+- `reports/run-comparison.json` (machine-readable assurance/privacy delta structure)
+- `reports/run-comparison.md` (reviewer-focused side-by-side delta summary)
+- viewer links/highlights for comparison in `viewer/index.html`
+
 Reviewer interpretation:
 - Run canonical verification first from inside the pack: `clawverify verify proof-bundle --input proof-bundle/proof_bundle.json`
 - Open `viewer/index.html` as the reviewer entrypoint, then drill into linked artifacts as needed

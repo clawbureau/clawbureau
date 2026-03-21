@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import crypto from 'node:crypto';
 
@@ -10,6 +10,7 @@ export interface ProveOptions {
   inputPath: string;
   htmlPath?: string;
   exportPackPath?: string;
+  compareWithPath?: string;
   decrypt: boolean;
   json: boolean;
   runSummaryPath?: string;
@@ -206,6 +207,84 @@ export interface ProofReport {
   html_path?: string;
   export_pack_path?: string;
   decrypted_payload_keys?: string[];
+  run_comparison?: ProofRunComparison;
+}
+
+type ProofRunComparisonValue = string | number | boolean | null;
+
+export interface ProofRunComparisonDeltaRow {
+  label: string;
+  baseline: ProofRunComparisonValue;
+  candidate: ProofRunComparisonValue;
+  changed: boolean;
+}
+
+export interface ProofRunComparisonStringSetDelta {
+  added: string[];
+  removed: string[];
+}
+
+export interface ProofRunComparisonCountDelta {
+  key: string;
+  baseline_count: number;
+  candidate_count: number;
+}
+
+export interface ProofRunComparisonSnapshot {
+  bundle_id: string | null;
+  harness_status: string | null;
+  tier: string | null;
+  trust_tier: string | null;
+  privacy_verdict: ProofPrivacyVerdict;
+  reviewer_action_required: boolean;
+  runner_attestation_posture: ProofRunnerAttestationPosture;
+  runner_attestation_reason_code: ProofRunnerAttestationReasonCode;
+}
+
+export interface ProofRunComparison {
+  comparison_version: '1';
+  generated_at: string;
+  baseline_source: {
+    type: 'proof_bundle' | 'export_pack' | 'proof_report';
+  };
+  baseline: ProofRunComparisonSnapshot;
+  candidate: ProofRunComparisonSnapshot;
+  deltas: {
+    assurance: {
+      rows: ProofRunComparisonDeltaRow[];
+      changed: boolean;
+    };
+    evidence: {
+      rows: ProofRunComparisonDeltaRow[];
+      changed: boolean;
+    };
+    policy: {
+      rows: ProofRunComparisonDeltaRow[];
+      changed: boolean;
+    };
+    processor: {
+      used_processor_routes: ProofRunComparisonStringSetDelta;
+      used_processor_count_deltas: ProofRunComparisonCountDelta[];
+      blocked_attempts: ProofRunComparisonStringSetDelta;
+      changed: boolean;
+    };
+    privacy: {
+      rows: ProofRunComparisonDeltaRow[];
+      data_handling_action_rows: ProofRunComparisonDeltaRow[];
+      sensitive_class_deltas: ProofRunComparisonStringSetDelta;
+      signal_deltas: {
+        background_noise: ProofRunComparisonStringSetDelta;
+        caution: ProofRunComparisonStringSetDelta;
+        reviewer_action_required: ProofRunComparisonStringSetDelta;
+      };
+      claim_deltas: {
+        proven_claims: ProofRunComparisonStringSetDelta;
+        not_proven_claims: ProofRunComparisonStringSetDelta;
+      };
+      changed: boolean;
+    };
+  };
+  reviewer_highlights: string[];
 }
 
 type ProofReportBase = Omit<
@@ -660,6 +739,8 @@ const EXPORT_PACK_REPORT_JSON_PATH = 'reports/proof-report.json';
 const EXPORT_PACK_REPORT_TEXT_PATH = 'reports/proof-report.txt';
 const EXPORT_PACK_REPORT_HTML_PATH = 'reports/proof-report.html';
 const EXPORT_PACK_CLAIMS_BOUNDARY_PATH = 'reports/claims-boundary.md';
+const EXPORT_PACK_RUN_COMPARISON_JSON_PATH = 'reports/run-comparison.json';
+const EXPORT_PACK_RUN_COMPARISON_MARKDOWN_PATH = 'reports/run-comparison.md';
 const EXPORT_PACK_README_PATH = 'README.md';
 const EXPORT_PACK_VIEWER_PATH = 'viewer/index.html';
 
@@ -726,7 +807,7 @@ function renderPrivacyClaimsBoundaryMarkdown(report: ProofReport): string {
   return lines.join('\n');
 }
 
-function renderPrivacyExportPackReadme(report: ProofReport): string {
+function renderPrivacyExportPackReadme(report: ProofReport, hasComparison: boolean): string {
   const lines: string[] = [];
   lines.push('# Clawsig Privacy/Compliance Export Pack');
   lines.push('');
@@ -741,6 +822,10 @@ function renderPrivacyExportPackReadme(report: ProofReport): string {
   lines.push('- `reports/proof-report.txt`: human-readable prove report.');
   lines.push('- `reports/proof-report.html`: pre-rendered proof report HTML using the same prove/export posture language.');
   lines.push('- `reports/claims-boundary.md`: explicit what-is-proven / not-proven boundaries.');
+  if (hasComparison) {
+    lines.push('- `reports/run-comparison.json`: machine-readable side-by-side delta report against the baseline run.');
+    lines.push('- `reports/run-comparison.md`: reviewer-oriented side-by-side delta summary.');
+  }
   lines.push('- `viewer/index.html`: portable hosted/local reviewer surface with pack-local artifact navigation.');
   lines.push('- `manifest.json`: deterministic file manifest with SHA-256 digests.');
   lines.push('');
@@ -786,6 +871,7 @@ function toViewerHref(path: string): string | null {
 function renderExportPackViewerHtml(args: {
   report: ProofReport;
   artifactPaths: string[];
+  comparison?: ProofRunComparison;
 }): string {
   const { report } = args;
   const artifactLinks = dedupeStrings(args.artifactPaths)
@@ -804,6 +890,28 @@ function renderExportPackViewerHtml(args: {
     report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_present,
     report.privacy_posture.runner_attestation.evidence.runner_attestation_receipt_structured,
   );
+  const hasComparison = args.comparison !== undefined;
+  const comparisonHighlights = args.comparison?.reviewer_highlights ?? [];
+  const comparisonPrimaryLinks = hasComparison
+    ? `
+          <li><a href="../${EXPORT_PACK_RUN_COMPARISON_MARKDOWN_PATH}">${EXPORT_PACK_RUN_COMPARISON_MARKDOWN_PATH}</a></li>
+          <li><a href="../${EXPORT_PACK_RUN_COMPARISON_JSON_PATH}">${EXPORT_PACK_RUN_COMPARISON_JSON_PATH}</a></li>`
+    : '';
+  const comparisonSection = hasComparison
+    ? `
+      <article class="card">
+        <h2>Side-by-side run comparison</h2>
+        <div class="rows">
+          <div class="row"><span class="label">Baseline source type</span><strong>${escapeHtml(args.comparison!.baseline_source.type)}</strong></div>
+          <div class="row"><span class="label">Baseline bundle ID</span><strong>${escapeHtml(args.comparison!.baseline.bundle_id ?? 'unknown')}</strong></div>
+          <div class="row"><span class="label">Candidate bundle ID</span><strong>${escapeHtml(args.comparison!.candidate.bundle_id ?? 'unknown')}</strong></div>
+        </div>
+        <div class="section">
+          <h3>Reviewer highlights</h3>
+          <ul>${renderList(comparisonHighlights)}</ul>
+        </div>
+      </article>`
+    : '';
 
   return `<!doctype html>
 <html lang="en">
@@ -902,6 +1010,7 @@ function renderExportPackViewerHtml(args: {
           <li><a href="../${EXPORT_PACK_REPORT_TEXT_PATH}">${EXPORT_PACK_REPORT_TEXT_PATH}</a></li>
           <li><a href="../${EXPORT_PACK_REPORT_JSON_PATH}">${EXPORT_PACK_REPORT_JSON_PATH}</a></li>
           <li><a href="../${EXPORT_PACK_CLAIMS_BOUNDARY_PATH}">${EXPORT_PACK_CLAIMS_BOUNDARY_PATH}</a></li>
+          ${comparisonPrimaryLinks}
           <li><a href="../manifest.json">manifest.json</a></li>
         </ul>
       </article>
@@ -914,6 +1023,8 @@ function renderExportPackViewerHtml(args: {
           <ul>${renderList(report.privacy_posture.not_proven_claims)}</ul>
         </div>
       </article>
+
+      ${comparisonSection}
     </section>
 
     <section class="card section">
@@ -1004,6 +1115,7 @@ async function writePrivacyComplianceExportPack(args: {
   packPath: string;
   bundle: Record<string, unknown>;
   report: ProofReport;
+  comparison?: ProofRunComparison;
 }): Promise<string> {
   const packRoot = resolve(args.packPath);
   await mkdir(packRoot, { recursive: true });
@@ -1022,7 +1134,7 @@ async function writePrivacyComplianceExportPack(args: {
   const reportTextBytes = Buffer.from(renderProofReportText(packReport), 'utf-8');
   const reportHtmlBytes = Buffer.from(renderProofReportHtml(packReport), 'utf-8');
   const claimsBoundaryBytes = Buffer.from(renderPrivacyClaimsBoundaryMarkdown(packReport), 'utf-8');
-  const readmeBytes = Buffer.from(renderPrivacyExportPackReadme(packReport), 'utf-8');
+  const readmeBytes = Buffer.from(renderPrivacyExportPackReadme(packReport, args.comparison !== undefined), 'utf-8');
 
   await writeExportPackFile(
     packRoot,
@@ -1079,10 +1191,34 @@ async function writePrivacyComplianceExportPack(args: {
     'text/markdown; charset=utf-8',
     entries,
   );
+
+  if (args.comparison) {
+    const comparisonJsonBytes = Buffer.from(JSON.stringify(args.comparison, null, 2) + '\n', 'utf-8');
+    const comparisonMarkdownBytes = Buffer.from(
+      renderProofRunComparisonMarkdown(args.comparison),
+      'utf-8',
+    );
+    await writeExportPackFile(
+      packRoot,
+      EXPORT_PACK_RUN_COMPARISON_JSON_PATH,
+      comparisonJsonBytes,
+      'application/json',
+      entries,
+    );
+    await writeExportPackFile(
+      packRoot,
+      EXPORT_PACK_RUN_COMPARISON_MARKDOWN_PATH,
+      comparisonMarkdownBytes,
+      'text/markdown; charset=utf-8',
+      entries,
+    );
+  }
+
   const viewerBytes = Buffer.from(
     renderExportPackViewerHtml({
       report: packReport,
       artifactPaths: [...entries.map((entry) => entry.path), EXPORT_PACK_VIEWER_PATH, 'manifest.json'],
+      comparison: args.comparison,
     }),
     'utf-8',
   );
@@ -1233,6 +1369,650 @@ function summarizeSentinels(payload: Record<string, unknown>): ProofReport['sent
 }
 
 const DATA_HANDLING_ACTION_ORDER: DataHandlingAction[] = ['allow', 'redact', 'block', 'require_approval'];
+
+function buildComparisonDeltaRow(
+  label: string,
+  baseline: ProofRunComparisonValue,
+  candidate: ProofRunComparisonValue,
+): ProofRunComparisonDeltaRow {
+  return {
+    label,
+    baseline,
+    candidate,
+    changed: baseline !== candidate,
+  };
+}
+
+function hasChangedDeltaRows(rows: ProofRunComparisonDeltaRow[]): boolean {
+  return rows.some((row) => row.changed);
+}
+
+function countChangedDeltaRows(rows: ProofRunComparisonDeltaRow[]): number {
+  return rows.filter((row) => row.changed).length;
+}
+
+function normalizeComparisonSet(values: string[]): string[] {
+  return dedupeStrings(values).sort((a, b) => a.localeCompare(b));
+}
+
+function diffComparisonStringSets(baseline: string[], candidate: string[]): ProofRunComparisonStringSetDelta {
+  const baselineSet = new Set(normalizeComparisonSet(baseline));
+  const candidateSet = new Set(normalizeComparisonSet(candidate));
+  const added = [...candidateSet].filter((entry) => !baselineSet.has(entry)).sort((a, b) => a.localeCompare(b));
+  const removed = [...baselineSet].filter((entry) => !candidateSet.has(entry)).sort((a, b) => a.localeCompare(b));
+  return { added, removed };
+}
+
+function hasStringSetDelta(delta: ProofRunComparisonStringSetDelta): boolean {
+  return delta.added.length > 0 || delta.removed.length > 0;
+}
+
+function countStringSetDeltaEntries(delta: ProofRunComparisonStringSetDelta): number {
+  return delta.added.length + delta.removed.length;
+}
+
+function formatProcessorRouteKey(route: Omit<ProofPrivacyProcessorRoute, 'count'>): string {
+  return `${route.provider} / ${route.model} (${route.region}, ${route.retention_profile})`;
+}
+
+function formatProcessorBlockedAttemptKey(attempt: ProofPrivacyProcessorBlockedAttempt): string {
+  const route = formatProcessorRouteKey(attempt.route);
+  return `${route} — ${attempt.reason_code}${attempt.timestamp ? ` @ ${attempt.timestamp}` : ''}`;
+}
+
+function mapProcessorRouteCounts(routes: ProofPrivacyProcessorRoute[]): Map<string, number> {
+  const routeCounts = new Map<string, number>();
+  for (const route of routes) {
+    const key = formatProcessorRouteKey(route);
+    routeCounts.set(key, (routeCounts.get(key) ?? 0) + route.count);
+  }
+  return routeCounts;
+}
+
+function actionCountForPosture(
+  posture: ProofPrivacyPosture,
+  action: DataHandlingAction,
+): number {
+  return posture.data_handling.actions.find((entry) => entry.action === action)?.count ?? 0;
+}
+
+function buildRunComparisonSnapshot(report: ProofReport): ProofRunComparisonSnapshot {
+  return {
+    bundle_id: report.public_layer.bundle_id,
+    harness_status: report.harness.status,
+    tier: report.harness.tier,
+    trust_tier: report.harness.trust_tier,
+    privacy_verdict: report.privacy_posture.overall_verdict,
+    reviewer_action_required: report.privacy_posture.reviewer_action_required,
+    runner_attestation_posture: report.privacy_posture.runner_attestation.posture,
+    runner_attestation_reason_code: report.privacy_posture.runner_attestation.reason_code,
+  };
+}
+
+function buildRunComparisonReviewerHighlights(args: {
+  baseline: ProofReport;
+  candidate: ProofReport;
+  deltas: ProofRunComparison['deltas'];
+}): string[] {
+  const { baseline, candidate, deltas } = args;
+  const highlights: string[] = [];
+  let assuranceHighlights = 0;
+  let evidenceHighlights = 0;
+  let processorHighlights = 0;
+  let privacyHighlights = 0;
+
+  if (baseline.harness.tier !== candidate.harness.tier || baseline.harness.trust_tier !== candidate.harness.trust_tier) {
+    highlights.push(
+      `Assurance tier changed: tier ${baseline.harness.tier ?? 'unknown'} -> ${candidate.harness.tier ?? 'unknown'}, trust ${baseline.harness.trust_tier ?? 'unknown'} -> ${candidate.harness.trust_tier ?? 'unknown'}.`,
+    );
+    assuranceHighlights += 1;
+  }
+
+  if (baseline.privacy_posture.overall_verdict !== candidate.privacy_posture.overall_verdict) {
+    highlights.push(
+      `Privacy verdict changed: ${baseline.privacy_posture.overall_verdict.toUpperCase()} -> ${candidate.privacy_posture.overall_verdict.toUpperCase()}.`,
+    );
+    privacyHighlights += 1;
+  }
+
+  const blockedAttemptDelta =
+    (candidate.privacy_posture.egress.blocked_attempt_count ?? 0) -
+    (baseline.privacy_posture.egress.blocked_attempt_count ?? 0);
+  if (blockedAttemptDelta !== 0) {
+    highlights.push(
+      `Blocked egress attempts changed by ${blockedAttemptDelta > 0 ? '+' : ''}${blockedAttemptDelta} (baseline=${baseline.privacy_posture.egress.blocked_attempt_count ?? 0}, candidate=${candidate.privacy_posture.egress.blocked_attempt_count ?? 0}).`,
+    );
+    evidenceHighlights += 1;
+  }
+
+  const approvalUnsatisfiedDelta =
+    candidate.privacy_posture.data_handling.approval_unsatisfied_count -
+    baseline.privacy_posture.data_handling.approval_unsatisfied_count;
+  if (approvalUnsatisfiedDelta !== 0) {
+    highlights.push(
+      `Unsatisfied approvals changed by ${approvalUnsatisfiedDelta > 0 ? '+' : ''}${approvalUnsatisfiedDelta} (baseline=${baseline.privacy_posture.data_handling.approval_unsatisfied_count}, candidate=${candidate.privacy_posture.data_handling.approval_unsatisfied_count}).`,
+    );
+    privacyHighlights += 1;
+  }
+
+  const redactionDelta =
+    candidate.privacy_posture.data_handling.redaction_applied_count -
+    baseline.privacy_posture.data_handling.redaction_applied_count;
+  if (redactionDelta !== 0) {
+    highlights.push(
+      `Redaction-applied receipts changed by ${redactionDelta > 0 ? '+' : ''}${redactionDelta} (baseline=${baseline.privacy_posture.data_handling.redaction_applied_count}, candidate=${candidate.privacy_posture.data_handling.redaction_applied_count}).`,
+    );
+    privacyHighlights += 1;
+  }
+
+  if (deltas.processor.used_processor_routes.added.length > 0 || deltas.processor.used_processor_routes.removed.length > 0) {
+    highlights.push(
+      `Processor route set changed: +${deltas.processor.used_processor_routes.added.length} / -${deltas.processor.used_processor_routes.removed.length}.`,
+    );
+    processorHighlights += 1;
+  }
+
+  if (deltas.processor.blocked_attempts.added.length > 0 || deltas.processor.blocked_attempts.removed.length > 0) {
+    highlights.push(
+      `Blocked processor attempt set changed: +${deltas.processor.blocked_attempts.added.length} / -${deltas.processor.blocked_attempts.removed.length}.`,
+    );
+    processorHighlights += 1;
+  }
+
+  const changedAssuranceRowCount = countChangedDeltaRows(deltas.assurance.rows);
+  if (changedAssuranceRowCount > 0 && assuranceHighlights === 0) {
+    highlights.push(
+      `Assurance delta summary: ${changedAssuranceRowCount} assurance ${pluralize(changedAssuranceRowCount, 'field')} changed.`,
+    );
+  }
+
+  const changedEvidenceRowCount = countChangedDeltaRows(deltas.evidence.rows);
+  if (changedEvidenceRowCount > 0 && evidenceHighlights === 0) {
+    highlights.push(
+      `Evidence delta summary: ${changedEvidenceRowCount} evidence ${pluralize(changedEvidenceRowCount, 'field')} changed.`,
+    );
+  }
+
+  const changedPolicyRowCount = countChangedDeltaRows(deltas.policy.rows);
+  if (changedPolicyRowCount > 0) {
+    highlights.push(
+      `Policy delta summary: ${changedPolicyRowCount} policy ${pluralize(changedPolicyRowCount, 'field')} changed.`,
+    );
+  }
+
+  if (deltas.processor.used_processor_count_deltas.length > 0 && processorHighlights === 0) {
+    const changedRouteCount = deltas.processor.used_processor_count_deltas.length;
+    highlights.push(
+      `Processor invocation counts changed across ${changedRouteCount} ${pluralize(changedRouteCount, 'route')}.`,
+    );
+  }
+
+  const changedPrivacyDeltaCount =
+    countChangedDeltaRows(deltas.privacy.rows) +
+    countChangedDeltaRows(deltas.privacy.data_handling_action_rows) +
+    countStringSetDeltaEntries(deltas.privacy.sensitive_class_deltas) +
+    countStringSetDeltaEntries(deltas.privacy.signal_deltas.background_noise) +
+    countStringSetDeltaEntries(deltas.privacy.signal_deltas.caution) +
+    countStringSetDeltaEntries(deltas.privacy.signal_deltas.reviewer_action_required) +
+    countStringSetDeltaEntries(deltas.privacy.claim_deltas.proven_claims) +
+    countStringSetDeltaEntries(deltas.privacy.claim_deltas.not_proven_claims);
+  if (changedPrivacyDeltaCount > 0 && privacyHighlights === 0) {
+    highlights.push(
+      `Privacy delta summary: ${changedPrivacyDeltaCount} privacy detail ${pluralize(changedPrivacyDeltaCount, 'entry')} changed.`,
+    );
+  }
+
+  const hasAnyDelta =
+    deltas.assurance.changed ||
+    deltas.evidence.changed ||
+    deltas.policy.changed ||
+    deltas.processor.changed ||
+    deltas.privacy.changed;
+  if (!hasAnyDelta) {
+    return ['No assurance, evidence, policy, processor, or privacy deltas were detected between the compared runs.'];
+  }
+
+  return highlights;
+}
+
+function buildProofRunComparison(args: {
+  baseline: ProofReport;
+  candidate: ProofReport;
+  baselineSourceType: ProofRunComparison['baseline_source']['type'];
+}): ProofRunComparison {
+  const { baseline, candidate, baselineSourceType } = args;
+
+  const assuranceRows: ProofRunComparisonDeltaRow[] = [
+    buildComparisonDeltaRow('Harness status', baseline.harness.status, candidate.harness.status),
+    buildComparisonDeltaRow('Harness tier', baseline.harness.tier, candidate.harness.tier),
+    buildComparisonDeltaRow('Harness trust tier', baseline.harness.trust_tier, candidate.harness.trust_tier),
+    buildComparisonDeltaRow(
+      'Runner attestation posture',
+      baseline.privacy_posture.runner_attestation.posture,
+      candidate.privacy_posture.runner_attestation.posture,
+    ),
+    buildComparisonDeltaRow(
+      'Runner attestation reason code',
+      baseline.privacy_posture.runner_attestation.reason_code,
+      candidate.privacy_posture.runner_attestation.reason_code,
+    ),
+  ];
+
+  const evidenceRows: ProofRunComparisonDeltaRow[] = [
+    buildComparisonDeltaRow('Signed gateway receipts', baseline.gateway.signed_count, candidate.gateway.signed_count),
+    buildComparisonDeltaRow('Event-chain entries', baseline.evidence.event_chain_count, candidate.evidence.event_chain_count),
+    buildComparisonDeltaRow('Execution receipts', baseline.evidence.execution_receipt_count, candidate.evidence.execution_receipt_count),
+    buildComparisonDeltaRow('Network receipts', baseline.evidence.network_receipt_count, candidate.evidence.network_receipt_count),
+    buildComparisonDeltaRow('Tool receipts', baseline.evidence.tool_receipt_count, candidate.evidence.tool_receipt_count),
+    buildComparisonDeltaRow(
+      'Egress policy evidence present',
+      baseline.privacy_posture.evidence.egress_policy_receipt_present,
+      candidate.privacy_posture.evidence.egress_policy_receipt_present,
+    ),
+    buildComparisonDeltaRow(
+      'Processor policy evidence present',
+      baseline.privacy_posture.evidence.processor_policy_evidence_present,
+      candidate.privacy_posture.evidence.processor_policy_evidence_present,
+    ),
+    buildComparisonDeltaRow(
+      'Data-handling evidence present',
+      baseline.privacy_posture.evidence.data_handling_receipts_present,
+      candidate.privacy_posture.evidence.data_handling_receipts_present,
+    ),
+    buildComparisonDeltaRow(
+      'Runtime hygiene evidence present',
+      baseline.privacy_posture.evidence.runtime_hygiene_present,
+      candidate.privacy_posture.evidence.runtime_hygiene_present,
+    ),
+    buildComparisonDeltaRow(
+      'Runner measurement evidence present',
+      baseline.privacy_posture.evidence.runner_measurement_present,
+      candidate.privacy_posture.evidence.runner_measurement_present,
+    ),
+    buildComparisonDeltaRow(
+      'Runner attestation receipt present',
+      baseline.privacy_posture.evidence.runner_attestation_receipt_present,
+      candidate.privacy_posture.evidence.runner_attestation_receipt_present,
+    ),
+    buildComparisonDeltaRow(
+      'Blocked egress attempts',
+      baseline.privacy_posture.egress.blocked_attempt_count,
+      candidate.privacy_posture.egress.blocked_attempt_count,
+    ),
+    buildComparisonDeltaRow(
+      'Data-handling receipts',
+      baseline.privacy_posture.data_handling.receipt_count,
+      candidate.privacy_posture.data_handling.receipt_count,
+    ),
+    buildComparisonDeltaRow(
+      'Approval required receipts',
+      baseline.privacy_posture.data_handling.approval_required_count,
+      candidate.privacy_posture.data_handling.approval_required_count,
+    ),
+    buildComparisonDeltaRow(
+      'Approval unsatisfied receipts',
+      baseline.privacy_posture.data_handling.approval_unsatisfied_count,
+      candidate.privacy_posture.data_handling.approval_unsatisfied_count,
+    ),
+    buildComparisonDeltaRow(
+      'Redaction applied receipts',
+      baseline.privacy_posture.data_handling.redaction_applied_count,
+      candidate.privacy_posture.data_handling.redaction_applied_count,
+    ),
+  ];
+
+  const policyRows: ProofRunComparisonDeltaRow[] = [
+    buildComparisonDeltaRow(
+      'Egress proofed mode',
+      baseline.privacy_posture.egress.proofed_mode,
+      candidate.privacy_posture.egress.proofed_mode,
+    ),
+    buildComparisonDeltaRow(
+      'Direct provider access blocked',
+      baseline.privacy_posture.egress.direct_provider_access_blocked,
+      candidate.privacy_posture.egress.direct_provider_access_blocked,
+    ),
+    buildComparisonDeltaRow(
+      'Processor profile',
+      baseline.privacy_posture.processor_policy.profile_id,
+      candidate.privacy_posture.processor_policy.profile_id,
+    ),
+    buildComparisonDeltaRow(
+      'Processor policy version',
+      baseline.privacy_posture.processor_policy.policy_version,
+      candidate.privacy_posture.processor_policy.policy_version,
+    ),
+    buildComparisonDeltaRow(
+      'Processor enforce flag',
+      baseline.privacy_posture.processor_policy.enforce,
+      candidate.privacy_posture.processor_policy.enforce,
+    ),
+    buildComparisonDeltaRow(
+      'Processor allowed routes',
+      baseline.privacy_posture.processor_policy.allowed_routes,
+      candidate.privacy_posture.processor_policy.allowed_routes,
+    ),
+    buildComparisonDeltaRow(
+      'Processor denied routes',
+      baseline.privacy_posture.processor_policy.denied_routes,
+      candidate.privacy_posture.processor_policy.denied_routes,
+    ),
+    buildComparisonDeltaRow(
+      'Data-handling policy version',
+      baseline.privacy_posture.data_handling.policy_version,
+      candidate.privacy_posture.data_handling.policy_version,
+    ),
+    buildComparisonDeltaRow(
+      'Runtime profile',
+      baseline.privacy_posture.runtime.profile_id,
+      candidate.privacy_posture.runtime.profile_id,
+    ),
+    buildComparisonDeltaRow(
+      'Runtime profile status',
+      baseline.privacy_posture.runtime.profile_status,
+      candidate.privacy_posture.runtime.profile_status,
+    ),
+    buildComparisonDeltaRow(
+      'Runtime hygiene verdict',
+      baseline.privacy_posture.runtime.hygiene_verdict,
+      candidate.privacy_posture.runtime.hygiene_verdict,
+    ),
+  ];
+
+  const baselineProcessorCounts = mapProcessorRouteCounts(baseline.privacy_posture.processor_policy.used_processors);
+  const candidateProcessorCounts = mapProcessorRouteCounts(candidate.privacy_posture.processor_policy.used_processors);
+  const baselineProcessorRoutes = [...baselineProcessorCounts.keys()];
+  const candidateProcessorRoutes = [...candidateProcessorCounts.keys()];
+  const usedProcessorRouteDelta = diffComparisonStringSets(baselineProcessorRoutes, candidateProcessorRoutes);
+  const usedProcessorCountDeltas: ProofRunComparisonCountDelta[] = [...new Set([
+    ...baselineProcessorRoutes,
+    ...candidateProcessorRoutes,
+  ])]
+    .sort((a, b) => a.localeCompare(b))
+    .map((key) => ({
+      key,
+      baseline_count: baselineProcessorCounts.get(key) ?? 0,
+      candidate_count: candidateProcessorCounts.get(key) ?? 0,
+    }))
+    .filter((entry) => entry.baseline_count !== entry.candidate_count);
+
+  const blockedAttemptDelta = diffComparisonStringSets(
+    baseline.privacy_posture.processor_policy.blocked_attempts.map(formatProcessorBlockedAttemptKey),
+    candidate.privacy_posture.processor_policy.blocked_attempts.map(formatProcessorBlockedAttemptKey),
+  );
+
+  const privacyRows: ProofRunComparisonDeltaRow[] = [
+    buildComparisonDeltaRow(
+      'Privacy verdict',
+      baseline.privacy_posture.overall_verdict,
+      candidate.privacy_posture.overall_verdict,
+    ),
+    buildComparisonDeltaRow(
+      'Privacy reviewer action required',
+      baseline.privacy_posture.reviewer_action_required,
+      candidate.privacy_posture.reviewer_action_required,
+    ),
+    buildComparisonDeltaRow(
+      'Runner attestation bindings consistent',
+      baseline.privacy_posture.runner_attestation.evidence.binding_consistent,
+      candidate.privacy_posture.runner_attestation.evidence.binding_consistent,
+    ),
+  ];
+
+  const dataHandlingActionRows = DATA_HANDLING_ACTION_ORDER.map((action) =>
+    buildComparisonDeltaRow(
+      `Data-handling action: ${action}`,
+      actionCountForPosture(baseline.privacy_posture, action),
+      actionCountForPosture(candidate.privacy_posture, action),
+    ));
+
+  const baselineSensitiveClasses = baseline.privacy_posture.data_handling.sensitive_classes.map(formatSensitiveClass);
+  const candidateSensitiveClasses = candidate.privacy_posture.data_handling.sensitive_classes.map(formatSensitiveClass);
+  const sensitiveClassDelta = diffComparisonStringSets(baselineSensitiveClasses, candidateSensitiveClasses);
+
+  const signalDeltas = {
+    background_noise: diffComparisonStringSets(
+      baseline.privacy_posture.signal_buckets.background_noise,
+      candidate.privacy_posture.signal_buckets.background_noise,
+    ),
+    caution: diffComparisonStringSets(
+      baseline.privacy_posture.signal_buckets.caution,
+      candidate.privacy_posture.signal_buckets.caution,
+    ),
+    reviewer_action_required: diffComparisonStringSets(
+      baseline.privacy_posture.signal_buckets.reviewer_action_required,
+      candidate.privacy_posture.signal_buckets.reviewer_action_required,
+    ),
+  };
+
+  const claimDeltas = {
+    proven_claims: diffComparisonStringSets(
+      baseline.privacy_posture.proven_claims,
+      candidate.privacy_posture.proven_claims,
+    ),
+    not_proven_claims: diffComparisonStringSets(
+      baseline.privacy_posture.not_proven_claims,
+      candidate.privacy_posture.not_proven_claims,
+    ),
+  };
+
+  const deltas: ProofRunComparison['deltas'] = {
+    assurance: {
+      rows: assuranceRows,
+      changed: hasChangedDeltaRows(assuranceRows),
+    },
+    evidence: {
+      rows: evidenceRows,
+      changed: hasChangedDeltaRows(evidenceRows),
+    },
+    policy: {
+      rows: policyRows,
+      changed: hasChangedDeltaRows(policyRows),
+    },
+    processor: {
+      used_processor_routes: usedProcessorRouteDelta,
+      used_processor_count_deltas: usedProcessorCountDeltas,
+      blocked_attempts: blockedAttemptDelta,
+      changed:
+        hasStringSetDelta(usedProcessorRouteDelta) ||
+        usedProcessorCountDeltas.length > 0 ||
+        hasStringSetDelta(blockedAttemptDelta),
+    },
+    privacy: {
+      rows: privacyRows,
+      data_handling_action_rows: dataHandlingActionRows,
+      sensitive_class_deltas: sensitiveClassDelta,
+      signal_deltas: signalDeltas,
+      claim_deltas: claimDeltas,
+      changed:
+        hasChangedDeltaRows(privacyRows) ||
+        hasChangedDeltaRows(dataHandlingActionRows) ||
+        hasStringSetDelta(sensitiveClassDelta) ||
+        hasStringSetDelta(signalDeltas.background_noise) ||
+        hasStringSetDelta(signalDeltas.caution) ||
+        hasStringSetDelta(signalDeltas.reviewer_action_required) ||
+        hasStringSetDelta(claimDeltas.proven_claims) ||
+        hasStringSetDelta(claimDeltas.not_proven_claims),
+    },
+  };
+
+  return {
+    comparison_version: '1',
+    generated_at: deriveStableExportPackTimestamp(candidate),
+    baseline_source: {
+      type: baselineSourceType,
+    },
+    baseline: buildRunComparisonSnapshot(baseline),
+    candidate: buildRunComparisonSnapshot(candidate),
+    deltas,
+    reviewer_highlights: buildRunComparisonReviewerHighlights({ baseline, candidate, deltas }),
+  };
+}
+
+function comparisonValueToText(value: ProofRunComparisonValue): string {
+  if (value === null) return 'unknown';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return String(value);
+}
+
+function renderComparisonDeltaRows(lines: string[], rows: ProofRunComparisonDeltaRow[]): void {
+  const changedRows = rows.filter((row) => row.changed);
+  if (changedRows.length === 0) {
+    lines.push('- No deltas.');
+    return;
+  }
+  for (const row of changedRows) {
+    lines.push(
+      `- ${row.label}: baseline=\`${comparisonValueToText(row.baseline)}\` -> candidate=\`${comparisonValueToText(row.candidate)}\``,
+    );
+  }
+}
+
+function renderComparisonStringSetDelta(
+  lines: string[],
+  label: string,
+  delta: ProofRunComparisonStringSetDelta,
+): void {
+  if (!hasStringSetDelta(delta)) {
+    lines.push(`- ${label}: no deltas.`);
+    return;
+  }
+  if (delta.added.length > 0) {
+    lines.push(`- ${label} added:`);
+    for (const entry of delta.added) {
+      lines.push(`  - ${entry}`);
+    }
+  }
+  if (delta.removed.length > 0) {
+    lines.push(`- ${label} removed:`);
+    for (const entry of delta.removed) {
+      lines.push(`  - ${entry}`);
+    }
+  }
+}
+
+function renderProofRunComparisonMarkdown(comparison: ProofRunComparison): string {
+  const lines: string[] = [];
+  lines.push('# Side-by-side Run Comparison');
+  lines.push('');
+  lines.push(`Generated at: ${comparison.generated_at}`);
+  lines.push(`Baseline source type: ${comparison.baseline_source.type}`);
+  lines.push(`Baseline bundle ID: ${comparison.baseline.bundle_id ?? 'unknown'}`);
+  lines.push(`Candidate bundle ID: ${comparison.candidate.bundle_id ?? 'unknown'}`);
+  lines.push('');
+  lines.push('## Reviewer Highlights');
+  for (const highlight of comparison.reviewer_highlights) {
+    lines.push(`- ${highlight}`);
+  }
+  lines.push('');
+  lines.push('## Assurance/Tier Deltas');
+  renderComparisonDeltaRows(lines, comparison.deltas.assurance.rows);
+  lines.push('');
+  lines.push('## Evidence Deltas');
+  renderComparisonDeltaRows(lines, comparison.deltas.evidence.rows);
+  lines.push('');
+  lines.push('## Policy Deltas');
+  renderComparisonDeltaRows(lines, comparison.deltas.policy.rows);
+  lines.push('');
+  lines.push('## Processor Deltas');
+  renderComparisonStringSetDelta(lines, 'Used processor routes', comparison.deltas.processor.used_processor_routes);
+  if (comparison.deltas.processor.used_processor_count_deltas.length === 0) {
+    lines.push('- Used processor count deltas: no deltas.');
+  } else {
+    lines.push('- Used processor count deltas:');
+    for (const delta of comparison.deltas.processor.used_processor_count_deltas) {
+      lines.push(
+        `  - ${delta.key}: baseline=${delta.baseline_count} -> candidate=${delta.candidate_count}`,
+      );
+    }
+  }
+  renderComparisonStringSetDelta(lines, 'Blocked processor attempts', comparison.deltas.processor.blocked_attempts);
+  lines.push('');
+  lines.push('## Privacy Deltas');
+  renderComparisonDeltaRows(lines, comparison.deltas.privacy.rows);
+  lines.push('');
+  lines.push('### Data-handling Action Deltas');
+  renderComparisonDeltaRows(lines, comparison.deltas.privacy.data_handling_action_rows);
+  lines.push('');
+  lines.push('### Sensitive-class Deltas');
+  renderComparisonStringSetDelta(lines, 'Sensitive classes', comparison.deltas.privacy.sensitive_class_deltas);
+  lines.push('');
+  lines.push('### Signal Deltas');
+  renderComparisonStringSetDelta(lines, 'Background signals', comparison.deltas.privacy.signal_deltas.background_noise);
+  renderComparisonStringSetDelta(lines, 'Caution signals', comparison.deltas.privacy.signal_deltas.caution);
+  renderComparisonStringSetDelta(
+    lines,
+    'Reviewer-action signals',
+    comparison.deltas.privacy.signal_deltas.reviewer_action_required,
+  );
+  lines.push('');
+  lines.push('### Claim Deltas');
+  renderComparisonStringSetDelta(lines, 'Proven claims', comparison.deltas.privacy.claim_deltas.proven_claims);
+  renderComparisonStringSetDelta(lines, 'Not-proven claims', comparison.deltas.privacy.claim_deltas.not_proven_claims);
+  lines.push('');
+  return lines.join('\n');
+}
+
+function isProofReportLike(value: unknown): value is ProofReport {
+  if (!isRecord(value)) return false;
+  return (
+    isRecord(value.public_layer) &&
+    isRecord(value.harness) &&
+    isRecord(value.evidence) &&
+    isRecord(value.gateway) &&
+    isRecord(value.sentinels) &&
+    isRecord(value.network) &&
+    isRecord(value.privacy_posture) &&
+    Array.isArray(value.review_buckets) &&
+    Array.isArray(value.warnings) &&
+    Array.isArray(value.next_steps) &&
+    typeof value.verify_command === 'string'
+  );
+}
+
+async function loadRunComparisonBaseline(compareWithPath: string): Promise<{
+  report: ProofReport;
+  sourceType: ProofRunComparison['baseline_source']['type'];
+}> {
+  const resolvedComparePath = resolve(compareWithPath);
+  const comparePathStat = await stat(resolvedComparePath);
+
+  if (comparePathStat.isDirectory()) {
+    const reportPath = resolve(resolvedComparePath, EXPORT_PACK_REPORT_JSON_PATH);
+    const parsed = await readJsonObject(reportPath);
+    if (!isProofReportLike(parsed)) {
+      throw new Error(`Comparison export-pack report is not a valid proof report: ${reportPath}`);
+    }
+    return {
+      report: parsed,
+      sourceType: 'export_pack',
+    };
+  }
+
+  const parsed = await readJsonObject(resolvedComparePath);
+  if (isProofReportLike(parsed)) {
+    return {
+      report: parsed,
+      sourceType: 'proof_report',
+    };
+  }
+
+  if (asString(parsed.envelope_type) !== 'proof_bundle' || !isRecord(parsed.payload)) {
+    throw new Error(
+      `Comparison input must be a proof bundle, export pack directory, or proof report JSON: ${resolvedComparePath}`,
+    );
+  }
+
+  const baselineRunSummary = await maybeReadJsonObject(inferRunSummaryPath(resolvedComparePath));
+  return {
+    report: buildProofReport({
+      inputPath: resolvedComparePath,
+      bundle: parsed,
+      runSummary: baselineRunSummary,
+    }),
+    sourceType: 'proof_bundle',
+  };
+}
 
 function summarizePrivacyPosture(args: {
   payload: Record<string, unknown>;
@@ -2029,6 +2809,18 @@ export function renderProofReportHtml(report: ProofReport): string {
     ...report.privacy_posture.egress.allowed_proxy_destinations.map((host) => formatAllowedEgressDestination('proxy', host)),
     ...report.privacy_posture.egress.allowed_child_destinations.map((host) => formatAllowedEgressDestination('child', host)),
   ];
+  const runComparisonCard = report.run_comparison
+    ? `<article class="card">
+        <h2>Side-by-side run comparison</h2>
+        ${renderKeyValueRows([
+          ['Baseline source type', report.run_comparison.baseline_source.type],
+          ['Baseline bundle ID', report.run_comparison.baseline.bundle_id],
+          ['Candidate bundle ID', report.run_comparison.candidate.bundle_id],
+        ])}
+        <div class="subheading">Reviewer highlights</div>
+        <ul>${renderList(report.run_comparison.reviewer_highlights)}</ul>
+      </article>`
+    : '';
   const rawJson = escapeHtml(JSON.stringify(report, null, 2));
 
   return `<!doctype html>
@@ -2269,6 +3061,8 @@ export function renderProofReportHtml(report: ProofReport): string {
         <ul>${renderList(report.next_steps)}</ul>
         <p class="footer-note">Verifier command: <code>${escapeHtml(report.verify_command)}</code></p>
       </article>
+
+      ${runComparisonCard}
     </section>
 
     <section class="grid" style="margin-top:16px;">
@@ -2413,6 +3207,16 @@ export function renderProofReportText(report: ProofReport): string {
   for (const claim of report.privacy_posture.not_proven_claims) {
     lines.push(`    - ${claim}`);
   }
+  if (report.run_comparison) {
+    lines.push('');
+    lines.push('Run comparison highlights:');
+    lines.push(`  Baseline source type       : ${report.run_comparison.baseline_source.type}`);
+    lines.push(`  Baseline bundle            : ${report.run_comparison.baseline.bundle_id ?? 'unknown'}`);
+    lines.push(`  Candidate bundle           : ${report.run_comparison.candidate.bundle_id ?? 'unknown'}`);
+    for (const highlight of report.run_comparison.reviewer_highlights) {
+      lines.push(`  - ${highlight}`);
+    }
+  }
   lines.push('');
   lines.push('Next steps:');
   for (const step of report.next_steps) {
@@ -2461,6 +3265,17 @@ export async function runProveReport(options: ProveOptions): Promise<ProofReport
     decryptedPayload,
   });
 
+  let runComparison: ProofRunComparison | undefined;
+  if (options.compareWithPath) {
+    const comparisonBaseline = await loadRunComparisonBaseline(options.compareWithPath);
+    runComparison = buildProofRunComparison({
+      baseline: comparisonBaseline.report,
+      candidate: report,
+      baselineSourceType: comparisonBaseline.sourceType,
+    });
+    report.run_comparison = runComparison;
+  }
+
   if (options.htmlPath) {
     const htmlPath = resolve(options.htmlPath);
     await writeFile(htmlPath, renderProofReportHtml(report), 'utf-8');
@@ -2472,6 +3287,7 @@ export async function runProveReport(options: ProveOptions): Promise<ProofReport
       packPath: options.exportPackPath,
       bundle,
       report,
+      comparison: runComparison,
     });
   }
 
