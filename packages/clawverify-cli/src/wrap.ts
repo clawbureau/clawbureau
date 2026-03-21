@@ -1036,6 +1036,9 @@ export async function wrap(
     passthrough: usePassthrough,
     ...(configuredClawproxyUrl || proofedMode ? { clawproxyUrl: effectiveClawproxyUrl } : {}),
     ...(configuredClawproxyToken ? { proxyToken: configuredClawproxyToken } : {}),
+    ...(loadedPolicy.policyBinding
+      ? { effectivePolicyHashB64u: loadedPolicy.policyBinding.effective_policy_hash_b64u }
+      : {}),
     ...(proofedMode
       ? {
           enforceEgressAllowlist: true,
@@ -1099,6 +1102,9 @@ export async function wrap(
     ...process.env,
     CLAWSIG_RUN_ID: runId,
     CLAWSIG_AGENT_DID: agentDid.did,
+    ...(loadedPolicy.policyBinding
+      ? { CLAWSIG_EFFECTIVE_POLICY_HASH_B64U: loadedPolicy.policyBinding.effective_policy_hash_b64u }
+      : {}),
 
     // RED TEAM FIX #6: Socket-level interception preload.
     CLAWSIG_PROXY_PORT: String(proxy.port),
