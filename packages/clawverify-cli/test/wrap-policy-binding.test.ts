@@ -125,6 +125,10 @@ describe('AF2-POL wrap policy binding surface', () => {
         await readFile(join(clawsigDir, 'proof_bundle.json'), 'utf-8')
       ) as {
         payload: {
+          event_chain?: Array<{
+            run_id?: string;
+            event_hash_b64u?: string;
+          }>;
           metadata?: {
             policy_binding?: {
               binding_version?: string;
@@ -165,6 +169,30 @@ describe('AF2-POL wrap policy binding surface', () => {
                 };
               };
             };
+            runner_attestation_receipt?: {
+              envelope_type?: string;
+              payload_hash_b64u?: string;
+              payload?: {
+                binding?: {
+                  run_id?: string;
+                  event_hash_b64u?: string;
+                };
+                policy?: {
+                  effective_policy_hash_b64u?: string;
+                };
+                runner_measurement?: {
+                  manifest_hash_b64u?: string;
+                  runtime_hash_b64u?: string;
+                  artifacts?: {
+                    preload_hash_b64u?: string | null;
+                    node_preload_sentinel_hash_b64u?: string | null;
+                    sentinel_shell_hash_b64u?: string | null;
+                    sentinel_shell_policy_hash_b64u?: string | null;
+                    interpose_library_hash_b64u?: string | null;
+                  };
+                };
+              };
+            };
           };
         };
       };
@@ -172,6 +200,8 @@ describe('AF2-POL wrap policy binding surface', () => {
       const binding = proofBundle.payload.metadata?.policy_binding;
       const egress = proofBundle.payload.metadata?.sentinels?.egress_policy_receipt?.payload;
       const runnerMeasurement = proofBundle.payload.metadata?.runner_measurement;
+      const runnerAttestation = proofBundle.payload.metadata?.runner_attestation_receipt;
+      const firstEvent = proofBundle.payload.event_chain?.[0];
       const runnerManifestHash = runnerMeasurement?.manifest
         ? await hashJsonB64u(runnerMeasurement.manifest)
         : null;
@@ -194,6 +224,20 @@ describe('AF2-POL wrap policy binding surface', () => {
       expect(runnerMeasurement?.manifest?.artifacts?.preload_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
       expect(runnerMeasurement?.manifest?.artifacts?.node_preload_sentinel_hash_b64u)
         .toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(runnerAttestation?.envelope_type).toBe('runner_attestation_receipt');
+      expect(runnerAttestation?.payload_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(runnerAttestation?.payload?.policy?.effective_policy_hash_b64u)
+        .toBe(binding?.effective_policy_hash_b64u);
+      expect(runnerAttestation?.payload?.runner_measurement?.manifest_hash_b64u)
+        .toBe(runnerMeasurement?.manifest_hash_b64u);
+      expect(runnerAttestation?.payload?.runner_measurement?.runtime_hash_b64u)
+        .toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(runnerAttestation?.payload?.runner_measurement?.artifacts?.preload_hash_b64u)
+        .toBe(runnerMeasurement?.manifest?.artifacts?.preload_hash_b64u);
+      expect(runnerAttestation?.payload?.runner_measurement?.artifacts?.node_preload_sentinel_hash_b64u)
+        .toBe(runnerMeasurement?.manifest?.artifacts?.node_preload_sentinel_hash_b64u);
+      expect(runnerAttestation?.payload?.binding?.run_id).toBe(firstEvent?.run_id);
+      expect(runnerAttestation?.payload?.binding?.event_hash_b64u).toBe(firstEvent?.event_hash_b64u);
       if (runnerMeasurement?.manifest?.proofed?.sentinels?.shell_enabled) {
         expect(runnerMeasurement?.manifest?.artifacts?.sentinel_shell_hash_b64u)
           .toMatch(/^[A-Za-z0-9_-]+$/);

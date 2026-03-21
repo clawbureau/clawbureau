@@ -40,6 +40,7 @@ import type {
   EgressPolicyReceiptPayload,
   PolicyBindingMetadata,
   RunnerMeasurementBindingMetadata,
+  RunnerAttestationReceiptPayload,
   SignedPolicyBundlePayload,
   SignedPolicyLayer,
   SignedPolicyStatement,
@@ -2840,7 +2841,22 @@ function extractEgressPolicyReceiptEnvelope(
   return sentinels.egress_policy_receipt;
 }
 
+function extractRunnerAttestationReceiptEnvelope(
+  metadataRecord: Record<string, unknown> | null
+): unknown {
+  if (!metadataRecord) return undefined;
+  return metadataRecord.runner_attestation_receipt;
+}
+
 interface EgressPolicyReceiptVerificationOutcome {
+  valid: boolean;
+  signature_valid: boolean;
+  code?: VerificationError['code'];
+  message?: string;
+  field?: string;
+}
+
+interface RunnerAttestationReceiptVerificationOutcome {
   valid: boolean;
   signature_valid: boolean;
   code?: VerificationError['code'];
@@ -4414,6 +4430,502 @@ async function verifyEgressPolicyReceiptEnvelope(args: {
       code: 'SIGNATURE_INVALID',
       message: 'egress policy receipt signature verification failed',
       field: 'payload.metadata.sentinels.egress_policy_receipt.signature_b64u',
+    };
+  }
+
+  return { valid: true, signature_valid: true };
+}
+
+async function verifyRunnerAttestationReceiptEnvelope(args: {
+  envelope: unknown;
+  bundleAgentDid: string;
+  expectedRunId: string | null;
+  allowedEventHashes: Set<string> | null;
+  runnerMeasurement: RunnerMeasurementBindingMetadata;
+  expectedPolicyHashB64u: string;
+}): Promise<RunnerAttestationReceiptVerificationOutcome> {
+  const {
+    envelope,
+    bundleAgentDid,
+    expectedRunId,
+    allowedEventHashes,
+    runnerMeasurement,
+    expectedPolicyHashB64u,
+  } = args;
+
+  if (!isObjectRecord(envelope)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'payload.metadata.runner_attestation_receipt must be an object',
+      field: 'payload.metadata.runner_attestation_receipt',
+    };
+  }
+
+  if (
+    !hasOnlyAllowedKeys(envelope, [
+      'envelope_version',
+      'envelope_type',
+      'payload',
+      'payload_hash_b64u',
+      'hash_algorithm',
+      'signature_b64u',
+      'algorithm',
+      'signer_did',
+      'issued_at',
+    ])
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt envelope has unsupported fields',
+      field: 'payload.metadata.runner_attestation_receipt',
+    };
+  }
+
+  if (envelope.envelope_version !== '1') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt envelope_version must be "1"',
+      field: 'payload.metadata.runner_attestation_receipt.envelope_version',
+    };
+  }
+  if (envelope.envelope_type !== 'runner_attestation_receipt') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt envelope_type must be "runner_attestation_receipt"',
+      field: 'payload.metadata.runner_attestation_receipt.envelope_type',
+    };
+  }
+  if (envelope.hash_algorithm !== 'SHA-256') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'UNKNOWN_HASH_ALGORITHM',
+      message: 'runner attestation receipt hash_algorithm must be SHA-256',
+      field: 'payload.metadata.runner_attestation_receipt.hash_algorithm',
+    };
+  }
+  if (envelope.algorithm !== 'Ed25519') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'UNKNOWN_ALGORITHM',
+      message: 'runner attestation receipt algorithm must be Ed25519',
+      field: 'payload.metadata.runner_attestation_receipt.algorithm',
+    };
+  }
+  if (
+    typeof envelope.payload_hash_b64u !== 'string' ||
+    !isValidBase64Url(envelope.payload_hash_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload_hash_b64u must be base64url',
+      field: 'payload.metadata.runner_attestation_receipt.payload_hash_b64u',
+    };
+  }
+  if (
+    typeof envelope.signature_b64u !== 'string' ||
+    !isValidBase64Url(envelope.signature_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt signature_b64u must be base64url',
+      field: 'payload.metadata.runner_attestation_receipt.signature_b64u',
+    };
+  }
+  if (
+    typeof envelope.signer_did !== 'string' ||
+    !isValidDidFormat(envelope.signer_did)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'INVALID_DID_FORMAT',
+      message: 'runner attestation receipt signer_did must be a valid DID',
+      field: 'payload.metadata.runner_attestation_receipt.signer_did',
+    };
+  }
+  if (!isValidIsoDate(envelope.issued_at)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt issued_at must be ISO-8601',
+      field: 'payload.metadata.runner_attestation_receipt.issued_at',
+    };
+  }
+  if (!isObjectRecord(envelope.payload)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload must be an object',
+      field: 'payload.metadata.runner_attestation_receipt.payload',
+    };
+  }
+
+  const payload = envelope.payload as unknown as RunnerAttestationReceiptPayload;
+  if (
+    !hasOnlyAllowedKeys(envelope.payload, [
+      'receipt_version',
+      'receipt_id',
+      'hash_algorithm',
+      'agent_did',
+      'timestamp',
+      'binding',
+      'runner_measurement',
+      'policy',
+    ])
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload has unsupported fields',
+      field: 'payload.metadata.runner_attestation_receipt.payload',
+    };
+  }
+
+  if (payload.receipt_version !== '1') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload.receipt_version must be "1"',
+      field: 'payload.metadata.runner_attestation_receipt.payload.receipt_version',
+    };
+  }
+  if (
+    typeof payload.receipt_id !== 'string' ||
+    payload.receipt_id.trim().length === 0
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload.receipt_id must be non-empty',
+      field: 'payload.metadata.runner_attestation_receipt.payload.receipt_id',
+    };
+  }
+  if (payload.hash_algorithm !== 'SHA-256') {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'UNKNOWN_HASH_ALGORITHM',
+      message: 'runner attestation receipt payload.hash_algorithm must be SHA-256',
+      field: 'payload.metadata.runner_attestation_receipt.payload.hash_algorithm',
+    };
+  }
+  if (typeof payload.agent_did !== 'string' || !isValidDidFormat(payload.agent_did)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'INVALID_DID_FORMAT',
+      message: 'runner attestation receipt payload.agent_did must be a valid DID',
+      field: 'payload.metadata.runner_attestation_receipt.payload.agent_did',
+    };
+  }
+  if (payload.agent_did !== bundleAgentDid || envelope.signer_did !== bundleAgentDid) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'runner attestation receipt signer/payload agent_did must match proof bundle agent_did',
+      field: 'payload.metadata.runner_attestation_receipt.signer_did',
+    };
+  }
+  if (!isValidIsoDate(payload.timestamp)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload.timestamp must be ISO-8601',
+      field: 'payload.metadata.runner_attestation_receipt.payload.timestamp',
+    };
+  }
+
+  if (!isObjectRecord(payload.binding)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload.binding must be an object',
+      field: 'payload.metadata.runner_attestation_receipt.payload.binding',
+    };
+  }
+  if (!hasOnlyAllowedKeys(payload.binding, ['run_id', 'event_hash_b64u'])) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload.binding has unsupported fields',
+      field: 'payload.metadata.runner_attestation_receipt.payload.binding',
+    };
+  }
+  if (
+    typeof payload.binding.run_id !== 'string' ||
+    payload.binding.run_id.trim().length === 0
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message: 'runner attestation receipt payload.binding.run_id is required',
+      field: 'payload.metadata.runner_attestation_receipt.payload.binding.run_id',
+    };
+  }
+  if (
+    typeof payload.binding.event_hash_b64u !== 'string' ||
+    !isBase64Url(payload.binding.event_hash_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MISSING_REQUIRED_FIELD',
+      message:
+        'runner attestation receipt payload.binding.event_hash_b64u must be base64url',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.binding.event_hash_b64u',
+    };
+  }
+  if (!expectedRunId || !allowedEventHashes) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'runner attestation receipt requires a valid payload.event_chain for run/event binding',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.binding.event_hash_b64u',
+    };
+  }
+  if (payload.binding.run_id !== expectedRunId) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message: 'runner attestation receipt binding.run_id does not match proof bundle run_id',
+      field: 'payload.metadata.runner_attestation_receipt.payload.binding.run_id',
+    };
+  }
+  if (!allowedEventHashes.has(payload.binding.event_hash_b64u)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'runner attestation receipt binding.event_hash_b64u must reference payload.event_chain',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.binding.event_hash_b64u',
+    };
+  }
+
+  if (!isObjectRecord(payload.policy)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload.policy must be an object',
+      field: 'payload.metadata.runner_attestation_receipt.payload.policy',
+    };
+  }
+  if (
+    typeof payload.policy.effective_policy_hash_b64u !== 'string' ||
+    !isBase64Url(payload.policy.effective_policy_hash_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'runner attestation receipt payload.policy.effective_policy_hash_b64u must be base64url',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.policy.effective_policy_hash_b64u',
+    };
+  }
+  if (payload.policy.effective_policy_hash_b64u !== expectedPolicyHashB64u) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'runner attestation receipt policy hash does not match payload.metadata.policy_binding.effective_policy_hash_b64u',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.policy.effective_policy_hash_b64u',
+    };
+  }
+
+  if (!isObjectRecord(payload.runner_measurement)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message: 'runner attestation receipt payload.runner_measurement must be an object',
+      field: 'payload.metadata.runner_attestation_receipt.payload.runner_measurement',
+    };
+  }
+  if (
+    typeof payload.runner_measurement.manifest_hash_b64u !== 'string' ||
+    !isBase64Url(payload.runner_measurement.manifest_hash_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'runner attestation receipt payload.runner_measurement.manifest_hash_b64u must be base64url',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.runner_measurement.manifest_hash_b64u',
+    };
+  }
+  if (
+    payload.runner_measurement.manifest_hash_b64u !==
+    runnerMeasurement.manifest_hash_b64u
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'EVIDENCE_MISMATCH',
+      message:
+        'runner attestation receipt manifest hash does not match payload.metadata.runner_measurement.manifest_hash_b64u',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.runner_measurement.manifest_hash_b64u',
+    };
+  }
+  if (
+    typeof payload.runner_measurement.runtime_hash_b64u !== 'string' ||
+    !isBase64Url(payload.runner_measurement.runtime_hash_b64u)
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'runner attestation receipt payload.runner_measurement.runtime_hash_b64u must be base64url',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.runner_measurement.runtime_hash_b64u',
+    };
+  }
+  const computedRuntimeHash = await computeHash(runnerMeasurement.manifest.runtime, 'SHA-256');
+  if (payload.runner_measurement.runtime_hash_b64u !== computedRuntimeHash) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'HASH_MISMATCH',
+      message: 'runner attestation receipt runtime_hash_b64u mismatch',
+      field:
+        'payload.metadata.runner_attestation_receipt.payload.runner_measurement.runtime_hash_b64u',
+    };
+  }
+
+  if (!isObjectRecord(payload.runner_measurement.artifacts)) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'runner attestation receipt payload.runner_measurement.artifacts must be an object',
+      field: 'payload.metadata.runner_attestation_receipt.payload.runner_measurement.artifacts',
+    };
+  }
+  if (
+    !hasOnlyAllowedKeys(payload.runner_measurement.artifacts, [
+      'preload_hash_b64u',
+      'node_preload_sentinel_hash_b64u',
+      'sentinel_shell_hash_b64u',
+      'sentinel_shell_policy_hash_b64u',
+      'interpose_library_hash_b64u',
+    ])
+  ) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'MALFORMED_ENVELOPE',
+      message:
+        'runner attestation receipt payload.runner_measurement.artifacts has unsupported fields',
+      field: 'payload.metadata.runner_attestation_receipt.payload.runner_measurement.artifacts',
+    };
+  }
+  const artifactFields = [
+    'preload_hash_b64u',
+    'node_preload_sentinel_hash_b64u',
+    'sentinel_shell_hash_b64u',
+    'sentinel_shell_policy_hash_b64u',
+    'interpose_library_hash_b64u',
+  ] as const;
+  for (const field of artifactFields) {
+    const receiptValue = payload.runner_measurement.artifacts[field];
+    if (receiptValue !== null && !isBase64Url(receiptValue)) {
+      return {
+        valid: false,
+        signature_valid: false,
+        code: 'MALFORMED_ENVELOPE',
+        message:
+          `runner attestation receipt payload.runner_measurement.artifacts.${field} must be base64url or null`,
+        field:
+          `payload.metadata.runner_attestation_receipt.payload.runner_measurement.artifacts.${field}`,
+      };
+    }
+    if (receiptValue !== runnerMeasurement.manifest.artifacts[field]) {
+      return {
+        valid: false,
+        signature_valid: false,
+        code: 'EVIDENCE_MISMATCH',
+        message:
+          `runner attestation receipt artifact hash ${field} does not match payload.metadata.runner_measurement.manifest.artifacts.${field}`,
+        field:
+          `payload.metadata.runner_attestation_receipt.payload.runner_measurement.artifacts.${field}`,
+      };
+    }
+  }
+
+  const computedPayloadHash = await computeHash(payload, 'SHA-256');
+  if (computedPayloadHash !== envelope.payload_hash_b64u) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'HASH_MISMATCH',
+      message: 'runner attestation receipt payload_hash_b64u mismatch',
+      field: 'payload.metadata.runner_attestation_receipt.payload_hash_b64u',
+    };
+  }
+
+  const publicKeyBytes = extractPublicKeyFromDidKey(envelope.signer_did);
+  if (!publicKeyBytes) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'INVALID_DID_FORMAT',
+      message: 'Unable to extract Ed25519 public key from runner attestation signer DID',
+      field: 'payload.metadata.runner_attestation_receipt.signer_did',
+    };
+  }
+  const signatureValid = await verifySignature(
+    envelope.algorithm,
+    publicKeyBytes,
+    base64UrlDecode(envelope.signature_b64u),
+    new TextEncoder().encode(envelope.payload_hash_b64u),
+  );
+  if (!signatureValid) {
+    return {
+      valid: false,
+      signature_valid: false,
+      code: 'SIGNATURE_INVALID',
+      message: 'runner attestation receipt signature verification failed',
+      field: 'payload.metadata.runner_attestation_receipt.signature_b64u',
     };
   }
 
@@ -8141,6 +8653,107 @@ export async function verifyProofBundle(
           'payload.metadata.runner_measurement',
       },
     };
+  }
+
+  const runnerMeasurementRecord =
+    metadataRecord && isObjectRecord(metadataRecord.runner_measurement)
+      ? (metadataRecord.runner_measurement as RunnerMeasurementBindingMetadata)
+      : null;
+  const runnerAttestationReceiptEnvelope =
+    extractRunnerAttestationReceiptEnvelope(metadataRecord);
+
+  if (!runnerMeasurementRecord) {
+    if (runnerAttestationReceiptEnvelope !== undefined) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'payload.metadata.runner_measurement is required when payload.metadata.runner_attestation_receipt is present',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+          component_results: componentResults,
+        },
+        error: {
+          code: 'MISSING_REQUIRED_FIELD',
+          message:
+            'payload.metadata.runner_measurement is required when payload.metadata.runner_attestation_receipt is present',
+          field: 'payload.metadata.runner_measurement',
+        },
+      };
+    }
+  } else {
+    if (runnerAttestationReceiptEnvelope === undefined) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'payload.metadata.runner_measurement requires payload.metadata.runner_attestation_receipt',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+          component_results: componentResults,
+        },
+        error: {
+          code: 'MISSING_REQUIRED_FIELD',
+          message:
+            'payload.metadata.runner_attestation_receipt is required when payload.metadata.runner_measurement is present',
+          field: 'payload.metadata.runner_attestation_receipt',
+        },
+      };
+    }
+    if (!policyBindingHash) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'runner attestation receipt requires payload.metadata.policy_binding.effective_policy_hash_b64u',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+          component_results: componentResults,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message:
+            'runner attestation receipt requires payload.metadata.policy_binding.effective_policy_hash_b64u',
+          field: 'payload.metadata.policy_binding.effective_policy_hash_b64u',
+        },
+      };
+    }
+
+    const runnerAttestationVerification =
+      await verifyRunnerAttestationReceiptEnvelope({
+        envelope: runnerAttestationReceiptEnvelope,
+        bundleAgentDid: payload.agent_did,
+        expectedRunId: bindingContext?.expectedRunId ?? null,
+        allowedEventHashes: bindingContext?.allowedEventHashes ?? null,
+        runnerMeasurement: runnerMeasurementRecord,
+        expectedPolicyHashB64u: policyBindingHash,
+      });
+    if (!runnerAttestationVerification.valid) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            runnerAttestationVerification.message ??
+            'Invalid runner attestation receipt evidence',
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+          component_results: componentResults,
+        },
+        error: {
+          code: runnerAttestationVerification.code ?? 'EVIDENCE_MISMATCH',
+          message:
+            runnerAttestationVerification.message ??
+            'Invalid runner attestation receipt evidence',
+          field:
+            runnerAttestationVerification.field ??
+            'payload.metadata.runner_attestation_receipt',
+        },
+      };
+    }
   }
 
   if (!hasEgressPolicyReceipt) {

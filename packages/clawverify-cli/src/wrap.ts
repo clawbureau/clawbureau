@@ -48,6 +48,8 @@ import type {
   EffectivePolicyBindingMetadata,
   RunnerMeasurementBindingMetadata,
   RunnerMeasurementManifest,
+  RunnerAttestationReceiptPayload,
+  RunnerAttestationReceiptEnvelope,
   LocalPolicy,
   CommandAnalysis,
   FsEvent,
@@ -579,6 +581,63 @@ async function buildRunnerMeasurementBinding(args: {
     hash_algorithm: 'SHA-256',
     manifest_hash_b64u: manifestHashB64u,
     manifest,
+  };
+}
+
+async function buildRunnerAttestationReceiptEnvelope(args: {
+  agentDid: string;
+  sign: (data: Uint8Array) => Promise<string>;
+  runId: string;
+  eventHashB64u: string;
+  effectivePolicyHashB64u: string;
+  runnerMeasurementBinding: RunnerMeasurementBindingMetadata;
+}): Promise<RunnerAttestationReceiptEnvelope> {
+  const runtimeHashB64u = await hashJsonB64u(args.runnerMeasurementBinding.manifest.runtime);
+  const timestamp = new Date().toISOString();
+
+  const payload: RunnerAttestationReceiptPayload = {
+    receipt_version: '1',
+    receipt_id: `rar_${crypto.randomUUID()}`,
+    hash_algorithm: 'SHA-256',
+    agent_did: args.agentDid,
+    timestamp,
+    binding: {
+      run_id: args.runId,
+      event_hash_b64u: args.eventHashB64u,
+    },
+    runner_measurement: {
+      manifest_hash_b64u: args.runnerMeasurementBinding.manifest_hash_b64u,
+      runtime_hash_b64u: runtimeHashB64u,
+      artifacts: {
+        preload_hash_b64u: args.runnerMeasurementBinding.manifest.artifacts.preload_hash_b64u,
+        node_preload_sentinel_hash_b64u:
+          args.runnerMeasurementBinding.manifest.artifacts.node_preload_sentinel_hash_b64u,
+        sentinel_shell_hash_b64u:
+          args.runnerMeasurementBinding.manifest.artifacts.sentinel_shell_hash_b64u,
+        sentinel_shell_policy_hash_b64u:
+          args.runnerMeasurementBinding.manifest.artifacts.sentinel_shell_policy_hash_b64u,
+        interpose_library_hash_b64u:
+          args.runnerMeasurementBinding.manifest.artifacts.interpose_library_hash_b64u,
+      },
+    },
+    policy: {
+      effective_policy_hash_b64u: args.effectivePolicyHashB64u,
+    },
+  };
+
+  const payloadHashB64u = await hashJsonB64u(payload);
+  const signatureB64u = await args.sign(new TextEncoder().encode(payloadHashB64u));
+
+  return {
+    envelope_version: '1',
+    envelope_type: 'runner_attestation_receipt',
+    payload,
+    payload_hash_b64u: payloadHashB64u,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: signatureB64u,
+    algorithm: 'Ed25519',
+    signer_did: args.agentDid,
+    issued_at: timestamp,
   };
 }
 
@@ -1574,6 +1633,7 @@ export async function wrap(
   const effectivePolicyBinding = loadedPolicy.policyBinding;
   let runnerMeasurementBinding: RunnerMeasurementBindingMetadata | undefined;
   let egressPolicyReceiptEnvelope: SignedEnvelope<EgressPolicyReceiptPayload> | undefined;
+  let runnerAttestationReceiptEnvelope: RunnerAttestationReceiptEnvelope | undefined;
   if (proofedMode && parsedProofedClawproxyUrl) {
     const allowedProxyDestinations = normalizeCanonicalHostList(proofedEgressAllowlist);
     const allowedChildDestinations = normalizeCanonicalHostList(proofedChildEgressAllowlist);
@@ -1602,6 +1662,12 @@ export async function wrap(
     };
     const descriptorPolicyHashB64u = await hashJsonB64u(policyDescriptor);
     const effectivePolicyHashB64u = effectivePolicyBinding?.effective_policy_hash_b64u;
+    if (!effectivePolicyHashB64u) {
+      process.stderr.write(
+        '\x1b[31m[clawsig]\x1b[0m PRV_RUNNER_ATTESTATION_POLICY_BINDING_MISSING: proofed mode requires payload.metadata.policy_binding.effective_policy_hash_b64u for runner attestation receipts.\n',
+      );
+      return 1;
+    }
     const eventHashB64u =
       bundle.payload.event_chain && bundle.payload.event_chain.length > 0
         ? bundle.payload.event_chain[0]?.event_hash_b64u
@@ -1613,15 +1679,28 @@ export async function wrap(
       );
       return 1;
     }
+    if (!runnerMeasurementBinding) {
+      process.stderr.write(
+        '\x1b[31m[clawsig]\x1b[0m PRV_RUNNER_ATTESTATION_MEASUREMENT_MISSING: proofed mode requires runner measurement metadata before attestation receipt emission.\n',
+      );
+      return 1;
+    }
+
+    runnerAttestationReceiptEnvelope = await buildRunnerAttestationReceiptEnvelope({
+      agentDid: agentDid.did,
+      sign: (data) => agentDid.sign(data),
+      runId,
+      eventHashB64u,
+      effectivePolicyHashB64u,
+      runnerMeasurementBinding,
+    });
 
     const policyReceiptPayload: EgressPolicyReceiptPayload = {
       receipt_version: '1',
       receipt_id: `epr_${crypto.randomUUID()}`,
       policy_version: '1',
       policy_hash_b64u: descriptorPolicyHashB64u,
-      ...(effectivePolicyHashB64u
-        ? { effective_policy_hash_b64u: effectivePolicyHashB64u }
-        : {}),
+      effective_policy_hash_b64u: effectivePolicyHashB64u,
       proofed_mode: true,
       clawproxy_url: parsedProofedClawproxyUrl.toString(),
       allowed_proxy_destinations: allowedProxyDestinations,
@@ -1661,11 +1740,19 @@ export async function wrap(
       `\x1b[36m[clawsig]\x1b[0m Runner measurement hash: ${runnerMeasurementBinding.manifest_hash_b64u}\n`,
     );
   }
+  if (runnerAttestationReceiptEnvelope) {
+    diag(
+      `\x1b[36m[clawsig]\x1b[0m Runner attestation receipt hash: ${runnerAttestationReceiptEnvelope.payload_hash_b64u}\n`,
+    );
+  }
 
   bundle.payload.metadata = {
     ...bundle.payload.metadata,
     ...(effectivePolicyBinding ? { policy_binding: effectivePolicyBinding } : {}),
     ...(runnerMeasurementBinding ? { runner_measurement: runnerMeasurementBinding } : {}),
+    ...(runnerAttestationReceiptEnvelope
+      ? { runner_attestation_receipt: runnerAttestationReceiptEnvelope }
+      : {}),
     sentinels: {
       ...(sentinelsMetadata as NonNullable<NonNullable<ProofBundlePayload['metadata']>['sentinels']>),
       ...(egressPolicyReceiptEnvelope
