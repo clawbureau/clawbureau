@@ -1,0 +1,22 @@
+## Codebase Patterns
+- Compile only from authoritative verification facts.
+- Keep the deterministic matrix authoritative and the narrative plane optional.
+- Fail closed on invalid upstream evidence, malformed rule inputs, or unsupported operators.
+- Preserve byte-stable authoritative outputs for identical evidence + rule sets.
+
+# Ralph Progress Log
+Started: 2026-03-21T17:45:00Z
+---
+
+## 2026-03-21T17:45:00Z - Clawcompiler Runtime v1 roadmap seeded
+- What was planned
+  - Added new roadmap folder + tracker files for Clawcompiler Runtime v1:
+    - `docs/roadmaps/clawcompiler-runtime-v1/README.md`
+    - `docs/roadmaps/clawcompiler-runtime-v1/prd.json`
+    - `docs/roadmaps/clawcompiler-runtime-v1/progress.txt`
+  - Seeded Beads epic `monorepo-cec2` with 10 dependency-aware child tasks covering ingest, deterministic rule runtime, fail-closed compilation, signed reports, first control pack, and product surfaces.
+  - Updated the roadmaps index so the old Clawcompiler bootstrap lane is treated as complete and Runtime v1 becomes the active follow-on roadmap.
+- Notes
+  - This roadmap explicitly depends on the shipped bootstrap contracts in `docs/roadmaps/clawcompiler/` and must not re-open schema membrane debates inside runtime lanes.
+  - Execution should follow waves, not blind parallelism: foundations first, authoritative runtime second, first assurance pack third, product surfaces last.
+---
