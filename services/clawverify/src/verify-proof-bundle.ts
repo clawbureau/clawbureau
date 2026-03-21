@@ -7638,8 +7638,8 @@ async function verifyVirReceiptEntry(
  * - unknown: No valid components
  * - basic: Valid envelope signature only
  * - verified: Valid event chain or receipts
- * - attested: Valid allowlisted signature-verified attestations
- * - full: All components valid (URM + events + receipts + attestations)
+ * - attested: Valid runner attestation evidence (AF2-ATT-003)
+ * - full: All components valid (URM + events + receipts + runner attestation)
  */
 function computeTrustTier(components: {
   envelope_valid: boolean;
@@ -7648,9 +7648,7 @@ function computeTrustTier(components: {
   receipts_valid?: boolean;
   vir_receipts_valid?: boolean;
   web_receipts_valid?: boolean;
-  coverage_attestations_valid?: boolean;
-  execution_attestations_valid?: boolean;
-  attestations_valid?: boolean;
+  runner_attestation_valid?: boolean;
 }): TrustTier {
   if (!components.envelope_valid) {
     return 'unknown';
@@ -7661,13 +7659,13 @@ function computeTrustTier(components: {
     components.urm_valid &&
     components.event_chain_valid &&
     (components.receipts_valid || components.vir_receipts_valid || components.web_receipts_valid) &&
-    (components.attestations_valid || components.execution_attestations_valid)
+    components.runner_attestation_valid
   ) {
     return 'full';
   }
 
-  // Attested: has valid attestations
-  if (components.attestations_valid) {
+  // AF2-ATT-003: attested tier requires valid runner attestation evidence.
+  if (components.runner_attestation_valid) {
     return 'attested';
   }
 
@@ -8556,6 +8554,10 @@ export async function verifyProofBundle(
   const payload = envelope.payload;
   const componentResults: NonNullable<ProofBundleVerificationResult['component_results']> = {
     envelope_valid: true,
+    runner_attestation_present: false,
+    runner_attestation_valid: false,
+    attested_assurance_reason_code:
+      'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION',
     causal_policy_profile: resolvedCausalPolicy.profile,
     causal_policy_snapshot: {
       profile: resolvedCausalPolicy.profile,
@@ -9085,6 +9087,13 @@ export async function verifyProofBundle(
       : null;
 
   const metadataRecord = isObjectRecord(payload.metadata) ? payload.metadata : null;
+  const runnerAttestationReceiptEnvelope =
+    extractRunnerAttestationReceiptEnvelope(metadataRecord);
+  const runnerAttestationPresent = runnerAttestationReceiptEnvelope !== undefined;
+  const runnerAttestationEvidencePresent = runnerAttestationPresent || Boolean(
+    metadataRecord && metadataRecord.runner_measurement !== undefined
+  );
+  componentResults.runner_attestation_present = runnerAttestationPresent;
 
   const requireEgressPolicyReceipt = options.requireEgressPolicyReceipt === true;
   const egressPolicyReceiptEnvelope = extractEgressPolicyReceiptEnvelope(metadataRecord);
@@ -9097,6 +9106,10 @@ export async function verifyProofBundle(
     eventChainValid: componentResults.event_chain_valid === true,
   });
   if (!policyBindingVerification.valid) {
+    if (runnerAttestationEvidencePresent) {
+      componentResults.attested_assurance_reason_code =
+        'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
+    }
     return {
       result: {
         status: 'INVALID',
@@ -9172,6 +9185,10 @@ export async function verifyProofBundle(
     metadataRecord,
   });
   if (!runnerMeasurementVerification.valid) {
+    if (runnerAttestationEvidencePresent) {
+      componentResults.attested_assurance_reason_code =
+        'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
+    }
     return {
       result: {
         status: 'INVALID',
@@ -9199,11 +9216,11 @@ export async function verifyProofBundle(
     metadataRecord && isObjectRecord(metadataRecord.runner_measurement)
       ? (metadataRecord.runner_measurement as RunnerMeasurementBindingMetadata)
       : null;
-  const runnerAttestationReceiptEnvelope =
-    extractRunnerAttestationReceiptEnvelope(metadataRecord);
 
   if (!runnerMeasurementRecord) {
     if (runnerAttestationReceiptEnvelope !== undefined) {
+      componentResults.attested_assurance_reason_code =
+        'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
       return {
         result: {
           status: 'INVALID',
@@ -9224,6 +9241,8 @@ export async function verifyProofBundle(
     }
   } else {
     if (runnerAttestationReceiptEnvelope === undefined) {
+      componentResults.attested_assurance_reason_code =
+        'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
       return {
         result: {
           status: 'INVALID',
@@ -9243,6 +9262,8 @@ export async function verifyProofBundle(
       };
     }
     if (!policyBindingHash) {
+      componentResults.attested_assurance_reason_code =
+        'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
       return {
         result: {
           status: 'INVALID',
@@ -9272,6 +9293,8 @@ export async function verifyProofBundle(
         expectedPolicyHashB64u: policyBindingHash,
       });
     if (!runnerAttestationVerification.valid) {
+      componentResults.attested_assurance_reason_code =
+        'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION';
       return {
         result: {
           status: 'INVALID',
@@ -9294,6 +9317,8 @@ export async function verifyProofBundle(
         },
       };
     }
+    componentResults.runner_attestation_valid = true;
+    componentResults.attested_assurance_reason_code = 'ATTESTED_TIER_GRANTED';
   }
 
   if (!hasEgressPolicyReceipt) {
@@ -10679,6 +10704,15 @@ export async function verifyProofBundle(
       trustTier = 'basic';
       modelIdentityRiskFlags.add('COMPLETENESS_TRUST_TIER_CONSTRAINED');
     }
+  }
+
+  if (
+    componentResults.runner_attestation_valid &&
+    trustTier !== 'attested' &&
+    trustTier !== 'full'
+  ) {
+    componentResults.attested_assurance_reason_code =
+      'ATTESTED_TIER_NOT_GRANTED_TRUST_CONSTRAINED';
   }
 
   // CVF-US-057: coverage attestation phase-gating (deterministic, fail-closed semantics)

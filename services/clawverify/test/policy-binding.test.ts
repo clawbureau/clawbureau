@@ -534,6 +534,190 @@ describe('AF2-POL service verifier policy binding', () => {
     expect(out.error?.field).toBe(
       'payload.metadata.runner_attestation_receipt.signature_b64u',
     );
+    expect(out.result.component_results?.attested_assurance_reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION',
+    );
+  });
+
+  it('grants attested trust tier only when runner attestation evidence is valid', async () => {
+    const keyPair = await generateKeyPair();
+    const did = await didFromPublicKey(keyPair.publicKey);
+    const sign = (message: Uint8Array) => signEd25519(keyPair.privateKey, message);
+
+    const eventHeader = makeEvent({
+      event_id: 'evt_runner_attested_1',
+      run_id: 'run_runner_attested_1',
+      event_hash_b64u: undefined,
+    });
+    const { event_hash_b64u: _ignored, ...eventBase } = eventHeader;
+    const event = {
+      ...eventBase,
+      event_hash_b64u: await computeHash(eventBase, 'SHA-256'),
+    };
+
+    const signedPolicyBundleEnvelope = await buildSignedPolicyBundleEnvelope({
+      did,
+      sign,
+    });
+    const policySnapshot = {
+      snapshot_version: '1',
+      resolver_version: 'org_project_task_exception.v1',
+      context: { org_id: 'acme' },
+      source_bundle: {
+        bundle_id: signedPolicyBundleEnvelope.payload.bundle_id,
+        issuer_did: did,
+        issued_at: signedPolicyBundleEnvelope.payload.issued_at,
+      },
+      applied_layers: [
+        {
+          layer_id: 'org',
+          scope_type: 'org',
+          org_id: 'acme',
+          priority: 0,
+          apply_mode: 'merge',
+          policy_hash_b64u: signedPolicyBundleEnvelope.payload.layers[0]!.policy_hash_b64u,
+        },
+      ],
+      effective_policy: {
+        statements: [
+          { sid: 'org.base', effect: 'Allow', actions: ['model:invoke'], resources: ['*'] },
+        ],
+      },
+    };
+    const effectivePolicyHash = await computeHash(canonicalize(policySnapshot), 'SHA-256');
+
+    const manifest = {
+      manifest_version: '1',
+      runtime: { platform: 'linux', arch: 'x64', node_version: 'v22.0.0' },
+      proofed: {
+        proofed_mode: true,
+        clawproxy_url: 'https://clawproxy.example',
+        allowed_proxy_destinations: ['clawproxy.example'],
+        allowed_child_destinations: ['127.0.0.1'],
+        sentinels: {
+          shell_enabled: false,
+          interpose_enabled: false,
+          preload_enabled: true,
+          fs_enabled: true,
+          net_enabled: true,
+        },
+      },
+      policy: {
+        effective_policy_hash_b64u: effectivePolicyHash,
+      },
+      artifacts: {
+        preload_hash_b64u: b64u(43),
+        node_preload_sentinel_hash_b64u: b64u(43),
+        sentinel_shell_hash_b64u: null,
+        sentinel_shell_policy_hash_b64u: null,
+        interpose_library_hash_b64u: null,
+      },
+    };
+    const runnerMeasurement = {
+      binding_version: '1',
+      hash_algorithm: 'SHA-256',
+      manifest_hash_b64u: await computeHash(manifest, 'SHA-256'),
+      manifest,
+    };
+    const runnerAttestationEnvelope = await buildSignedRunnerAttestationReceiptEnvelope({
+      did,
+      sign,
+      agentDid: did,
+      runId: event.run_id,
+      eventHashB64u: event.event_hash_b64u,
+      effectivePolicyHashB64u: effectivePolicyHash,
+      manifest,
+      manifestHashB64u: runnerMeasurement.manifest_hash_b64u,
+    });
+    const egressPayload = {
+      receipt_version: '1',
+      receipt_id: 'epr_runner_attested_1',
+      policy_version: '1',
+      policy_hash_b64u: await computeHash(
+        {
+          policy_version: '1',
+          proofed_mode: true,
+          clawproxy_url: 'https://clawproxy.example',
+          allowed_proxy_destinations: ['clawproxy.example'],
+          allowed_child_destinations: ['127.0.0.1'],
+          direct_provider_access_blocked: true,
+        },
+        'SHA-256',
+      ),
+      effective_policy_hash_b64u: effectivePolicyHash,
+      proofed_mode: true,
+      clawproxy_url: 'https://clawproxy.example',
+      allowed_proxy_destinations: ['clawproxy.example'],
+      allowed_child_destinations: ['127.0.0.1'],
+      direct_provider_access_blocked: true,
+      blocked_attempt_count: 0,
+      blocked_attempts_observed: false,
+      hash_algorithm: 'SHA-256',
+      agent_did: did,
+      timestamp: '2026-03-20T00:00:02.000Z',
+      binding: {
+        run_id: event.run_id,
+        event_hash_b64u: event.event_hash_b64u,
+      },
+    };
+    const egressPayloadHash = await computeHash(egressPayload, 'SHA-256');
+    const egressEnvelope = {
+      envelope_version: '1',
+      envelope_type: 'egress_policy_receipt',
+      payload: egressPayload,
+      payload_hash_b64u: egressPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: await sign(new TextEncoder().encode(egressPayloadHash)),
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: egressPayload.timestamp,
+    };
+
+    const payload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_runner_attested_1',
+      agent_did: did,
+      event_chain: [event],
+      metadata: {
+        policy_binding: {
+          binding_version: '1',
+          effective_policy_hash_b64u: effectivePolicyHash,
+          effective_policy_snapshot: policySnapshot,
+          signed_policy_bundle_envelope: signedPolicyBundleEnvelope,
+        },
+        sentinels: {
+          interpose_active: true,
+          egress_policy_receipt: egressEnvelope,
+        },
+        runner_measurement: runnerMeasurement,
+        runner_attestation_receipt: runnerAttestationEnvelope,
+      },
+    };
+    const payloadHash = await computeHash(payload, 'SHA-256');
+    const signature = await signEd25519(
+      keyPair.privateKey,
+      new TextEncoder().encode(payloadHash),
+    );
+    const envelope: any = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signature,
+      algorithm: 'Ed25519',
+      signer_did: did,
+      issued_at: '2026-03-20T00:00:03Z',
+    };
+
+    const out = await verifyProofBundle(envelope);
+    expect(out.result.status).toBe('VALID');
+    expect(out.result.trust_tier).toBe('attested');
+    expect(out.result.component_results?.runner_attestation_present).toBe(true);
+    expect(out.result.component_results?.runner_attestation_valid).toBe(true);
+    expect(out.result.component_results?.attested_assurance_reason_code).toBe(
+      'ATTESTED_TIER_GRANTED',
+    );
   });
 
   it('fails closed when runner_measurement.manifest_hash_b64u does not match manifest', async () => {
@@ -613,6 +797,10 @@ describe('AF2-POL service verifier policy binding', () => {
     expect(out.error?.code).toBe('HASH_MISMATCH');
     expect(out.error?.field).toBe(
       'payload.metadata.runner_measurement.manifest_hash_b64u',
+    );
+    expect(out.result.component_results?.runner_attestation_present).toBe(false);
+    expect(out.result.component_results?.attested_assurance_reason_code).toBe(
+      'ATTESTED_TIER_NOT_GRANTED_INVALID_RUNNER_ATTESTATION',
     );
   });
 });
