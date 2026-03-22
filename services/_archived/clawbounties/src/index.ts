@@ -1105,6 +1105,53 @@ interface SubmissionCompiledEvidenceDecisionSurfaceV1 {
   warnings: string[];
 }
 
+type SubmissionCompiledEvidencePolicyDecisionState =
+  | 'approve_recommended'
+  | 'manual_review_required'
+  | 'fix_required'
+  | 'unavailable';
+
+interface SubmissionCompiledEvidenceDecisionPolicyV1 {
+  schema_version: 'submission_compiled_evidence_decision_policy.v1';
+  decision: SubmissionCompiledEvidencePolicyDecisionState;
+  posture: SubmissionCompiledEvidenceDecisionPosture;
+  reason_codes: string[];
+  warning_codes: string[];
+  evidence_reason_codes: string[];
+  requester_contract: {
+    explicit_override_required: boolean;
+    approval_blocked: boolean;
+  };
+  automation: {
+    auto_approval_eligible: boolean;
+  };
+  decision_surface: SubmissionCompiledEvidenceDecisionSurfaceV1;
+}
+
+interface RequesterCompiledEvidenceOverrideContractV1 {
+  acknowledge_manual_review_required: true;
+  override_note: string;
+  override_reason_code: string | null;
+}
+
+interface RequesterCompiledEvidenceOverrideReceiptV1 {
+  required: boolean;
+  provided: boolean;
+  acknowledged: boolean;
+  override_note: string | null;
+  override_reason_code: string | null;
+}
+
+interface RequesterCompiledEvidenceApprovalGateResult {
+  status: 'allow' | 'override_required' | 'blocked_fix_required';
+  reason_code: string;
+  reason_codes: string[];
+}
+
+type ParseRequesterCompiledEvidenceOverrideContractResult =
+  | { ok: true; provided: boolean; contract: RequesterCompiledEvidenceOverrideContractV1 | null }
+  | { ok: false; message: string; details: Record<string, unknown> };
+
 interface VerifyCompiledEvidenceResult {
   status: VerificationStatus;
   reason: string;
@@ -1382,6 +1429,8 @@ interface ApproveBountyResponseV1 {
   escrow: EscrowReleaseResponse;
   decided_at: string;
   compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
+  compiled_evidence_decision_policy?: SubmissionCompiledEvidenceDecisionPolicyV1 | null;
+  compiled_evidence_override?: RequesterCompiledEvidenceOverrideReceiptV1 | null;
 }
 
 interface RejectBountyResponseV1 {
@@ -6076,11 +6125,11 @@ function deriveCompiledEvidenceSummaryForView(
 function deriveCompiledEvidenceDecisionPosture(
   summary: SubmissionCompiledEvidenceSummaryV1,
 ): SubmissionCompiledEvidenceDecisionPosture {
-  if (!summary.authoritative_report.provided || !summary.authoritative_report.valid) {
+  const overallStatus = summary.authoritative_report.overall_status;
+  if (!summary.authoritative_report.provided || !summary.authoritative_report.valid || overallStatus === null) {
     return 'authoritative_unverified_or_invalid';
   }
 
-  const overallStatus = summary.authoritative_report.overall_status;
   const hasAuthoritativeNonPass =
     summary.non_pass_controls.length > 0
     || overallStatus === 'FAIL'
@@ -6163,6 +6212,265 @@ function deriveCompiledEvidenceDecisionSurfaceForRecord(
   );
 }
 
+function evaluateCompiledEvidenceDecisionPolicy(
+  decisionSurface: SubmissionCompiledEvidenceDecisionSurfaceV1,
+): SubmissionCompiledEvidenceDecisionPolicyV1 {
+  const reasonCodes: string[] = [];
+  const addReasonCode = (code: string): void => {
+    if (!reasonCodes.includes(code)) reasonCodes.push(code);
+  };
+
+  const warningCodes = dedupeStrings([
+    ...decisionSurface.warnings,
+    ...(decisionSurface.narrative_layer?.boundary_warning_codes ?? []),
+  ]);
+
+  if ((decisionSurface.narrative_layer?.boundary_warning_codes.length ?? 0) > 0) {
+    addReasonCode('COMPILED_EVIDENCE_POLICY_NARRATIVE_BOUNDARY_WARNINGS_PRESENT');
+  }
+
+  if (!decisionSurface.available || decisionSurface.posture === 'unavailable') {
+    addReasonCode('COMPILED_EVIDENCE_POLICY_UNAVAILABLE');
+    addReasonCode('COMPILED_EVIDENCE_POLICY_DECISION_UNAVAILABLE');
+    return {
+      schema_version: 'submission_compiled_evidence_decision_policy.v1',
+      decision: 'unavailable',
+      posture: decisionSurface.posture,
+      reason_codes: reasonCodes,
+      warning_codes: warningCodes,
+      evidence_reason_codes: decisionSurface.important_reason_codes,
+      requester_contract: {
+        explicit_override_required: true,
+        approval_blocked: false,
+      },
+      automation: {
+        auto_approval_eligible: false,
+      },
+      decision_surface: decisionSurface,
+    };
+  }
+
+  const authoritativeReportProvided = decisionSurface.authoritative_report?.provided === true;
+  const authoritativeReportValid = decisionSurface.authoritative_report?.valid === true;
+
+  if (!authoritativeReportProvided) {
+    addReasonCode('COMPILED_EVIDENCE_POLICY_AUTHORITATIVE_REPORT_MISSING');
+  }
+  if (authoritativeReportProvided && !authoritativeReportValid) {
+    addReasonCode('COMPILED_EVIDENCE_POLICY_AUTHORITATIVE_REPORT_UNVERIFIED_OR_INVALID');
+  }
+  if (authoritativeReportProvided && authoritativeReportValid && decisionSurface.authoritative_report?.overall_status === null) {
+    addReasonCode('COMPILED_EVIDENCE_POLICY_AUTHORITATIVE_REPORT_STATUS_MISSING');
+  }
+  if (decisionSurface.key_non_pass_controls.length > 0) {
+    addReasonCode('COMPILED_EVIDENCE_POLICY_NON_PASS_CONTROLS_PRESENT');
+  }
+
+  let decision: SubmissionCompiledEvidencePolicyDecisionState = 'unavailable';
+  switch (decisionSurface.posture) {
+    case 'authoritative_pass':
+      decision = 'approve_recommended';
+      addReasonCode('COMPILED_EVIDENCE_POLICY_AUTHORITATIVE_PASS');
+      addReasonCode('COMPILED_EVIDENCE_POLICY_DECISION_APPROVE_RECOMMENDED');
+      break;
+    case 'authoritative_non_pass':
+      decision = 'fix_required';
+      addReasonCode('COMPILED_EVIDENCE_POLICY_AUTHORITATIVE_NON_PASS');
+      addReasonCode('COMPILED_EVIDENCE_POLICY_DECISION_FIX_REQUIRED');
+      break;
+    case 'authoritative_unverified_or_invalid':
+      decision = 'manual_review_required';
+      addReasonCode('COMPILED_EVIDENCE_POLICY_AUTHORITATIVE_UNVERIFIED_OR_INVALID');
+      addReasonCode('COMPILED_EVIDENCE_POLICY_DECISION_MANUAL_REVIEW_REQUIRED');
+      break;
+    default:
+      decision = 'unavailable';
+      addReasonCode('COMPILED_EVIDENCE_POLICY_UNAVAILABLE');
+      addReasonCode('COMPILED_EVIDENCE_POLICY_DECISION_UNAVAILABLE');
+      break;
+  }
+
+  return {
+    schema_version: 'submission_compiled_evidence_decision_policy.v1',
+    decision,
+    posture: decisionSurface.posture,
+    reason_codes: reasonCodes,
+    warning_codes: warningCodes,
+    evidence_reason_codes: decisionSurface.important_reason_codes,
+    requester_contract: {
+      explicit_override_required: decision === 'manual_review_required' || decision === 'unavailable',
+      approval_blocked: decision === 'fix_required',
+    },
+    automation: {
+      auto_approval_eligible: decision === 'approve_recommended',
+    },
+    decision_surface: decisionSurface,
+  };
+}
+
+function buildCompiledEvidenceDecisionPolicy(
+  summary: SubmissionCompiledEvidenceSummaryV1 | null,
+  options?: {
+    maxNonPassControls?: number;
+    maxImportantReasonCodes?: number;
+    maxWarnings?: number;
+    maxBoundaryWarningCodes?: number;
+  },
+): SubmissionCompiledEvidenceDecisionPolicyV1 {
+  return evaluateCompiledEvidenceDecisionPolicy(buildCompiledEvidenceDecisionSurface(summary, options));
+}
+
+function deriveCompiledEvidenceDecisionPolicyForRecord(
+  record: SubmissionRecord,
+  mode: 'detail' | 'list' = 'detail',
+): SubmissionCompiledEvidenceDecisionPolicyV1 {
+  return evaluateCompiledEvidenceDecisionPolicy(deriveCompiledEvidenceDecisionSurfaceForRecord(record, mode));
+}
+
+function parseRequesterCompiledEvidenceOverrideContract(
+  raw: unknown,
+): ParseRequesterCompiledEvidenceOverrideContractResult {
+  if (raw === undefined || raw === null) {
+    return {
+      ok: true,
+      provided: false,
+      contract: null,
+    };
+  }
+
+  if (!isRecord(raw)) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_override must be an object',
+      details: { field: 'compiled_evidence_override' },
+    };
+  }
+
+  if (raw.acknowledge_manual_review_required !== true) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_override.acknowledge_manual_review_required must be true',
+      details: { field: 'compiled_evidence_override.acknowledge_manual_review_required' },
+    };
+  }
+
+  const overrideNoteRaw = raw.override_note;
+  if (!isNonEmptyString(overrideNoteRaw)) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_override.override_note is required',
+      details: { field: 'compiled_evidence_override.override_note' },
+    };
+  }
+  const overrideNote = overrideNoteRaw.trim();
+  if (overrideNote.length === 0) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_override.override_note is required',
+      details: { field: 'compiled_evidence_override.override_note' },
+    };
+  }
+  if (overrideNote.length > 600) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_override.override_note is too long',
+      details: {
+        field: 'compiled_evidence_override.override_note',
+        max_length: 600,
+      },
+    };
+  }
+
+  const overrideReasonRaw = raw.override_reason_code;
+  if (overrideReasonRaw !== undefined && overrideReasonRaw !== null && typeof overrideReasonRaw !== 'string') {
+    return {
+      ok: false,
+      message: 'compiled_evidence_override.override_reason_code must be a string',
+      details: { field: 'compiled_evidence_override.override_reason_code' },
+    };
+  }
+
+  const overrideReasonCode = isNonEmptyString(overrideReasonRaw) ? overrideReasonRaw.trim().toUpperCase() : null;
+  if (overrideReasonCode && overrideReasonCode.length > 160) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_override.override_reason_code is too long',
+      details: {
+        field: 'compiled_evidence_override.override_reason_code',
+        max_length: 160,
+      },
+    };
+  }
+  if (overrideReasonCode && !/^[A-Z0-9_]+$/.test(overrideReasonCode)) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_override.override_reason_code must be a code-like string using A-Z, 0-9, and _',
+      details: { field: 'compiled_evidence_override.override_reason_code' },
+    };
+  }
+
+  return {
+    ok: true,
+    provided: true,
+    contract: {
+      acknowledge_manual_review_required: true,
+      override_note: overrideNote,
+      override_reason_code: overrideReasonCode,
+    },
+  };
+}
+
+function buildRequesterCompiledEvidenceOverrideReceipt(
+  required: boolean,
+  contract: RequesterCompiledEvidenceOverrideContractV1 | null,
+): RequesterCompiledEvidenceOverrideReceiptV1 | null {
+  if (!required && !contract) return null;
+
+  return {
+    required,
+    provided: contract !== null,
+    acknowledged: contract?.acknowledge_manual_review_required === true,
+    override_note: contract?.override_note ?? null,
+    override_reason_code: contract?.override_reason_code ?? null,
+  };
+}
+
+function evaluateRequesterCompiledEvidenceApprovalGate(
+  decisionPolicy: SubmissionCompiledEvidenceDecisionPolicyV1,
+  overrideContract: RequesterCompiledEvidenceOverrideContractV1 | null,
+): RequesterCompiledEvidenceApprovalGateResult {
+  if (decisionPolicy.requester_contract.approval_blocked) {
+    return {
+      status: 'blocked_fix_required',
+      reason_code: 'COMPILED_EVIDENCE_APPROVAL_BLOCKED_FIX_REQUIRED',
+      reason_codes: dedupeStrings([
+        ...decisionPolicy.reason_codes,
+        'COMPILED_EVIDENCE_APPROVAL_BLOCKED_FIX_REQUIRED',
+      ]),
+    };
+  }
+
+  if (decisionPolicy.requester_contract.explicit_override_required && !overrideContract) {
+    return {
+      status: 'override_required',
+      reason_code: 'COMPILED_EVIDENCE_APPROVAL_OVERRIDE_REQUIRED',
+      reason_codes: dedupeStrings([
+        ...decisionPolicy.reason_codes,
+        'COMPILED_EVIDENCE_APPROVAL_OVERRIDE_REQUIRED',
+      ]),
+    };
+  }
+
+  return {
+    status: 'allow',
+    reason_code: 'COMPILED_EVIDENCE_APPROVAL_POLICY_SATISFIED',
+    reason_codes: dedupeStrings([
+      ...decisionPolicy.reason_codes,
+      'COMPILED_EVIDENCE_APPROVAL_POLICY_SATISFIED',
+    ]),
+  };
+}
+
 export const __submissionCompiledEvidenceInternals = {
   parseCompiledEvidenceAttachmentInput,
   parseCompiledEvidenceReferenceInput,
@@ -6174,6 +6482,13 @@ export const __submissionCompiledEvidenceInternals = {
   normalizeCompiledEvidenceSummaryForView,
   buildCompiledEvidenceDecisionSurface,
   deriveCompiledEvidenceDecisionPosture,
+  evaluateCompiledEvidenceDecisionPolicy,
+  buildCompiledEvidenceDecisionPolicy,
+  deriveCompiledEvidenceDecisionPolicyForRecord,
+  parseRequesterCompiledEvidenceOverrideContract,
+  buildRequesterCompiledEvidenceOverrideReceipt,
+  evaluateRequesterCompiledEvidenceApprovalGate,
+  planArenaDeskDecisionAction,
 };
 
 function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
@@ -16995,6 +17310,13 @@ async function handleApproveBounty(
   const requester_did_raw = bodyRaw.requester_did;
   const submission_id_raw = bodyRaw.submission_id;
   const idempotency_key_raw = bodyRaw.idempotency_key;
+  const compiled_evidence_override_raw = bodyRaw.compiled_evidence_override;
+
+  const parsedCompiledEvidenceOverride = parseRequesterCompiledEvidenceOverrideContract(compiled_evidence_override_raw);
+  if (!parsedCompiledEvidenceOverride.ok) {
+    return errorResponse('INVALID_REQUEST', parsedCompiledEvidenceOverride.message, 400, parsedCompiledEvidenceOverride.details, version);
+  }
+  const compiledEvidenceOverrideContract = parsedCompiledEvidenceOverride.contract;
 
   const requesterDidHint = isNonEmptyString(requester_did_raw) ? requester_did_raw.trim() : null;
   if (requesterDidHint && !requesterDidHint.startsWith('did:')) {
@@ -17140,13 +17462,16 @@ async function handleApproveBounty(
     const resolvedSubmissionId = bounty.approved_submission_id ?? submission_id;
 
     let resolvedSubmissionCompiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null;
+    let resolvedSubmissionCompiledEvidencePolicy: SubmissionCompiledEvidenceDecisionPolicyV1 | null = null;
     try {
       const resolvedSubmission = await getSubmissionById(env.BOUNTIES_DB, resolvedSubmissionId);
       if (resolvedSubmission) {
         resolvedSubmissionCompiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(resolvedSubmission, 'detail');
+        resolvedSubmissionCompiledEvidencePolicy = evaluateCompiledEvidenceDecisionPolicy(resolvedSubmissionCompiledEvidenceReview);
       }
     } catch {
       resolvedSubmissionCompiledEvidenceReview = null;
+      resolvedSubmissionCompiledEvidencePolicy = null;
     }
 
     try {
@@ -17170,6 +17495,8 @@ async function handleApproveBounty(
       escrow: escrowResponse,
       decided_at: bounty.approved_at ?? bounty.updated_at,
       compiled_evidence_review: resolvedSubmissionCompiledEvidenceReview,
+      compiled_evidence_decision_policy: resolvedSubmissionCompiledEvidencePolicy,
+      compiled_evidence_override: null,
     };
 
     const sourceId = `clawbounties:approve:${bounty.bounty_id}:${resolvedSubmissionId}:${
@@ -17232,6 +17559,15 @@ async function handleApproveBounty(
   }
 
   const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail');
+  const compiledEvidenceDecisionPolicy = evaluateCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
+  const compiledEvidenceOverrideReceipt = buildRequesterCompiledEvidenceOverrideReceipt(
+    compiledEvidenceDecisionPolicy.requester_contract.explicit_override_required,
+    compiledEvidenceOverrideContract,
+  );
+  const compiledEvidenceApprovalGate = evaluateRequesterCompiledEvidenceApprovalGate(
+    compiledEvidenceDecisionPolicy,
+    compiledEvidenceOverrideContract,
+  );
 
   if (!payoutPolicy.policy.payout_ready) {
     return errorResponse(
@@ -17243,6 +17579,52 @@ async function handleApproveBounty(
         payout_review_policy: payoutPolicy.policy.view,
         assurance_gating: payoutPolicy.assurance_gating,
         compiled_evidence_review: compiledEvidenceReview,
+        compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+        compiled_evidence_override: compiledEvidenceOverrideReceipt,
+      },
+      version,
+    );
+  }
+
+  if (compiledEvidenceApprovalGate.status === 'blocked_fix_required') {
+    const topNonPassControl = compiledEvidenceReview.key_non_pass_controls[0] ?? null;
+    const message = topNonPassControl
+      ? `Compiled evidence requires fixes before approval (${topNonPassControl.control_id}:${topNonPassControl.status})`
+      : 'Compiled evidence requires fixes before approval';
+
+    return errorResponse(
+      'SUBMISSION_COMPILED_EVIDENCE_FIX_REQUIRED',
+      message,
+      422,
+      {
+        reason_codes: compiledEvidenceApprovalGate.reason_codes,
+        payout_review_policy: payoutPolicy.policy.view,
+        assurance_gating: payoutPolicy.assurance_gating,
+        compiled_evidence_review: compiledEvidenceReview,
+        compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+        compiled_evidence_override: compiledEvidenceOverrideReceipt,
+      },
+      version,
+    );
+  }
+
+  if (compiledEvidenceApprovalGate.status === 'override_required') {
+    return errorResponse(
+      'SUBMISSION_COMPILED_EVIDENCE_OVERRIDE_REQUIRED',
+      'Compiled evidence posture requires explicit requester override acknowledgement before approval',
+      422,
+      {
+        reason_codes: compiledEvidenceApprovalGate.reason_codes,
+        payout_review_policy: payoutPolicy.policy.view,
+        assurance_gating: payoutPolicy.assurance_gating,
+        compiled_evidence_review: compiledEvidenceReview,
+        compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+        compiled_evidence_override: compiledEvidenceOverrideReceipt,
+        required_contract: {
+          acknowledge_manual_review_required: true,
+          override_note: 'non-empty string (max 600 chars)',
+          override_reason_code: 'optional code-like string (A-Z, 0-9, _, max 160 chars)',
+        },
       },
       version,
     );
@@ -17279,6 +17661,7 @@ async function handleApproveBounty(
 
   const now = new Date().toISOString();
   let decidedAt = now;
+  let approvalOverrideReceiptTrusted = true;
 
   try {
     await updateBountyApproved(env.BOUNTIES_DB, {
@@ -17315,6 +17698,7 @@ async function handleApproveBounty(
         );
       }
 
+      approvalOverrideReceiptTrusted = false;
       decidedAt = updated.approved_at ?? updated.updated_at;
     } catch (lookupErr) {
       const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
@@ -17343,6 +17727,8 @@ async function handleApproveBounty(
     escrow: escrowResponse,
     decided_at: decidedAt,
     compiled_evidence_review: compiledEvidenceReview,
+    compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+    compiled_evidence_override: approvalOverrideReceiptTrusted ? compiledEvidenceOverrideReceipt : null,
   };
 
   await emitClawrepLoopEvent(env, {
@@ -22856,6 +23242,109 @@ function parseArenaDeskDecisionMode(raw: unknown): ArenaDeskDecisionMode | null 
   return null;
 }
 
+interface ArenaDeskDecisionActionPlan {
+  action: 'approve' | 'reject' | null;
+  reason_code: string;
+  eligible_for_approval: boolean;
+  payout_ready: boolean;
+  compiled_evidence_decision: SubmissionCompiledEvidencePolicyDecisionState;
+}
+
+function planArenaDeskDecisionAction(
+  decisionMode: ArenaDeskDecisionMode,
+  payoutReady: boolean,
+  compiledEvidencePolicy: SubmissionCompiledEvidenceDecisionPolicyV1,
+): ArenaDeskDecisionActionPlan {
+  const compiledDecision = compiledEvidencePolicy.decision;
+  const eligibleForApproval = payoutReady && compiledDecision === 'approve_recommended';
+
+  if (compiledDecision === 'manual_review_required') {
+    return {
+      action: null,
+      reason_code: 'ARENA_DECISION_COMPILED_EVIDENCE_MANUAL_REVIEW_REQUIRED',
+      eligible_for_approval: eligibleForApproval,
+      payout_ready: payoutReady,
+      compiled_evidence_decision: compiledDecision,
+    };
+  }
+
+  if (compiledDecision === 'unavailable') {
+    return {
+      action: null,
+      reason_code: 'ARENA_DECISION_COMPILED_EVIDENCE_UNAVAILABLE',
+      eligible_for_approval: eligibleForApproval,
+      payout_ready: payoutReady,
+      compiled_evidence_decision: compiledDecision,
+    };
+  }
+
+  if (decisionMode === 'approve_valid') {
+    if (eligibleForApproval) {
+      return {
+        action: 'approve',
+        reason_code: 'ARENA_DECISION_APPROVE_RECOMMENDED',
+        eligible_for_approval: eligibleForApproval,
+        payout_ready: payoutReady,
+        compiled_evidence_decision: compiledDecision,
+      };
+    }
+
+    return {
+      action: null,
+      reason_code: compiledDecision === 'fix_required'
+        ? 'ARENA_DECISION_COMPILED_EVIDENCE_FIX_REQUIRED'
+        : payoutReady
+          ? 'ARENA_DECISION_MODE_SKIP_VALID'
+          : 'ARENA_DECISION_MODE_SKIP_INVALID',
+      eligible_for_approval: eligibleForApproval,
+      payout_ready: payoutReady,
+      compiled_evidence_decision: compiledDecision,
+    };
+  }
+
+  if (decisionMode === 'reject_invalid') {
+    if (eligibleForApproval) {
+      return {
+        action: null,
+        reason_code: 'ARENA_DECISION_MODE_SKIP_VALID',
+        eligible_for_approval: eligibleForApproval,
+        payout_ready: payoutReady,
+        compiled_evidence_decision: compiledDecision,
+      };
+    }
+
+    return {
+      action: 'reject',
+      reason_code: compiledDecision === 'fix_required'
+        ? 'ARENA_DECISION_COMPILED_EVIDENCE_FIX_REQUIRED'
+        : 'ARENA_DECISION_REJECT_INVALID',
+      eligible_for_approval: eligibleForApproval,
+      payout_ready: payoutReady,
+      compiled_evidence_decision: compiledDecision,
+    };
+  }
+
+  if (eligibleForApproval) {
+    return {
+      action: 'approve',
+      reason_code: 'ARENA_DECISION_MIXED_APPROVE_RECOMMENDED',
+      eligible_for_approval: eligibleForApproval,
+      payout_ready: payoutReady,
+      compiled_evidence_decision: compiledDecision,
+    };
+  }
+
+  return {
+    action: 'reject',
+    reason_code: compiledDecision === 'fix_required'
+      ? 'ARENA_DECISION_COMPILED_EVIDENCE_FIX_REQUIRED'
+      : 'ARENA_DECISION_MIXED_REJECT_INVALID',
+    eligible_for_approval: eligibleForApproval,
+    payout_ready: payoutReady,
+    compiled_evidence_decision: compiledDecision,
+  };
+}
+
 async function buildArenaMissionSummary(
   db: D1Database,
   params: {
@@ -24129,29 +24618,27 @@ async function handlePostArenaDeskDecisionLoop(
     }
 
     const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'list');
-    const eligibleForApproval = payoutPolicyResult.policy.payout_ready;
-
-    let action: 'approve' | 'reject' | null = null;
-    if (decisionMode === 'approve_valid') {
-      action = eligibleForApproval ? 'approve' : null;
-    } else if (decisionMode === 'reject_invalid') {
-      action = eligibleForApproval ? null : 'reject';
-    } else {
-      action = eligibleForApproval ? 'approve' : 'reject';
-    }
+    const compiledEvidenceDecisionPolicy = evaluateCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
+    const actionPlan = planArenaDeskDecisionAction(
+      decisionMode,
+      payoutPolicyResult.policy.payout_ready,
+      compiledEvidenceDecisionPolicy,
+    );
+    const action = actionPlan.action;
 
     if (!action) {
       decisions.push({
         bounty_id: bounty.bounty_id,
         submission_id: submission.submission_id,
         status: 'skipped',
-        reason_code: eligibleForApproval
-          ? 'ARENA_DECISION_MODE_SKIP_VALID'
-          : 'ARENA_DECISION_MODE_SKIP_INVALID',
+        reason_code: actionPlan.reason_code,
         decision_mode: decisionMode,
+        payout_ready: actionPlan.payout_ready,
+        eligible_for_auto_approval: actionPlan.eligible_for_approval,
         payout_blocked_reason_codes: payoutPolicyResult.policy.blocked_reason_codes,
         payout_review_policy: payoutPolicyResult.policy.view,
         compiled_evidence_review: compiledEvidenceReview,
+        compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
       });
       continue;
     }
@@ -24176,13 +24663,17 @@ async function handlePostArenaDeskDecisionLoop(
         submission_id: submission.submission_id,
         status: 'planned',
         action,
+        action_reason_code: actionPlan.reason_code,
         idempotency_key: idempotencyKey,
         requester_did: bounty.requester_did,
         proof_verify_status: submission.proof_verify_status,
         commit_proof_verify_status: submission.commit_proof_verify_status,
+        payout_ready: actionPlan.payout_ready,
+        eligible_for_auto_approval: actionPlan.eligible_for_approval,
         payout_blocked_reason_codes: payoutPolicyResult.policy.blocked_reason_codes,
         payout_review_policy: payoutPolicyResult.policy.view,
         compiled_evidence_review: compiledEvidenceReview,
+        compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
       });
       continue;
     }
@@ -24225,10 +24716,14 @@ async function handlePostArenaDeskDecisionLoop(
         submission_id: submission.submission_id,
         status: 'applied',
         action,
+        action_reason_code: actionPlan.reason_code,
         idempotency_key: idempotencyKey,
         http_status: response.status,
+        payout_ready: actionPlan.payout_ready,
+        eligible_for_auto_approval: actionPlan.eligible_for_approval,
         payout_review_policy: payoutPolicyResult.policy.view,
         compiled_evidence_review: compiledEvidenceReview,
+        compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
         response: responsePayload,
       });
     } else {
@@ -24238,10 +24733,14 @@ async function handlePostArenaDeskDecisionLoop(
         submission_id: submission.submission_id,
         status: 'failed',
         action,
+        action_reason_code: actionPlan.reason_code,
         idempotency_key: idempotencyKey,
         http_status: response.status,
+        payout_ready: actionPlan.payout_ready,
+        eligible_for_auto_approval: actionPlan.eligible_for_approval,
         payout_review_policy: payoutPolicyResult.policy.view,
         compiled_evidence_review: compiledEvidenceReview,
+        compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
         response: responsePayload,
       });
     }
