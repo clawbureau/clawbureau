@@ -15,7 +15,7 @@
         "Existing proof-bundle-only submissions remain supported"
       ],
       "priority": 1,
-      "passes": false
+      "passes": true
     },
     {
       "id": "CBA-RV-002",
@@ -28,7 +28,7 @@
         "Invalid compiled evidence cannot silently upgrade reviewer posture"
       ],
       "priority": 1,
-      "passes": false
+      "passes": true
     },
     {
       "id": "CBA-RV-003",
@@ -41,7 +41,7 @@
         "Non-pass controls and important reason codes are exposed deterministically"
       ],
       "priority": 1,
-      "passes": false
+      "passes": true
     },
     {
       "id": "CBA-RV-004",
@@ -71,8 +71,8 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-03-22T01:25:00Z",
-    "status": "roadmap seeded (0/5 shipped)",
+    "updatedAt": "2026-03-22T02:14:46Z",
+    "status": "active (3/5 shipped; Wave 1 complete)",
     "dependsOn": [
       "docs/roadmaps/clawcompiler-runtime-v1/"
     ]
