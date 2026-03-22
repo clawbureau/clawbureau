@@ -14,7 +14,9 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## In progress / partially shipped
 
-- None currently.
+- **Clawbounties Assurance Decision Policy v1** (0/5 ⏳ — canonical compiled-evidence decision policy, requester override contract, arena desk adoption, manager autopilot guardrails, decision audit snapshots)
+  - Folder: `docs/roadmaps/clawbounties-assurance-decision-policy-v1/`
+  - Status: seeded; execution not started yet
 
 ## Completed roadmaps
 
