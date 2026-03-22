@@ -54,7 +54,7 @@
         "No silent auto-approval uplift from narrative-only or malformed compiled evidence"
       ],
       "priority": 2,
-      "passes": false
+      "passes": true
     },
     {
       "id": "CBA-RV-005",
@@ -67,12 +67,12 @@
         "Integration stays additive and does not break existing arena flows"
       ],
       "priority": 2,
-      "passes": false
+      "passes": true
     }
   ],
   "metadata": {
-    "updatedAt": "2026-03-22T02:14:46Z",
-    "status": "active (3/5 shipped; Wave 1 complete)",
+    "updatedAt": "2026-03-22T03:02:36Z",
+    "status": "complete (5/5 shipped)",
     "dependsOn": [
       "docs/roadmaps/clawcompiler-runtime-v1/"
     ]

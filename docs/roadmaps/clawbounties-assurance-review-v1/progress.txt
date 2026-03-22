@@ -45,3 +45,24 @@ Started: 2026-03-22T01:25:00Z
   - Reviewer-facing list/detail payloads need compacted non-pass/warning surfaces; raw persisted summaries are too noisy to expose directly.
   - `INAPPLICABLE` compiled controls should still count in matrix totals but should not dominate reviewer-facing “important reason code” posture.
 ---
+
+## 2026-03-22T03:02:36Z - Wave 2 shipped (`CBA-RV-004` / `CBA-RV-005`)
+- What was implemented
+  - Added compact compiled-evidence decision surfaces for reviewer/requester actions, exposing authoritative posture, key non-pass controls, important reason codes, and narrative-boundary warnings without dumping raw compiled artifacts.
+  - Threaded compiled evidence into submission next-actions, requester approval/reject response payloads, and arena decision-loop outputs.
+  - Propagated compiled evidence posture into arena inline summaries, decision-capture payloads, manager routing/autopilot/operator summaries, and live submission contender hints.
+  - Preserved additive behavior: no payout-routing or ingest-contract rewrites, only richer reviewer-facing guidance.
+- Evidence
+  - Feature PR #530: `feat(clawbounties): add reviewer compiled evidence surfaces`
+  - Feature commit: `dd2926316de058fa91702ed120afd038d67c4770`
+  - DID proof: `proofs/feat/clawbounties/CBA-RV-reviewer-surfaces/commit.sig.json`
+  - Reviewer verdict: `PASS WITH FIXES` at `/tmp/pi-chain-runs/cba2-wave2-reviewer-surfaces-20260322-022257/progress.md`
+- Validations
+  - `cd services/_archived/clawbounties && npm run typecheck`
+  - targeted `npx tsx` compiled-evidence decision-surface checks
+  - reviewer guard checks for submission scoping + non-authoritative wording
+  - `git diff --check`
+- Learnings for future iterations
+  - Arena compiled-evidence posture must be tied to the matching submission, not just the latest arena run for the bounty.
+  - Reviewer wording must not imply authority for reference-only / unverifiable compiled evidence, even when that evidence is useful as a hint.
+---
