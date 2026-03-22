@@ -1,0 +1,103 @@
+{
+  "name": "e2e-demo-surfaces-v1",
+  "project": "clawbureau",
+  "description": "Render real E2E proof artifacts as high-quality product surfaces on clawea-www and clawsig-explorer, using the frontend-skill UI bar.",
+  "branchName": "main",
+  "userStories": [
+    {
+      "id": "E2E-UI-001",
+      "title": "Seed E2E demo surfaces roadmap and tracker",
+      "description": "As the canonical planner, I need a roadmap and Beads issue set for E2E demo surfaces so the work is tracked in the same system as product execution.",
+      "acceptanceCriteria": [
+        "Add docs/roadmaps/e2e-demo-surfaces-v1/README.md, prd.json, and progress.txt",
+        "Add a Beads epic plus wave-1 child stories",
+        "Explicitly record frontend-skill as the UI/UX bar for this roadmap"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Seeded roadmap folder, added Beads epic/stories, and documented ~/.agents/skills/frontend-skill/SKILL.md as the mandatory UI guide for the tranche."
+    },
+    {
+      "id": "E2E-UI-002",
+      "title": "Public-facing workflow demo on clawea-www",
+      "description": "As a buyer or stakeholder, I need a polished narrative page that shows PR proof, bundle review, and arena decision workflows using real artifact-backed examples instead of abstract claims.",
+      "acceptanceCriteria": [
+        "Add a dedicated public page under clawea-www",
+        "Use real artifact-derived data points for each workflow",
+        "Update existing case-study / proof-points surfaces to route people into the new page"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Added /case-studies/e2e-proof-workflows with real artifact anchors, plus new entry points from /case-studies and /proof-points."
+    },
+    {
+      "id": "E2E-UI-003",
+      "title": "Operator-facing workflow showcase on clawsig-explorer",
+      "description": "As an operator or reviewer, I need a utility-first explorer page that summarizes the same workflows with concrete evidence anchors, quick links, and review-ready metrics.",
+      "acceptanceCriteria": [
+        "Add a dedicated explorer route for the showcase",
+        "Summarize all three workflows with reviewer-friendly metrics and source artifact anchors",
+        "Expose the showcase from existing explorer navigation"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Added /showcase/e2e in clawsig-explorer and linked it in explorer nav."
+    },
+    {
+      "id": "E2E-UI-004",
+      "title": "Generated artifact registry for demo surfaces",
+      "description": "As a maintainer, I need the public and operator demo pages to read from a generated artifact registry instead of hard-coded constants so the content can be refreshed from real evidence with one command.",
+      "acceptanceCriteria": [
+        "Add a script that reads the canonical source artifacts and writes a generated registry JSON",
+        "Update clawea-www and clawsig-explorer demo pages to consume the generated registry",
+        "Expose registry freshness / source artifact paths in the rendered surfaces"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Added scripts/ops/generate-e2e-demo-registry.mjs and registry JSON imports in both surfaces."
+    },
+    {
+      "id": "E2E-UI-005",
+      "title": "Reviewer drill-downs from showcase into inspect, run, and arena",
+      "description": "As a reviewer, I need the operator showcase to connect cleanly into the relevant explorer surfaces so I can move from workflow overview into the exact page used for bundle review, run review, or arena review without losing context.",
+      "acceptanceCriteria": [
+        "Add shared workflow-context drill-down UI on inspect, run, and arena surfaces",
+        "Add showcase links that target the new drill-down anchors where applicable",
+        "Keep the copy utility-first and evidence-linked rather than marketing-oriented"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Added shared e2e-workflow helper and workflow-context cards on inspect, run, and arena surfaces, plus deeper showcase links."
+    },
+    {
+      "id": "E2E-UI-006",
+      "title": "Staging-safe demo snapshots from repo-contained evidence",
+      "description": "As a maintainer, I need the demo registry to derive from repo-contained, staging-safe snapshots instead of local /tmp inputs so the demo can be regenerated in CI and shared reliably.",
+      "acceptanceCriteria": [
+        "Add a snapshot generator that traces a repo-contained proof bundle and emits stable public-safe snapshot JSON under artifacts/ops/e2e-demo/",
+        "Update the registry generator to consume snapshot artifacts rather than local /tmp-only sources",
+        "Refresh generated registries so bundle-review data points come from repo-contained evidence"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Added scripts/ops/generate-e2e-demo-snapshots.mjs and snapshot outputs under artifacts/ops/e2e-demo/public plus traced settlement-prod bundle output."
+    },
+    {
+      "id": "E2E-UI-007",
+      "title": "Scheduled refresh workflow for demo artifacts and registries",
+      "description": "As a maintainer, I need a scheduled/manual workflow that regenerates the demo snapshots and registries in CI so the artifact pack stays refreshable without local state.",
+      "acceptanceCriteria": [
+        "Add a GitHub Actions workflow with schedule + workflow_dispatch",
+        "Run snapshot generation, registry generation, typechecks, and diff sanity check",
+        "Upload refreshed demo artifacts as workflow artifacts"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Added .github/workflows/e2e-demo-refresh.yml."
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-03-22T17:40:38Z",
+    "status": "Complete \u2014 Waves 1-3 shipped, deployed to staging + production on 2026-03-22, feature packaged in PR #539"
+  }
+}
