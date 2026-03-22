@@ -14,11 +14,13 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## In progress / partially shipped
 
-- **Clawbounties Assurance Decision Policy v1** (3/5 ⏳ — canonical compiled-evidence decision policy, requester override contract, arena desk adoption shipped; manager autopilot guardrails and decision audit snapshots remain)
-  - Folder: `docs/roadmaps/clawbounties-assurance-decision-policy-v1/`
-  - Status: Wave 1 complete via PR #533; Wave 2 remains
+- None currently active.
 
 ## Completed roadmaps
+
+- **Clawbounties Assurance Decision Policy v1** (5/5 ✅ — canonical compiled-evidence decision policy, requester override contract, arena desk adoption, manager autopilot guardrails, and decision audit snapshots)
+  - Folder: `docs/roadmaps/clawbounties-assurance-decision-policy-v1/`
+  - Status: complete (PRs #533/#535)
 
 - **Clawbounties Assurance Review v1** (5/5 ✅ — compiled evidence submission contracts, normalized reviewer trust surfaces, reviewer/requester next-actions, arena/manager-review propagation)
   - Folder: `docs/roadmaps/clawbounties-assurance-review-v1/`
