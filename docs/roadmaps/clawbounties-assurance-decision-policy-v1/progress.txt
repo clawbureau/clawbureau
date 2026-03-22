@@ -18,3 +18,28 @@ Started: 2026-03-22T08:09:30Z
   - This roadmap should remain conservative about authoritative boundaries: compiled evidence can tighten or block decisions, but narrative-only inputs must never silently become green policy signals.
   - Because nearly every story is expected to touch `services/_archived/clawbounties/src/index.ts`, fake concurrency would mostly create merge churn; keep implementation lanes tight and reuse worker/reviewer dispatch for bounded waves.
 ---
+
+## 2026-03-22T08:53:09Z - Wave 1 shipped (`CBA-DP-001` / `CBA-DP-002` / `CBA-DP-003`)
+- What was implemented
+  - Added a canonical compiled-evidence decision policy layer in `services/_archived/clawbounties/src/index.ts` with deterministic states:
+    - `approve_recommended`
+    - `manual_review_required`
+    - `fix_required`
+    - `unavailable`
+  - Reused that policy in requester approval and arena desk automation instead of treating compiled evidence as a reviewer hint only.
+  - Added explicit requester override parsing + receipts for non-green compiled evidence and fail-closed requester approval blocking for fix-required posture.
+  - Added arena desk action planning so auto-approval only happens when both payout policy and compiled-evidence decision policy are green.
+- Evidence
+  - Feature PR #533: `feat(clawbounties): add compiled evidence decision policy`
+  - Feature commit: `cb563ec1a5b4fcf69486886d0da17b1dcc68c2c2`
+  - DID proof: `proofs/feat/clawbounties/CBA-DP-decision-policy/commit.sig.json`
+  - Reviewer verdict: `PASS WITH FIXES` at `/tmp/pi-chain-runs/cba3-wave1-decision-policy-20260322-081823/progress.md`
+- Validations
+  - `cd services/_archived/clawbounties && npm run typecheck`
+  - `cd services/_archived/clawbounties && npx --yes tsx /tmp/cba3-wave1-runtime-checks.ts`
+  - `git diff --check`
+- Learnings for future iterations
+  - If a compiled-evidence authoritative report is marked valid but lacks `overall_status`, decision policy must still fail closed to manual review instead of drifting toward green posture.
+  - Requester override inputs should be treated as contracts, not free text: whitespace-only notes and non-code-like reason values create avoidable ambiguity.
+  - Already-approved/idempotent approval responses must not echo override receipts from the current request unless that override data is actually trustworthy for the approved decision.
+---

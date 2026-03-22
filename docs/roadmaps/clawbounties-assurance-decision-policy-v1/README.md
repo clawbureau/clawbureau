@@ -56,10 +56,13 @@ Turn compiled evidence into a deterministic decision layer that can honestly say
 
 ## Current status
 
-- Roadmap seeded.
-- `CBA-DP-001` through `CBA-DP-005` are planned.
-- Roadmap status is now **0/5 stories shipped**.
-- Expected implementation surface is still concentrated in `services/_archived/clawbounties/src/index.ts`, so this roadmap should stay mostly single-lane even if prompt prep/review/package run in parallel.
+- Wave 1 shipped via PR #533.
+- `CBA-DP-001` through `CBA-DP-003` are complete.
+- Wave 2 remains:
+  - `CBA-DP-004` manager autopilot compiled-evidence guardrails
+  - `CBA-DP-005` decision snapshots and override audit surfaces
+- Roadmap status is now **3/5 stories shipped**.
+- Implementation is still centered in `services/_archived/clawbounties/src/index.ts`, so Wave 2 should remain a mostly single-lane execution tranche.
 
 ## Success criteria
 
