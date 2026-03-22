@@ -14,7 +14,10 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## In progress / partially shipped
 
-- _No active roadmaps right now._
+- **Clawbounties Assurance Review v1** (compiled evidence adoption in reviewer workflows, submission trust surfaces, arena/manager propagation)
+  - Folder: `docs/roadmaps/clawbounties-assurance-review-v1/`
+  - Status: roadmap seeded, 0/5 stories shipped
+  - Beads: `monorepo-cba2`, `monorepo-cba2.1`..`monorepo-cba2.5`
 
 ## Completed roadmaps
 
@@ -63,7 +66,4 @@ Each roadmap folder should contain:
 
 Optional but recommended:
 - `oracle/<YYYY-MM-DD>/` (prompts, outputs, INDEX)
-- `specs/` (long-lived specs / protocols)
-specs / protocols)
-s, INDEX)
 - `specs/` (long-lived specs / protocols)
