@@ -1,0 +1,20 @@
+## Codebase Patterns
+- Clawbounties Assurance Review v1 already made compiled evidence visible in submission, requester/reviewer, arena, and manager surfaces; this roadmap should promote those signals into canonical decision policy rather than inventing a second parallel trust model.
+- Authoritative compiled evidence must stay distinct from optional narrative or reference-only attachments; only authoritative compiled posture can improve approval automation.
+- The likely implementation surface remains concentrated in `services/_archived/clawbounties/src/index.ts`, so execution should stay mostly single-lane even if prompt prep, review, and packaging run in parallel.
+- Approval, arena desk, and manager autopilot should reuse one shared compiled-evidence evaluator so policy drift does not emerge between manual and automated closure paths.
+- If humans override non-green compiled evidence, the override must be explicit and auditable; silent overrides defeat the point of surfacing authoritative compiled posture.
+
+# Ralph Progress Log
+Started: 2026-03-22T08:09:30Z
+---
+
+## 2026-03-22T08:09:30Z - Clawbounties Assurance Decision Policy v1 roadmap seeded
+- What was planned
+  - Added a successor roadmap focused on turning compiled evidence into deterministic decision policy for requester approval, arena desk automation, and manager autopilot.
+  - Planned Wave 1 around the shared evaluator plus requester and arena adoption, with Wave 2 reserved for autopilot guardrails and decision audit snapshots.
+  - Seeded Beads epic/task structure for `monorepo-cba3` with five dependency-aware stories.
+- Notes
+  - This roadmap should remain conservative about authoritative boundaries: compiled evidence can tighten or block decisions, but narrative-only inputs must never silently become green policy signals.
+  - Because nearly every story is expected to touch `services/_archived/clawbounties/src/index.ts`, fake concurrency would mostly create merge churn; keep implementation lanes tight and reuse worker/reviewer dispatch for bounded waves.
+---

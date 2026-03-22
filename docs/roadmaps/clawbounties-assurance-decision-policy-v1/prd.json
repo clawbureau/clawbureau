@@ -1,0 +1,81 @@
+{
+  "name": "clawbounties-assurance-decision-policy-v1",
+  "project": "clawbureau",
+  "description": "Promote compiled evidence from reviewer context into deterministic requester, arena, and autopilot decision policy for Clawbounties.",
+  "branchName": "main",
+  "userStories": [
+    {
+      "id": "CBA-DP-001",
+      "title": "Canonical compiled-evidence decision evaluator",
+      "description": "As the marketplace, I need a single compiled-evidence decision evaluator so requester approval, arena desk loops, and autopilot all consume the same authoritative decision posture.",
+      "acceptanceCriteria": [
+        "A reusable evaluator derives deterministic decision states such as approve_recommended, manual_review_required, fix_required, or unavailable from compiled evidence summary state",
+        "Authoritative pass vs authoritative non-pass vs authoritative unverified/invalid are mapped explicitly and conservatively",
+        "Reference-only or narrative-only compiled evidence never produces an authoritative green decision state",
+        "Evaluator emits machine-readable reason codes and boundary warnings for downstream requester/arena/autopilot flows"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CBA-DP-002",
+      "title": "Requester approval override contract",
+      "description": "As a requester, I need approval to fail closed or require explicit acknowledgement when compiled evidence is not decision-green so overrides are intentional and auditable.",
+      "acceptanceCriteria": [
+        "Requester approval consumes the canonical compiled-evidence decision evaluator",
+        "fix_required posture blocks approval fail closed with deterministic error codes and structured decision details",
+        "manual_review_required posture requires an explicit override contract (for example an acknowledgement or override note) before approval succeeds",
+        "Approval responses preserve the compiled-evidence decision view and any override note without overstating non-authoritative evidence"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CBA-DP-003",
+      "title": "Arena desk decision policy adoption",
+      "description": "As ops, I need arena desk decision loops to respect compiled-evidence decision posture so auto-approval and auto-rejection stay consistent with reviewer policy.",
+      "acceptanceCriteria": [
+        "Arena desk loops consume the canonical compiled-evidence decision evaluator for each candidate submission",
+        "Auto-approval only happens when payout policy is green and compiled-evidence policy is approve_recommended",
+        "manual_review_required posture stays skipped/manual in automation modes instead of silently auto-approving",
+        "Decision-loop outputs expose deterministic compiled-evidence policy reason codes and policy snapshots"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "CBA-DP-004",
+      "title": "Manager autopilot compiled-evidence guardrails",
+      "description": "As marketplace ops, I need manager autopilot to fail closed to manual review when the latest compiled evidence is not green so routing automation cannot outrun assurance posture.",
+      "acceptanceCriteria": [
+        "Manager autopilot status depends on compiled-evidence decision posture in addition to existing win-rate, circuit-breaker, and fleet gates",
+        "Latest compiled-evidence non-pass or unverified posture forces manual_review_required instead of auto_route_enabled",
+        "Autopilot payloads expose compiled-evidence decision state and reason codes explicitly",
+        "Compiled-evidence guardrails remain additive to existing route/circuit/fleet checks and do not weaken other fail-closed gates"
+      ],
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "CBA-DP-005",
+      "title": "Decision snapshots and override audit surfaces",
+      "description": "As reviewers and operators, I need the marketplace to persist what compiled-evidence decision posture existed at approval/reject/autopilot time so overrides and automation can be audited later.",
+      "acceptanceCriteria": [
+        "Requester approval/reject and automated desk/autopilot paths persist compact decision snapshots tied to the relevant submission or arena action",
+        "Snapshots include decision state, reason codes, authoritative-vs-non-authoritative boundary markers, and any explicit override note when present",
+        "Submission, bounty, arena, or admin/operator surfaces expose the latest decision snapshot without dumping raw compiled artifacts",
+        "Audit surfaces remain deterministic and cannot imply authoritative approval from narrative-only or reference-only evidence"
+      ],
+      "priority": 3,
+      "passes": false
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-03-22T08:09:30Z",
+    "status": "active (0/5 shipped; seeded)",
+    "dependsOn": [
+      "docs/roadmaps/clawcompiler-runtime-v1/",
+      "docs/roadmaps/clawbounties-assurance-review-v1/"
+    ]
+  }
+}
