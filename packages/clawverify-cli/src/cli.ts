@@ -16,7 +16,7 @@ import {
 import { runComplianceReport } from './compliance-cmd.js';
 import { runConfigSet } from './config-cmd.js';
 import { hintForReasonCode, explainReasonCode, explainReasonCodeJson } from './hints.js';
-import { runInit } from './init.js';
+import { runInit, toInitJsonOutput } from './init.js';
 import { runMigratePolicy } from './migrate-policy.js';
 import { wrap } from './wrap.js';
 import { runProveReport } from './prove-cmd.js';
@@ -996,18 +996,7 @@ async function main() {
     });
 
     if (jsonMode) {
-      const policyCreated = result.created.includes('policy.json');
-      const policyExists = policyCreated || result.skipped.includes('policy.json');
-      printJson({
-        identity_created: false,
-        identity_did: null,
-        identity_path: null,
-        policy_created: policyCreated,
-        policy_path: policyExists ? join(result.dir, 'policy.json') : null,
-        dir: result.dir,
-        created: result.created,
-        skipped: result.skipped,
-      });
+      printJson(toInitJsonOutput(result));
     } else {
       process.stdout.write(`Initialized .clawsig/ in ${result.dir}\n`);
 

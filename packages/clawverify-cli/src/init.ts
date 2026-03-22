@@ -8,9 +8,9 @@
  * Runnable via: npx @clawbureau/clawverify-cli init
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { generateIdentity, loadIdentity, defaultIdentityPath } from './identity.js';
+import { generateIdentity, defaultIdentityPath } from './identity.js';
 
 const CLAWSIG_DIR = '.clawsig';
 
@@ -73,8 +73,53 @@ export interface InitResult {
   created: string[];
   skipped: string[];
   dir: string;
-  /** The persistent DID, if an identity was created or already existed. */
+  /** Absolute path to the resolved identity key file for this init run. */
+  identityPath: string;
+  /** True when this run generated a fresh identity keypair. */
+  identityCreated: boolean;
+  /** The persistent DID, if an identity was created or an existing key is valid. */
   did?: string;
+}
+
+export interface InitJsonOutput {
+  identity_created: boolean;
+  identity_did: string | null;
+  identity_path: string;
+  policy_created: boolean;
+  policy_path: string | null;
+  dir: string;
+  created: string[];
+  skipped: string[];
+}
+
+function readIdentityDid(identityPath: string): string | undefined {
+  try {
+    const raw = readFileSync(identityPath, 'utf-8');
+    const parsed = JSON.parse(raw) as { did?: unknown };
+    if (typeof parsed.did === 'string' && parsed.did.startsWith('did:key:z')) {
+      return parsed.did;
+    }
+  } catch {
+    // Ignore malformed identities; caller can choose whether to force-regenerate.
+  }
+
+  return undefined;
+}
+
+export function toInitJsonOutput(result: InitResult): InitJsonOutput {
+  const policyCreated = result.created.includes('policy.json');
+  const policyExists = policyCreated || result.skipped.includes('policy.json');
+
+  return {
+    identity_created: result.identityCreated,
+    identity_did: result.did ?? null,
+    identity_path: result.identityPath,
+    policy_created: policyCreated,
+    policy_path: policyExists ? join(result.dir, 'policy.json') : null,
+    dir: result.dir,
+    created: result.created,
+    skipped: result.skipped,
+  };
 }
 
 export async function runInit(options: InitOptions = {}): Promise<InitResult> {
@@ -84,6 +129,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   const created: string[] = [];
   const skipped: string[] = [];
   let did: string | undefined;
+  let identityCreated = false;
 
   // Create .clawsig/ directory
   if (!existsSync(clawsigDir)) {
@@ -93,15 +139,12 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   // --- Identity generation ---
   const identityPath = defaultIdentityPath(!!options.global, targetDir);
   if (existsSync(identityPath) && !options.force) {
-    // Load existing identity to report the DID
-    const existing = await loadIdentity(targetDir);
-    if (existing) {
-      did = existing.did;
-      skipped.push('identity.jwk.json');
-    }
+    did = readIdentityDid(identityPath);
+    skipped.push('identity.jwk.json');
   } else {
     const identity = await generateIdentity(identityPath);
     did = identity.did;
+    identityCreated = true;
     created.push('identity.jwk.json');
   }
 
@@ -123,5 +166,12 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
     created.push('README.md');
   }
 
-  return { created, skipped, dir: clawsigDir, did };
+  return {
+    created,
+    skipped,
+    dir: clawsigDir,
+    identityPath,
+    identityCreated,
+    did,
+  };
 }

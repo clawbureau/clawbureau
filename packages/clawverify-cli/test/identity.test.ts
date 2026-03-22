@@ -9,7 +9,7 @@ import {
   identityToAgentDid,
   defaultIdentityPath,
 } from '../src/identity.js';
-import { runInit } from '../src/init.js';
+import { runInit, toInitJsonOutput } from '../src/init.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -311,6 +311,8 @@ describe('runInit with identity', () => {
     const result = await runInit({ targetDir: tmpDir });
 
     expect(result.created).toContain('identity.jwk.json');
+    expect(result.identityCreated).toBe(true);
+    expect(result.identityPath).toBe(join(tmpDir, '.clawsig', 'identity.jwk.json'));
     expect(result.did).toBeDefined();
     expect(result.did).toMatch(/^did:key:z/);
 
@@ -328,6 +330,8 @@ describe('runInit with identity', () => {
 
     // Second init without --force
     const second = await runInit({ targetDir: tmpDir });
+    expect(second.identityCreated).toBe(false);
+    expect(second.identityPath).toBe(join(tmpDir, '.clawsig', 'identity.jwk.json'));
     expect(second.skipped).toContain('identity.jwk.json');
     expect(second.did).toBe(first.did);
   });
@@ -337,6 +341,7 @@ describe('runInit with identity', () => {
     const firstDid = first.did;
 
     const second = await runInit({ targetDir: tmpDir, force: true });
+    expect(second.identityCreated).toBe(true);
     expect(second.created).toContain('identity.jwk.json');
     expect(second.did).toBeDefined();
     // New keypair = new DID (extremely unlikely to collide)
@@ -349,5 +354,45 @@ describe('runInit with identity', () => {
     expect(result.created).toContain('policy.json');
     expect(result.created).toContain('README.md');
     expect(result.created).toContain('identity.jwk.json');
+  });
+
+  it('formats init JSON output with created identity details', async () => {
+    const result = await runInit({ targetDir: tmpDir });
+    const json = toInitJsonOutput(result);
+
+    expect(json.identity_created).toBe(true);
+    expect(json.identity_did).toBe(result.did);
+    expect(json.identity_path).toBe(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+    expect(json.policy_created).toBe(true);
+    expect(json.policy_path).toBe(join(tmpDir, '.clawsig', 'policy.json'));
+  });
+
+  it('formats init JSON output with existing identity details on rerun', async () => {
+    const first = await runInit({ targetDir: tmpDir });
+    const second = await runInit({ targetDir: tmpDir });
+    const json = toInitJsonOutput(second);
+
+    expect(json.identity_created).toBe(false);
+    expect(json.identity_did).toBe(first.did);
+    expect(json.identity_path).toBe(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+    expect(json.policy_created).toBe(false);
+    expect(json.policy_path).toBe(join(tmpDir, '.clawsig', 'policy.json'));
+    expect(json.skipped).toContain('identity.jwk.json');
+  });
+
+  it('formats rerun JSON from the resolved identity path even when CLAWSIG_IDENTITY is set', async () => {
+    const first = await runInit({ targetDir: tmpDir });
+    const envIdentityPath = join(tmpDir, 'env-identity.jwk.json');
+    const envIdentity = await generateIdentity(envIdentityPath);
+    process.env['CLAWSIG_IDENTITY'] = envIdentityPath;
+
+    const second = await runInit({ targetDir: tmpDir });
+    const json = toInitJsonOutput(second);
+
+    expect(json.identity_created).toBe(false);
+    expect(json.identity_did).toBe(first.did);
+    expect(json.identity_did).not.toBe(envIdentity.did);
+    expect(json.identity_path).toBe(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+    expect(json.skipped).toContain('identity.jwk.json');
   });
 });
