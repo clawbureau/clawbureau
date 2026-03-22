@@ -64,5 +64,6 @@ Each roadmap folder should contain:
 Optional but recommended:
 - `oracle/<YYYY-MM-DD>/` (prompts, outputs, INDEX)
 - `specs/` (long-lived specs / protocols)
+specs / protocols)
 s, INDEX)
 - `specs/` (long-lived specs / protocols)
