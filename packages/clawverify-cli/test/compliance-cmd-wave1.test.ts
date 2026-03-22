@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { jcsCanonicalize } from '@clawbureau/clawverify-core';
 import { runComplianceReport } from '../src/compliance-cmd.js';
 import { verifyCompiledReportFromFile } from '../src/verify.js';
 
@@ -19,6 +20,8 @@ interface CompilerOutput {
   };
   compiled_report?: {
     report_id: string;
+    compiler_version: string;
+    overall_status: string;
     matrix_hash_b64u: string;
     evidence_refs: Record<string, string>;
     control_results: Array<{
@@ -122,19 +125,137 @@ function mutateBase64Url(input: string): string {
   return `${head}${input.slice(1)}`;
 }
 
+async function sha256B64uFromCanonical(value: unknown): Promise<string> {
+  const canonical = jcsCanonicalize(value);
+  const bytes = new TextEncoder().encode(canonical);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Buffer.from(new Uint8Array(digest)).toString('base64url');
+}
+
+async function importPkcs8PrivateKey(pkcs8B64u: string): Promise<CryptoKey> {
+  const bytes = Buffer.from(pkcs8B64u, 'base64url');
+  return crypto.subtle.importKey('pkcs8', bytes, { name: 'Ed25519' }, false, ['sign']);
+}
+
+async function makeSignedWaiver(args: {
+  signerDid: string;
+  signerPrivateKeyPkcs8B64u: string;
+  framework: string;
+  controlId: string;
+  bundleHashB64u: string;
+  agentDid: string;
+  waiverKind: 'COMPENSATING_CONTROL' | 'HUMAN_EXCEPTION';
+  waiverId: string;
+  issuedAt: string;
+  expiresAt: string;
+}) {
+  const waiverPayload = {
+    waiver_version: '1',
+    waiver_id: args.waiverId,
+    framework: args.framework,
+    control_id: args.controlId,
+    bundle_hash_b64u: args.bundleHashB64u,
+    agent_did: args.agentDid,
+    waiver_kind: args.waiverKind,
+    issued_at: args.issuedAt,
+    expires_at: args.expiresAt,
+  };
+
+  const payloadHashB64u = await sha256B64uFromCanonical(waiverPayload);
+  const signerKey = await importPkcs8PrivateKey(args.signerPrivateKeyPkcs8B64u);
+  const signature = await crypto.subtle.sign(
+    'Ed25519',
+    signerKey,
+    new TextEncoder().encode(payloadHashB64u),
+  );
+
+  return {
+    ...waiverPayload,
+    payload_hash_b64u: payloadHashB64u,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: Buffer.from(new Uint8Array(signature)).toString('base64url'),
+    algorithm: 'Ed25519',
+    signer_did: args.signerDid,
+  };
+}
+
 async function runComplianceFixture(
   fixture: unknown,
   outputName: string,
+  framework: string = 'soc2',
 ): Promise<CompilerOutput> {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clawverify-compliance-wave1-'));
   const inputPath = path.join(tmpDir, 'input.json');
   const outputPath = path.join(tmpDir, outputName);
 
   await fs.writeFile(inputPath, JSON.stringify(fixture, null, 2), 'utf8');
-  await runComplianceReport(inputPath, 'soc2', outputPath);
+  await runComplianceReport(inputPath, framework, outputPath);
 
   const outputRaw = await fs.readFile(outputPath, 'utf8');
   return JSON.parse(outputRaw) as CompilerOutput;
+}
+
+function buildAiExecutionFixture(agentDid: string) {
+  const effectivePolicyHashB64u = 'policy_hash_axa_001';
+
+  return {
+    envelope: {
+      payload: {
+        agent_did: agentDid,
+        event_chain: [{ event_id: 'evt-axa-1' }],
+        side_effect_receipts: [
+          { receipt_id: 'se-axa-1', effect_class: 'network_egress' },
+        ],
+        human_approval_receipts: [
+          { receipt_id: 'har-axa-1', approval_type: 'explicit_approve' },
+        ],
+        coverage_attestations: [{ payload: { attestation_id: 'cov-axa-1' } }],
+        metadata: {
+          policy_binding: {
+            effective_policy_hash_b64u: effectivePolicyHashB64u,
+          },
+          sentinels: {
+            egress_policy_receipt: {
+              payload: {
+                receipt_id: 'epr-axa-1',
+                proofed_mode: true,
+                direct_provider_access_blocked: true,
+              },
+            },
+          },
+          data_handling: {
+            receipts: [
+              {
+                payload: {
+                  receipt_id: 'dhr-axa-1',
+                  enforcement: { mode: 'enforced' },
+                },
+              },
+            ],
+          },
+          reviewer_signoff_receipts: [
+            {
+              payload: {
+                receipt_id: 'rsr-axa-1',
+                decision: 'needs_changes',
+              },
+            },
+          ],
+        },
+      },
+    },
+    policy: {
+      policy_hash_b64u: effectivePolicyHashB64u,
+    },
+    verification_fact: {
+      status: 'VALID',
+      reason_code: 'OK',
+      reason: 'Proof bundle verified successfully',
+      verified_at: VERIFIED_AT,
+      verifier: 'clawverify-cli-test',
+      agent_did: agentDid,
+    },
+  };
 }
 
 describe('runComplianceReport Wave-1 authoritative compiler', () => {
@@ -550,5 +671,271 @@ describe('runComplianceReport Wave-1 authoritative compiler', () => {
     const schemaOut = await verifyCompiledReportFromFile({ inputPath: schemaViolationPath });
     expect(schemaOut.status).toBe('FAIL');
     expect(schemaOut.reason_code).toBe('SCHEMA_VALIDATION_FAILED');
+
+    const overallMismatchEnvelope = JSON.parse(
+      JSON.stringify(envelope),
+    ) as Record<string, unknown>;
+    const overallMismatchPayload = overallMismatchEnvelope.payload as Record<string, unknown>;
+    overallMismatchPayload.overall_status = 'FAIL';
+    const overallMismatchPath = path.join(tmpDir, 'compiled-envelope-overall-mismatch.json');
+    await fs.writeFile(overallMismatchPath, JSON.stringify({ envelope: overallMismatchEnvelope }, null, 2), 'utf8');
+    const overallMismatchOut = await verifyCompiledReportFromFile({ inputPath: overallMismatchPath });
+    expect(overallMismatchOut.status).toBe('FAIL');
+    expect(overallMismatchOut.reason_code).toBe('SCHEMA_VALIDATION_FAILED');
+
+    const partialWithoutWaiverEnvelope = JSON.parse(
+      JSON.stringify(envelope),
+    ) as Record<string, unknown>;
+    const partialWithoutWaiverPayload = partialWithoutWaiverEnvelope.payload as Record<string, unknown>;
+    partialWithoutWaiverPayload.compiler_version = 'clawcompiler-runtime-v1-wave3';
+    partialWithoutWaiverPayload.overall_status = 'PARTIAL';
+    const partialWithoutWaiverControl = (partialWithoutWaiverPayload.control_results as Array<Record<string, unknown>>)[0]!;
+    partialWithoutWaiverControl.status = 'PARTIAL';
+    partialWithoutWaiverControl.waiver_applied = false;
+    partialWithoutWaiverControl.reason_codes = ['CONTROL_PREDICATE_FAILED'];
+    const partialWithoutWaiverPath = path.join(tmpDir, 'compiled-envelope-partial-without-waiver.json');
+    await fs.writeFile(partialWithoutWaiverPath, JSON.stringify({ envelope: partialWithoutWaiverEnvelope }, null, 2), 'utf8');
+    const partialWithoutWaiverOut = await verifyCompiledReportFromFile({ inputPath: partialWithoutWaiverPath });
+    expect(partialWithoutWaiverOut.status).toBe('FAIL');
+    expect(partialWithoutWaiverOut.reason_code).toBe('SCHEMA_VALIDATION_FAILED');
+  });
+
+  it('produces deterministic AI execution assurance pack outcomes from verifier-backed evidence', async () => {
+    const fixture = buildAiExecutionFixture('did:key:agent-axa-deterministic');
+
+    const out1 = await runComplianceFixture(
+      fixture,
+      'out-axa-deterministic-1.json',
+      'ai-execution-v1',
+    );
+    const out2 = await runComplianceFixture(
+      fixture,
+      'out-axa-deterministic-2.json',
+      'ai-execution-v1',
+    );
+
+    expect(out1).toEqual(out2);
+    expect(out1.runtime.state).toBe('COMPILED_PASS');
+    expect(out1.compiled_report?.compiler_version).toBe('clawcompiler-runtime-v1-wave3');
+    expect(out1.compiled_report?.overall_status).toBe('PASS');
+
+    const nonPassControl = out1.compiled_report?.control_results.find(
+      (control) => control.status !== 'PASS',
+    );
+    expect(nonPassControl).toBeUndefined();
+  });
+
+  it('does not overclaim AI execution assurance controls when upstream evidence is missing', async () => {
+    const fixture = {
+      envelope: {
+        payload: {
+          agent_did: 'did:key:agent-axa-no-overclaim',
+          event_chain: [{ event_id: 'evt-axa-overclaim-1' }],
+        },
+      },
+      policy: {
+        policy_hash_b64u: 'policy_hash_axa_no_overclaim_001',
+      },
+      verification_fact: {
+        status: 'VALID',
+        reason_code: 'OK',
+        reason: 'Proof bundle verified successfully',
+        verified_at: VERIFIED_AT,
+        verifier: 'clawverify-cli-test',
+        agent_did: 'did:key:agent-axa-no-overclaim',
+      },
+    };
+
+    const out = await runComplianceFixture(
+      fixture,
+      'out-axa-no-overclaim.json',
+      'ai-execution-v1',
+    );
+
+    expect(out.runtime.state).toBe('COMPILED_FAIL');
+
+    const controlById = new Map(
+      (out.report?.controls ?? []).map((control) => [control.control_id, control]),
+    );
+
+    expect(controlById.get('AXA.POLICY.1')?.status).toBe('FAIL');
+    expect(controlById.get('AXA.APPROVAL.1')?.status).toBe('FAIL');
+    expect(controlById.get('AXA.EGRESS.1')?.status).toBe('FAIL');
+    expect(controlById.get('AXA.DLP.1')?.status).toBe('FAIL');
+    expect(controlById.get('AXA.ATTESTATION.1')?.status).toBe('FAIL');
+    expect(controlById.get('AXA.REVIEW.1')?.status).toBe('FAIL');
+  });
+
+  it('fails closed when compiler input policy hash disagrees with verified bundle policy binding', async () => {
+    const fixture = buildAiExecutionFixture('did:key:agent-axa-policy-mismatch');
+    fixture.policy.policy_hash_b64u = 'policy_hash_axa_mismatch_001';
+
+    const out = await runComplianceFixture(
+      fixture,
+      'out-axa-policy-mismatch.json',
+      'ai-execution-v1',
+    );
+
+    expect(out.runtime.state).toBe('COMPILED_FAIL');
+    expect(out.runtime.global_reason_code).toBe('AXA_POLICY_FAIL_POLICY_HASH_MISMATCH');
+
+    const policyControl = out.report?.controls.find(
+      (control) => control.control_id === 'AXA.POLICY.1',
+    );
+    expect(policyControl?.status).toBe('FAIL');
+    expect(policyControl?.reason_code).toBe('AXA_POLICY_FAIL_POLICY_HASH_MISMATCH');
+  });
+
+  it('applies signed waivers only as FAIL -> PARTIAL degradations', async () => {
+    const waiverSignerSeed = new Uint8Array(32);
+    for (let i = 0; i < waiverSignerSeed.length; i++) waiverSignerSeed[i] = i + 101;
+    const waiverSigner = await makeDidSignerFromSeed(waiverSignerSeed);
+
+    const fixture = buildAiExecutionFixture('did:key:agent-axa-waiver');
+    fixture.envelope.payload.metadata.reviewer_signoff_receipts = [];
+
+    const bundleHashB64u = await sha256B64uFromCanonical(fixture.envelope.payload);
+    const waiver = await makeSignedWaiver({
+      signerDid: waiverSigner.did,
+      signerPrivateKeyPkcs8B64u: waiverSigner.privateKeyPkcs8B64u,
+      framework: 'CLAW_AI_EXECUTION_ASSURANCE_V1',
+      controlId: 'AXA.REVIEW.1',
+      bundleHashB64u,
+      agentDid: fixture.envelope.payload.agent_did,
+      waiverKind: 'HUMAN_EXCEPTION',
+      waiverId: 'waiver-axa-review-001',
+      issuedAt: '2025-12-01T00:00:00.000Z',
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    });
+
+    const waivedFixture = {
+      ...fixture,
+      waivers: [waiver],
+    };
+
+    const out = await runComplianceFixture(
+      waivedFixture,
+      'out-axa-waiver-valid.json',
+      'ai-execution-v1',
+    );
+
+    const waivedControl = out.compiled_report?.control_results.find(
+      (control) => control.control_id === 'AXA.REVIEW.1',
+    );
+
+    expect(waivedControl?.status).toBe('PARTIAL');
+    expect(waivedControl?.waiver_applied).toBe(true);
+    expect(waivedControl?.reason_codes).toContain('WAIVER_APPLIED_SIGNED');
+    expect(waivedControl?.reason_codes).toContain('RESIDUAL_HUMAN_EXCEPTION_APPLIED');
+    expect(out.compiled_report?.overall_status).toBe('PARTIAL');
+  });
+
+  it('fails closed on invalid, mismatched, and expired signed waivers', async () => {
+    const waiverSignerSeed = new Uint8Array(32);
+    for (let i = 0; i < waiverSignerSeed.length; i++) waiverSignerSeed[i] = i + 131;
+    const waiverSigner = await makeDidSignerFromSeed(waiverSignerSeed);
+
+    const fixture = buildAiExecutionFixture('did:key:agent-axa-waiver-invalid');
+    fixture.envelope.payload.metadata.reviewer_signoff_receipts = [];
+
+    const bundleHashB64u = await sha256B64uFromCanonical(fixture.envelope.payload);
+
+    const validWaiver = await makeSignedWaiver({
+      signerDid: waiverSigner.did,
+      signerPrivateKeyPkcs8B64u: waiverSigner.privateKeyPkcs8B64u,
+      framework: 'CLAW_AI_EXECUTION_ASSURANCE_V1',
+      controlId: 'AXA.REVIEW.1',
+      bundleHashB64u,
+      agentDid: fixture.envelope.payload.agent_did,
+      waiverKind: 'COMPENSATING_CONTROL',
+      waiverId: 'waiver-axa-invalid-base',
+      issuedAt: '2025-12-01T00:00:00.000Z',
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    });
+
+    const passTargetWaiver = await makeSignedWaiver({
+      signerDid: waiverSigner.did,
+      signerPrivateKeyPkcs8B64u: waiverSigner.privateKeyPkcs8B64u,
+      framework: 'CLAW_AI_EXECUTION_ASSURANCE_V1',
+      controlId: 'AXA.POLICY.1',
+      bundleHashB64u,
+      agentDid: fixture.envelope.payload.agent_did,
+      waiverKind: 'COMPENSATING_CONTROL',
+      waiverId: 'waiver-axa-invalid-pass-target',
+      issuedAt: '2025-12-01T00:00:00.000Z',
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    });
+
+    const passTargetOut = await runComplianceFixture(
+      {
+        ...fixture,
+        waivers: [passTargetWaiver],
+      },
+      'out-axa-waiver-invalid-pass-target.json',
+      'ai-execution-v1',
+    );
+
+    expect(passTargetOut.runtime.state).toBe('COMPILED_FAIL');
+    expect(passTargetOut.runtime.global_reason_code).toBe('WAIVER_TARGET_NOT_FAIL');
+
+    const signatureInvalid = {
+      ...validWaiver,
+      signature_b64u: mutateBase64Url(validWaiver.signature_b64u),
+    };
+
+    const signatureOut = await runComplianceFixture(
+      {
+        ...fixture,
+        waivers: [signatureInvalid],
+      },
+      'out-axa-waiver-invalid-signature.json',
+      'ai-execution-v1',
+    );
+
+    expect(signatureOut.runtime.state).toBe('COMPILED_FAIL');
+    expect(signatureOut.runtime.global_reason_code).toBe('WAIVER_SIGNATURE_INVALID');
+
+    const bundleMismatchWaiver = {
+      ...validWaiver,
+      waiver_id: 'waiver-axa-invalid-bundle',
+      bundle_hash_b64u: mutateBase64Url(validWaiver.bundle_hash_b64u),
+    };
+
+    const bundleMismatchOut = await runComplianceFixture(
+      {
+        ...fixture,
+        waivers: [bundleMismatchWaiver],
+      },
+      'out-axa-waiver-invalid-bundle.json',
+      'ai-execution-v1',
+    );
+
+    expect(bundleMismatchOut.runtime.state).toBe('COMPILED_FAIL');
+    expect(bundleMismatchOut.runtime.global_reason_code).toBe('WAIVER_BUNDLE_HASH_MISMATCH');
+
+    const expiredWaiver = await makeSignedWaiver({
+      signerDid: waiverSigner.did,
+      signerPrivateKeyPkcs8B64u: waiverSigner.privateKeyPkcs8B64u,
+      framework: 'CLAW_AI_EXECUTION_ASSURANCE_V1',
+      controlId: 'AXA.REVIEW.1',
+      bundleHashB64u,
+      agentDid: fixture.envelope.payload.agent_did,
+      waiverKind: 'COMPENSATING_CONTROL',
+      waiverId: 'waiver-axa-invalid-expired',
+      issuedAt: '2025-01-01T00:00:00.000Z',
+      expiresAt: '2025-06-01T00:00:00.000Z',
+    });
+
+    const expiredOut = await runComplianceFixture(
+      {
+        ...fixture,
+        waivers: [expiredWaiver],
+      },
+      'out-axa-waiver-invalid-expired.json',
+      'ai-execution-v1',
+    );
+
+    expect(expiredOut.runtime.state).toBe('COMPILED_FAIL');
+    expect(expiredOut.runtime.global_reason_code).toBe('WAIVER_EXPIRED');
   });
 });

@@ -20,6 +20,12 @@ const STRICT_ISO_UTC_RE =
 const BASE64_URL_RE = /^[A-Za-z0-9_-]+$/;
 const COMPILED_REPORT_ID_RE = /^cer_[A-Za-z0-9._:-]+$/;
 const COMPILER_VERSION_WAVE2 = 'clawcompiler-runtime-v1-wave2';
+const COMPILER_VERSION_WAVE3 = 'clawcompiler-runtime-v1-wave3';
+const WAIVER_APPLIED_REASON_CODE = 'WAIVER_APPLIED_SIGNED';
+const WAIVER_RESIDUAL_REASON_CODES = new Set([
+  'RESIDUAL_COMPENSATING_CONTROL_RELIANCE',
+  'RESIDUAL_HUMAN_EXCEPTION_APPLIED',
+]);
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -72,6 +78,37 @@ async function computeMatrixHash(
     matrix_version: '1',
     control_results: normalizeControlResults(controlResults),
   });
+}
+
+function summarizeOverallStatus(
+  controls: CompiledEvidenceControlResult[],
+): CompiledEvidenceReportPayload['overall_status'] {
+  if (controls.some((control) => control.status === 'FAIL_CLOSED_INVALID_EVIDENCE')) {
+    return 'FAIL_CLOSED_INVALID_EVIDENCE';
+  }
+
+  if (controls.some((control) => control.status === 'FAIL')) {
+    return 'FAIL';
+  }
+
+  if (controls.some((control) => control.status === 'PARTIAL')) {
+    return 'PARTIAL';
+  }
+
+  return 'PASS';
+}
+
+function countWaiverResidualReasonCodes(reasonCodes: string[]): number {
+  return reasonCodes.filter((reasonCode) =>
+    WAIVER_RESIDUAL_REASON_CODES.has(reasonCode),
+  ).length;
+}
+
+function hasWaiverReasonMarkers(reasonCodes: string[]): boolean {
+  return (
+    reasonCodes.includes(WAIVER_APPLIED_REASON_CODE) ||
+    countWaiverResidualReasonCodes(reasonCodes) > 0
+  );
 }
 
 type PayloadValidationResult =
@@ -136,17 +173,24 @@ function validatePayload(
     };
   }
 
-  if (rawPayload.compiler_version !== COMPILER_VERSION_WAVE2) {
+  if (
+    rawPayload.compiler_version !== COMPILER_VERSION_WAVE2 &&
+    rawPayload.compiler_version !== COMPILER_VERSION_WAVE3
+  ) {
     return {
       ok: false,
       reason: 'Compiled evidence report payload failed schema validation.',
       error: {
         code: 'SCHEMA_VALIDATION_FAILED',
-        message: `payload.compiler_version must equal "${COMPILER_VERSION_WAVE2}".`,
+        message:
+          `payload.compiler_version must equal "${COMPILER_VERSION_WAVE2}" or "${COMPILER_VERSION_WAVE3}".`,
         field: 'payload.compiler_version',
       },
     };
   }
+
+  const isWave3CompiledPayload =
+    rawPayload.compiler_version === COMPILER_VERSION_WAVE3;
 
   if (!isRecord(rawPayload.evidence_refs)) {
     return {
@@ -197,6 +241,7 @@ function validatePayload(
   if (
     rawPayload.overall_status !== 'PASS' &&
     rawPayload.overall_status !== 'FAIL' &&
+    rawPayload.overall_status !== 'PARTIAL' &&
     rawPayload.overall_status !== 'FAIL_CLOSED_INVALID_EVIDENCE'
   ) {
     return {
@@ -205,7 +250,20 @@ function validatePayload(
       error: {
         code: 'SCHEMA_VALIDATION_FAILED',
         message:
-          'payload.overall_status must be PASS, FAIL, or FAIL_CLOSED_INVALID_EVIDENCE for wave2 compiled reports.',
+          'payload.overall_status must be PASS, FAIL, PARTIAL, or FAIL_CLOSED_INVALID_EVIDENCE.',
+        field: 'payload.overall_status',
+      },
+    };
+  }
+
+  if (!isWave3CompiledPayload && rawPayload.overall_status === 'PARTIAL') {
+    return {
+      ok: false,
+      reason: 'Compiled evidence report payload failed schema validation.',
+      error: {
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.overall_status=PARTIAL is only allowed for wave3 compiled reports.',
         field: 'payload.overall_status',
       },
     };
@@ -269,6 +327,7 @@ function validatePayload(
     if (
       control.status !== 'PASS' &&
       control.status !== 'FAIL' &&
+      control.status !== 'PARTIAL' &&
       control.status !== 'INAPPLICABLE' &&
       control.status !== 'FAIL_CLOSED_INVALID_EVIDENCE'
     ) {
@@ -278,7 +337,19 @@ function validatePayload(
         error: {
           code: 'SCHEMA_VALIDATION_FAILED',
           message:
-            `${prefix}.status must be PASS, FAIL, INAPPLICABLE, or FAIL_CLOSED_INVALID_EVIDENCE for wave2 compiled reports.`,
+            `${prefix}.status must be PASS, FAIL, PARTIAL, INAPPLICABLE, or FAIL_CLOSED_INVALID_EVIDENCE.`,
+          field: `${prefix}.status`,
+        },
+      };
+    }
+
+    if (!isWave3CompiledPayload && control.status === 'PARTIAL') {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: `${prefix}.status=PARTIAL is only allowed for wave3 compiled reports.`,
           field: `${prefix}.status`,
         },
       };
@@ -354,7 +425,7 @@ function validatePayload(
       };
     }
 
-    if (control.waiver_applied !== false) {
+    if (!isWave3CompiledPayload && control.waiver_applied !== false) {
       return {
         ok: false,
         reason: 'Compiled evidence report payload failed schema validation.',
@@ -365,6 +436,108 @@ function validatePayload(
         },
       };
     }
+
+    if (isWave3CompiledPayload && control.waiver_applied && control.status !== 'PARTIAL') {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: `${prefix}.waiver_applied=true requires status=PARTIAL.`,
+          field: `${prefix}.status`,
+        },
+      };
+    }
+
+    if (isWave3CompiledPayload && control.status === 'PARTIAL' && control.waiver_applied !== true) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: `${prefix}.status=PARTIAL requires waiver_applied=true.`,
+          field: `${prefix}.waiver_applied`,
+        },
+      };
+    }
+
+    const residualReasonCount = countWaiverResidualReasonCodes(control.reason_codes);
+    const hasWaiverAppliedReason = control.reason_codes.includes(
+      WAIVER_APPLIED_REASON_CODE,
+    );
+    const hasBaseReasonCode = control.reason_codes.some(
+      (reasonCode) =>
+        reasonCode !== WAIVER_APPLIED_REASON_CODE &&
+        !WAIVER_RESIDUAL_REASON_CODES.has(reasonCode),
+    );
+
+    if (control.waiver_applied) {
+      if (!hasWaiverAppliedReason) {
+        return {
+          ok: false,
+          reason: 'Compiled evidence report payload failed schema validation.',
+          error: {
+            code: 'SCHEMA_VALIDATION_FAILED',
+            message:
+              `${prefix}.waiver_applied=true requires reason_codes to include ${WAIVER_APPLIED_REASON_CODE}.`,
+            field: `${prefix}.reason_codes`,
+          },
+        };
+      }
+
+      if (residualReasonCount !== 1) {
+        return {
+          ok: false,
+          reason: 'Compiled evidence report payload failed schema validation.',
+          error: {
+            code: 'SCHEMA_VALIDATION_FAILED',
+            message:
+              `${prefix}.waiver_applied=true requires exactly one deterministic residual reason code.`,
+            field: `${prefix}.reason_codes`,
+          },
+        };
+      }
+
+      if (!hasBaseReasonCode) {
+        return {
+          ok: false,
+          reason: 'Compiled evidence report payload failed schema validation.',
+          error: {
+            code: 'SCHEMA_VALIDATION_FAILED',
+            message:
+              `${prefix}.waiver_applied=true requires the underlying control failure reason code to remain present.`,
+            field: `${prefix}.reason_codes`,
+          },
+        };
+      }
+    } else if (hasWaiverReasonMarkers(control.reason_codes)) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            `${prefix}.reason_codes may not contain waiver markers when waiver_applied=false.`,
+          field: `${prefix}.reason_codes`,
+        },
+      };
+    }
+  }
+
+  const computedOverallStatus = summarizeOverallStatus(
+    rawPayload.control_results as unknown as CompiledEvidenceControlResult[],
+  );
+  if (computedOverallStatus !== rawPayload.overall_status) {
+    return {
+      ok: false,
+      reason: 'Compiled evidence report payload failed schema validation.',
+      error: {
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          `payload.overall_status must equal ${computedOverallStatus} for the provided control_results.`,
+        field: 'payload.overall_status',
+      },
+    };
   }
 
   return {

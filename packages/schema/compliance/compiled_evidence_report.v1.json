@@ -29,7 +29,10 @@
     },
     "compiler_version": {
       "type": "string",
-      "minLength": 1
+      "enum": [
+        "clawcompiler-runtime-v1-wave2",
+        "clawcompiler-runtime-v1-wave3"
+      ]
     },
     "evidence_refs": {
       "type": "object",
@@ -140,6 +143,40 @@
               "properties": {
                 "status": {
                   "const": "PARTIAL"
+                },
+                "reason_codes": {
+                  "type": "array",
+                  "allOf": [
+                    {
+                      "contains": {
+                        "const": "WAIVER_APPLIED_SIGNED"
+                      }
+                    },
+                    {
+                      "contains": {
+                        "enum": [
+                          "RESIDUAL_COMPENSATING_CONTROL_RELIANCE",
+                          "RESIDUAL_HUMAN_EXCEPTION_APPLIED"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "PARTIAL"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "waiver_applied": {
+                  "const": true
                 }
               }
             }

@@ -2,14 +2,14 @@
   "report_version": "1",
   "report_id": "cer_2026-02-17_bootstrap",
   "compiled_at": "2026-02-17T18:30:00Z",
-  "compiler_version": "0.1.0",
+  "compiler_version": "clawcompiler-runtime-v1-wave2",
   "evidence_refs": {
     "proof_bundle_hash_b64u": "cHJvb2ZfYnVuZGxlX2hhc2hfMDAx",
     "ontology_hash_b64u": "b250b2xvZ3lfaGFzaF8wMDE",
     "mapping_rules_hash_b64u": "bWFwcGluZ19ydWxlc19oYXNoXzAwMQ",
     "verify_result_hash_b64u": "dmVyaWZ5X3Jlc3VsdF9oYXNoXzAwMQ"
   },
-  "overall_status": "PARTIAL",
+  "overall_status": "PASS",
   "matrix_hash_b64u": "invalid==hash",
   "control_results": [
     {

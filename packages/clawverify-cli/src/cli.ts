@@ -53,7 +53,7 @@ function usageText(): string {
     '  clawverify verify compiled-report --input <path> [--json]',
     '  clawverify verify commit-sig   --input <path> [--json]',
     '  clawsig sign-commit <sha> [--repo-claim-id <claim_id>] [--json]',
-    '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>] [--json]',
+    '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act|ai-execution-v1] [--output <file>] [--json]',
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
     '  clawsig inspect --input <bundle.json> [--decrypt] [--json]',
@@ -355,7 +355,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   if (argv[0] === 'compliance') {
     const inputPath = argv[1];
     if (!inputPath || inputPath.startsWith('--')) {
-      throw new CliUsageError('Usage: clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>]');
+      throw new CliUsageError('Usage: clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act|ai-execution-v1] [--output <file>]');
     }
     const framework = readFlag(argv, '--framework') ?? 'soc2';
     const outputPath = readFlag(argv, '--output');
