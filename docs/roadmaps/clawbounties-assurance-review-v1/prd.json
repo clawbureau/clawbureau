@@ -1,0 +1,80 @@
+{
+  "name": "clawbounties-assurance-review-v1",
+  "project": "clawbureau",
+  "description": "Adopt Clawcompiler Runtime v1 outputs inside Clawbounties reviewer workflows so marketplace decisions become more legible and evidence-rich.",
+  "branchName": "main",
+  "userStories": [
+    {
+      "id": "CBA-RV-001",
+      "title": "Compiled evidence attachment contract",
+      "description": "As a submission pipeline, I need a deterministic way to attach compiled evidence report envelopes to marketplace submissions so review surfaces can consume authoritative compiled outputs.",
+      "acceptanceCriteria": [
+        "Submission contract can carry a compiled evidence report envelope or canonical reference to one",
+        "Stored submission state records whether compiled evidence was provided and the authoritative report hash",
+        "Malformed or unsupported compiled evidence inputs fail closed with deterministic error codes",
+        "Existing proof-bundle-only submissions remain supported"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CBA-RV-002",
+      "title": "Compiled evidence verification and normalization",
+      "description": "As the marketplace, I need compiled evidence reports verified and normalized at ingest so reviewer surfaces don’t trust raw uploaded JSON blindly.",
+      "acceptanceCriteria": [
+        "Compiled evidence envelopes are verified using existing compiler/verifier contracts",
+        "Normalized marketplace state captures authoritative control counts, non-pass controls, and narrative presence/boundary state",
+        "Deterministic invalid codes exist for signature/hash/schema/binding failures",
+        "Invalid compiled evidence cannot silently upgrade reviewer posture"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CBA-RV-003",
+      "title": "Submission detail and list assurance summary",
+      "description": "As a requester or reviewer, I need submission APIs to summarize compiled evidence so I can see the authoritative posture without opening raw artifacts first.",
+      "acceptanceCriteria": [
+        "`GET /v1/submissions/:id` includes a compiled evidence summary when available",
+        "`GET /v1/bounties/:id/submissions` includes compact compiled evidence posture fields",
+        "Summary distinguishes authoritative matrix validity from optional narrative validity",
+        "Non-pass controls and important reason codes are exposed deterministically"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CBA-RV-004",
+      "title": "Requester and reviewer next-actions from compiled evidence",
+      "description": "As a reviewer, I need next-actions and approval surfaces to reflect compiled evidence findings so marketplace decisions are faster and more consistent.",
+      "acceptanceCriteria": [
+        "Submission next-actions incorporate compiled evidence posture when available",
+        "Approval/reject/request-changes views surface key non-pass controls and narrative-boundary warnings",
+        "Authoritative vs non-authoritative evidence remains visually and contractually distinct",
+        "No silent auto-approval uplift from narrative-only or malformed compiled evidence"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "CBA-RV-005",
+      "title": "Arena and manager-review compiled evidence propagation",
+      "description": "As ops, I need arena review and manager summaries to carry compiled evidence posture so autonomous routing learns from richer trust signals.",
+      "acceptanceCriteria": [
+        "Arena review flow can carry compiled evidence summary fields when submissions include them",
+        "Manager/reviewer summaries preserve authoritative vs narrative boundaries",
+        "Autopilot/operator views can see compiled evidence availability and important non-pass controls",
+        "Integration stays additive and does not break existing arena flows"
+      ],
+      "priority": 2,
+      "passes": false
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-03-22T01:25:00Z",
+    "status": "roadmap seeded (0/5 shipped)",
+    "dependsOn": [
+      "docs/roadmaps/clawcompiler-runtime-v1/"
+    ]
+  }
+}

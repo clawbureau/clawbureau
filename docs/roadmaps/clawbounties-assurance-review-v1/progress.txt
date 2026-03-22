@@ -1,0 +1,19 @@
+## Codebase Patterns
+- Keep marketplace review additive first; surface better evidence before tightening approval gates.
+- Treat compiled evidence as a separate authoritative layer from raw proof verification.
+- Narrative may help reviewers, but the marketplace must never let it override authoritative compiled control results.
+- Prefer submission detail/list improvements before broad arena/autopilot propagation.
+
+# Ralph Progress Log
+Started: 2026-03-22T01:25:00Z
+---
+
+## 2026-03-22T01:25:00Z - Clawbounties Assurance Review v1 roadmap seeded
+- What was planned
+  - Added roadmap docs for bringing Clawcompiler Runtime v1 outputs into live Clawbounties review flows.
+  - Seeded tracks for submission assurance ingestion, reviewer-facing assurance surfaces, and arena/operator propagation.
+  - Planned Wave 1 around the submission contract + detail/list review surfaces, with Wave 2 carrying those outputs into decision and arena flows.
+- Notes
+  - This roadmap should stay tightly tied to already-shipped compiled evidence contracts; do not invent marketplace-specific proof semantics.
+  - The first tranche should improve reviewer decision speed and trust legibility before changing payout or closure policy.
+---
