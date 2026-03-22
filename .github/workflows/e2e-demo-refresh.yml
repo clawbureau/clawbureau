@@ -1,0 +1,46 @@
+name: e2e-demo-refresh
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '33 6 * * *'
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate staging-safe demo snapshots
+        run: node scripts/ops/generate-e2e-demo-snapshots.mjs
+
+      - name: Generate demo registries
+        run: node scripts/ops/generate-e2e-demo-registry.mjs
+
+      - name: Typecheck clawea-www
+        run: npx -y tsc -p services/clawea-www/tsconfig.json --noEmit
+
+      - name: Typecheck clawsig-explorer
+        run: npx -y tsc -p services/clawsig-explorer/tsconfig.json --noEmit
+
+      - name: Diff sanity check
+        run: git diff --check
+
+      - name: Upload refreshed demo artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-demo-refresh-${{ github.run_id }}
+          path: |
+            artifacts/ops/e2e-demo/
+            services/clawea-www/src/generated/e2e-demo-registry.json
+            services/clawsig-explorer/src/generated/e2e-demo-registry.json
+          if-no-files-found: error

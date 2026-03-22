@@ -12,6 +12,7 @@
 
 import { layout, esc, didDisplay, statusBadge, tierBadge, relativeTime, type PageMeta } from '../layout.js';
 import { getReasonCodeExplanation } from '../reason-codes.js';
+import { renderE2eDrilldownCard } from '../e2e-workflow.js';
 
 export interface RunData {
   run_id: string;
@@ -155,6 +156,8 @@ export function runDetailPage(run: RunData): string {
       </dl>
     </div>
 
+    ${reviewerWorkflowCard(run)}
+
     ${shareRunCard(run)}
 
     ${reasonExplanationCard(reasonExplanation, run.failure_class, run.reason_code, run.run_id)}
@@ -163,6 +166,25 @@ export function runDetailPage(run: RunData): string {
   `;
 
   return layout(meta, body);
+}
+
+function reviewerWorkflowCard(run: RunData): string {
+  const inspectHref = run.bundle_url
+    ? `/inspect?bundle=${encodeURIComponent(run.bundle_url)}#reviewer-workflow`
+    : '/inspect#reviewer-workflow';
+
+  return renderE2eDrilldownCard('bundle-review', {
+    anchorId: 'workflow-drilldown',
+    kicker: 'Reviewer drill-down',
+    title: 'How to review this run',
+    subtitle:
+      'This page gives you status, proof tier, and fail-closed verification posture. Use Inspect when you need bundle-level structure or plaintext forensics for an authorized viewer.',
+    primaryLink: { href: inspectHref, label: 'Open Inspect with this bundle' },
+    secondaryLinks: [
+      { href: '/showcase/e2e#bundle-review', label: 'Showcase workflow context' },
+      { href: '/runs', label: 'Browse more runs' },
+    ],
+  });
 }
 
 function shareRunCard(run: RunData): string {

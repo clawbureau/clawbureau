@@ -1,0 +1,21 @@
+{
+  "snapshot_version": "1",
+  "generated_at": "2026-03-22T17:33:32.815Z",
+  "canonical_sources": {
+    "commit_proof": "proofs/feat/clawsig/human-readable-proofs/commit.sig.json",
+    "proof_bundle": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/proof-bundle.json",
+    "arena_summary": "artifacts/arena/arena_bty_arena_001/summary.json",
+    "autopilot_summary": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json",
+    "bundle_trace": "artifacts/ops/e2e-demo/traces/settlement-prod.trace.json"
+  },
+  "snapshot_outputs": {
+    "commit_proof": "artifacts/ops/e2e-demo/public/commit-proof.snapshot.json",
+    "bundle_review": "artifacts/ops/e2e-demo/public/bundle-review.snapshot.json",
+    "arena_decision": "artifacts/ops/e2e-demo/public/arena-decision.snapshot.json"
+  },
+  "notes": [
+    "Wave 3 converts the demo surfaces to staging-safe, repo-contained snapshot inputs.",
+    "The bundle-review snapshot is derived by tracing a repo-contained marketplace E2E proof bundle.",
+    "The refresh workflow can regenerate these snapshots in CI without relying on local /tmp state."
+  ]
+}

@@ -1,5 +1,6 @@
 import { esc, fmtNum, layout, relativeTime, statusBadge, type PageMeta } from '../layout.js';
 import type { ArenaContenderView, ArenaMissionSummaryView, ArenaReportView } from '../api.js';
+import { renderE2eDrilldownCard } from '../e2e-workflow.js';
 
 interface ArenaIndexItem {
   arena_id: string;
@@ -881,6 +882,19 @@ export function arenaComparePage(report: ArenaReportView, artifactsBaseUrl: stri
         <div class="label">Generated</div>
       </div>
     </div>
+
+    ${renderE2eDrilldownCard('arena-decision', {
+      anchorId: 'workflow-drilldown',
+      kicker: 'Reviewer drill-down',
+      title: 'Arena review workflow context',
+      subtitle:
+        'Use this page when you need the comparative decision surface: winner rationale, review thread, calibration, autopilot posture, and the contender evidence matrix in one place.',
+      primaryLink: { href: '/showcase/e2e#arena-decision', label: 'Show workflow context' },
+      secondaryLinks: [
+        { href: '/arena', label: 'Back to arena index' },
+        { href: '#proof-card', label: 'Jump to contenders table' },
+      ],
+    })}
 
     <div class="card">
       <p class="section-title">Winner rationale + tradeoffs</p>

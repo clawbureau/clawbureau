@@ -99,6 +99,9 @@ export function proofPointsPage(): string {
           <li>On-premises deployment is available but has fewer production hours than our cloud deployment</li>
         </ul>
         <p>We will update this page as each gap closes.</p>
+
+        <h2>See the workflows rendered end to end</h2>
+        <p>If you want to see how these artifacts become actual product UI, open the <a href="/case-studies/e2e-proof-workflows">E2E Proof Workflows</a> page. It turns real commit signatures, run summaries, proof bundles, and arena decision artifacts into the review surfaces operators and buyers actually need.</p>
       </div>
     </section>
     <section class="section">

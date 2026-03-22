@@ -34,11 +34,11 @@ export function caseStudiesIndexPage(): string {
             <p>How we run 3 autonomous agents on our own codebase with full proof chains on every PR. 190+ PRs merged, 7 economy services, all passing verification.</p>
             <span style="color:var(--accent);font-weight:500">Read the case study &rarr;</span>
           </a>
-          <div class="card" style="opacity:.7">
-            <h3>Enterprise Pilot (Financial Services)</h3>
-            <p>Production deploy approval workflow with proof bundles and SOX evidence export. Pilot in progress.</p>
-            <span style="color:var(--text-muted);font-weight:500">Coming Q1 2026</span>
-          </div>
+          <a href="/case-studies/e2e-proof-workflows" class="card" style="text-decoration:none;color:inherit">
+            <h3>E2E Proof Workflows</h3>
+            <p>Three real demos rendered on the actual sites people touch: PR proof review, proof-bundle review, and arena decisioning with live artifact-backed numbers.</p>
+            <span style="color:var(--accent);font-weight:500">Open the workflow demo &rarr;</span>
+          </a>
         </div>
 
         <h2>Run Your Own Pilot</h2>

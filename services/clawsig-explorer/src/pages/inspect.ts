@@ -1,4 +1,5 @@
 import { layout, type PageMeta } from '../layout.js';
+import { renderE2eDrilldownCard } from '../e2e-workflow.js';
 
 interface InspectAuthState {
   authenticated: boolean;
@@ -236,6 +237,19 @@ export function inspectPage(options: InspectPageOptions): string {
       Public verification layer is always visible. Full plaintext forensics is shown only after GitHub OAuth and viewer-key authorization.
     </p>
   </div>
+
+  ${renderE2eDrilldownCard('bundle-review', {
+    anchorId: 'reviewer-workflow',
+    kicker: 'Reviewer drill-down',
+    title: 'Inspect is the deep-review stop',
+    subtitle:
+      'Come here when the run-level posture is not enough. This view is for envelope structure, public-layer verification, and, when authorized, decrypted plaintext forensics.',
+    primaryLink: { href: '/showcase/e2e#bundle-review', label: 'Show workflow context' },
+    secondaryLinks: [
+      { href: '/runs', label: 'Browse recent runs' },
+      { href: '/inspect', label: 'Reset inspector surface' },
+    ],
+  })}
 
   <div id="status-banner" class="inspect-banner"></div>
 

@@ -40,6 +40,7 @@ import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
 import { homePage, statsPage } from './pages/home.js';
 import { runsFeedPage } from './pages/runs.js';
 import { opsDashboardPage } from './pages/ops.js';
+import { e2eShowcasePage } from './pages/e2e.js';
 import {
   arenaComparePage,
   arenaIndexPage,
@@ -520,6 +521,11 @@ export default {
         return html(arenaLeagueUnavailablePage(), 200, 30);
       }
       return html(arenaLeaguePage(leagueData), 200, 30);
+    }
+
+    // -- E2E showcase --
+    if (path === '/showcase/e2e') {
+      return html(e2eShowcasePage(), 200, 60);
     }
 
     // -- Arena ROI dashboard (AGP-US-084) --

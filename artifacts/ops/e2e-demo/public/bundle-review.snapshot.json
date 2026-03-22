@@ -1,0 +1,21 @@
+{
+  "snapshot_version": "1",
+  "workflow_id": "bundle-review",
+  "generated_at": "2026-03-22T17:33:32.815Z",
+  "source_path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/proof-bundle.json",
+  "source_mtime": "2026-03-22T17:32:43.065Z",
+  "trace_path": "artifacts/ops/e2e-demo/traces/settlement-prod.trace.json",
+  "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171",
+  "bundle_id": "bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0",
+  "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+  "issued_at": "2026-02-18T15:27:50.147Z",
+  "event_count": 7,
+  "tool_receipt_count": 5,
+  "dominant_tool": "http_fetch",
+  "dominant_tool_count": 5,
+  "primary_result_status": "success",
+  "primary_result_status_count": 4,
+  "verification_status": "PASS",
+  "verification_code": "OK",
+  "verification_reason": "All marketplace settlement smoke steps passed"
+}
