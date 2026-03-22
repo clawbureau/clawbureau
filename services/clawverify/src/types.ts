@@ -531,6 +531,19 @@ export interface CompiledEvidenceControlResult {
   waiver_applied: boolean;
 }
 
+export interface CompiledEvidenceNarrative {
+  narrative_version: '1';
+  report_id: string;
+  generated_at: string;
+  authoritative: false;
+  disclaimer: string;
+  authoritative_matrix_hash_b64u: string;
+  authoritative_report_hash_b64u: string;
+  text: string;
+  generator_provider?: string;
+  generator_model?: string;
+}
+
 export interface CompiledEvidenceReportPayload {
   report_version: '1';
   report_id: string;
@@ -540,6 +553,7 @@ export interface CompiledEvidenceReportPayload {
   overall_status: CompiledEvidenceOverallStatus;
   matrix_hash_b64u: string;
   control_results: CompiledEvidenceControlResult[];
+  narrative?: CompiledEvidenceNarrative;
 }
 
 export interface CompiledEvidenceReportEnvelope {

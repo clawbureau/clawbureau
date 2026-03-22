@@ -43,6 +43,8 @@
     "generated_at": "2026-02-17T18:30:01Z",
     "authoritative": false,
     "disclaimer": "NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.",
+    "authoritative_matrix_hash_b64u": "bWF0cml4X2hhc2hfMDAx",
+    "authoritative_report_hash_b64u": "YXV0aG9yaXRhdGl2ZV9yZXBvcnRfaGFzaF8wMDE",
     "text": "Deterministic matrix evaluation completed successfully. One control is PARTIAL due to an approved, scope-bound waiver.",
     "generator_provider": "openai",
     "generator_model": "gpt-5.3"

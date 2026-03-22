@@ -4,6 +4,8 @@
   "generated_at": "2026-02-17T18:30:01Z",
   "authoritative": false,
   "disclaimer": "This narrative may be treated as authoritative.",
+  "authoritative_matrix_hash_b64u": "bWF0cml4X2hhc2hfMDAx",
+  "authoritative_report_hash_b64u": "YXV0aG9yaXRhdGl2ZV9yZXBvcnRfaGFzaF8wMDE",
   "text": "Invalid fixture: disclaimer does not match the required canonical string.",
   "generator_provider": "openai",
   "generator_model": "gpt-5.3"

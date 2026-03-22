@@ -102,6 +102,19 @@ export interface CompiledEvidenceControlResult {
   waiver_applied: boolean;
 }
 
+export interface CompiledEvidenceNarrative {
+  narrative_version: '1';
+  report_id: string;
+  generated_at: string;
+  authoritative: false;
+  disclaimer: string;
+  authoritative_matrix_hash_b64u: string;
+  authoritative_report_hash_b64u: string;
+  text: string;
+  generator_provider?: string;
+  generator_model?: string;
+}
+
 export interface CompiledEvidenceReport {
   report_version: '1';
   report_id: string;
@@ -111,6 +124,7 @@ export interface CompiledEvidenceReport {
   overall_status: CompiledEvidenceOverallStatus;
   matrix_hash_b64u: string;
   control_results: CompiledEvidenceControlResult[];
+  narrative?: CompiledEvidenceNarrative;
 }
 
 export interface CompiledEvidenceReportEnvelope {
@@ -129,6 +143,12 @@ export interface AuthoritativeCompiledReportSignerInput {
   signer_did: string;
   private_key_pkcs8_b64u: string;
   issued_at?: string;
+}
+
+export interface CompiledEvidenceNarrativeRuntimeInput {
+  enabled?: boolean;
+  generator_provider?: string;
+  generator_model?: string;
 }
 
 export interface VerifyCompiledEvidenceReportEnvelopeResult {
@@ -212,6 +232,8 @@ export interface CompliancePolicyInput {
   allowed_models?: string[];
   /** Minimum model identity tier required by the WPC. */
   minimum_model_identity_tier?: string;
+  /** Strict-policy gate: disables narrative generation even when runtime config requests it. */
+  disable_narrative_generation?: boolean;
 }
 
 export type WaiverKind = 'COMPENSATING_CONTROL' | 'HUMAN_EXCEPTION';
@@ -258,6 +280,7 @@ export interface AuthoritativeCompilerInput {
   waivers?: SignedControlWaiverInput[];
   compiled_report_refs?: Partial<CompiledEvidenceReportEvidenceRefs>;
   compiled_report_signer?: AuthoritativeCompiledReportSignerInput;
+  narrative_runtime?: CompiledEvidenceNarrativeRuntimeInput;
 }
 
 export type AuthoritativeCompilerState =
@@ -309,6 +332,8 @@ const COMPILER_VERSION_WAVE2 = 'clawcompiler-runtime-v1-wave2';
 const COMPILER_VERSION_WAVE3 = 'clawcompiler-runtime-v1-wave3';
 const COMPILER_MAPPING_VERSION = 'control-pack-v1';
 const AI_EXECUTION_ASSURANCE_PACK_ID = 'claw.ai_execution_assurance.v1';
+export const COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER =
+  'NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.';
 const WAIVER_APPLIED_REASON_CODE = 'WAIVER_APPLIED_SIGNED';
 const WAIVER_RESIDUAL_REASON_CODES = new Set([
   'RESIDUAL_COMPENSATING_CONTROL_RELIANCE',
@@ -551,6 +576,18 @@ function parsePolicyInput(
     };
   }
 
+  if (
+    rawPolicy.disable_narrative_generation !== undefined &&
+    typeof rawPolicy.disable_narrative_generation !== 'boolean'
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_DISABLE_NARRATIVE_GENERATION',
+      reason:
+        'policy.disable_narrative_generation, when present, must be a boolean.',
+    };
+  }
+
   if (rawPolicy.allowed_models !== undefined) {
     if (!Array.isArray(rawPolicy.allowed_models)) {
       return {
@@ -646,6 +683,57 @@ function parseCompiledReportSignerInput(
       signer_did: rawSigner.signer_did,
       private_key_pkcs8_b64u: rawSigner.private_key_pkcs8_b64u,
       issued_at: rawSigner.issued_at,
+    },
+  };
+}
+
+function parseNarrativeRuntimeInput(
+  rawNarrativeRuntime: Record<string, unknown>,
+): { ok: true; value: CompiledEvidenceNarrativeRuntimeInput } | ParseFailure {
+  if (
+    rawNarrativeRuntime.enabled !== undefined &&
+    typeof rawNarrativeRuntime.enabled !== 'boolean'
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_NARRATIVE_RUNTIME_ENABLED',
+      reason: 'narrative_runtime.enabled, when present, must be a boolean.',
+    };
+  }
+
+  if (
+    rawNarrativeRuntime.generator_provider !== undefined &&
+    !isNonEmptyString(rawNarrativeRuntime.generator_provider)
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_NARRATIVE_GENERATOR_PROVIDER',
+      reason:
+        'narrative_runtime.generator_provider, when present, must be a non-empty string.',
+    };
+  }
+
+  if (
+    rawNarrativeRuntime.generator_model !== undefined &&
+    !isNonEmptyString(rawNarrativeRuntime.generator_model)
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_NARRATIVE_GENERATOR_MODEL',
+      reason:
+        'narrative_runtime.generator_model, when present, must be a non-empty string.',
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      enabled:
+        typeof rawNarrativeRuntime.enabled === 'boolean'
+          ? rawNarrativeRuntime.enabled
+          : undefined,
+      generator_provider: asString(rawNarrativeRuntime.generator_provider),
+      generator_model: asString(rawNarrativeRuntime.generator_model),
     },
   };
 }
@@ -1785,6 +1873,26 @@ function parseCompilerInput(rawInput: unknown): ParseCompilerResult {
     return parsedCompiledReportSigner;
   }
 
+  if (
+    rawInput.narrative_runtime !== undefined &&
+    !isRecord(rawInput.narrative_runtime)
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_NARRATIVE_RUNTIME',
+      reason: 'narrative_runtime, when present, must be a JSON object.',
+    };
+  }
+
+  const parsedNarrativeRuntime =
+    rawInput.narrative_runtime !== undefined
+      ? parseNarrativeRuntimeInput(rawInput.narrative_runtime)
+      : undefined;
+
+  if (parsedNarrativeRuntime && !parsedNarrativeRuntime.ok) {
+    return parsedNarrativeRuntime;
+  }
+
   return {
     ok: true,
     value: {
@@ -1809,6 +1917,9 @@ function parseCompilerInput(rawInput: unknown): ParseCompilerResult {
         : undefined,
       compiled_report_signer: parsedCompiledReportSigner?.ok
         ? parsedCompiledReportSigner.value
+        : undefined,
+      narrative_runtime: parsedNarrativeRuntime?.ok
+        ? parsedNarrativeRuntime.value
         : undefined,
     },
   };
@@ -2334,6 +2445,97 @@ async function applySignedControlWaivers(
   };
 }
 
+type AuthoritativeCompiledEvidenceReportView = Omit<
+  CompiledEvidenceReport,
+  'narrative'
+>;
+
+function authoritativeCompiledReportView(
+  report: CompiledEvidenceReport,
+): AuthoritativeCompiledEvidenceReportView {
+  const { narrative: _ignoredNarrative, ...authoritative } = report;
+  return authoritative;
+}
+
+async function computeAuthoritativeReportHashB64u(
+  report: CompiledEvidenceReport,
+): Promise<string> {
+  return sha256B64uFromCanonical(authoritativeCompiledReportView(report));
+}
+
+function buildDeterministicNarrativeText(report: CompiledEvidenceReport): string {
+  const statuses: CompiledEvidenceControlStatus[] = [
+    'PASS',
+    'FAIL',
+    'PARTIAL',
+    'INAPPLICABLE',
+    'FAIL_CLOSED_INVALID_EVIDENCE',
+  ];
+
+  const statusSummary = statuses
+    .map((status) => {
+      const count = report.control_results.filter(
+        (control) => control.status === status,
+      ).length;
+      return `${status}=${count}`;
+    })
+    .join(', ');
+
+  const nonPassControls = report.control_results
+    .filter((control) => control.status !== 'PASS')
+    .map((control) => `${control.control_id}:${control.status}`)
+    .sort();
+
+  const nonPassSummary =
+    nonPassControls.length > 0 ? nonPassControls.join(', ') : 'none';
+
+  return [
+    `Authoritative compiled matrix ${report.report_id} evaluated with overall status ${report.overall_status}.`,
+    `Control status counts: ${statusSummary}.`,
+    `Non-pass controls: ${nonPassSummary}.`,
+  ].join(' ');
+}
+
+async function attachNarrativePlaneIfEnabled(
+  input: AuthoritativeCompilerInput,
+  compiledReport: CompiledEvidenceReport,
+): Promise<CompiledEvidenceReport> {
+  const policyDisablesNarrative =
+    input.policy?.disable_narrative_generation === true;
+  const runtimeRequestsNarrative = input.narrative_runtime?.enabled === true;
+
+  if (!runtimeRequestsNarrative || policyDisablesNarrative) {
+    return compiledReport;
+  }
+
+  const authoritativeReportHashB64u =
+    await computeAuthoritativeReportHashB64u(compiledReport);
+
+  const narrative: CompiledEvidenceNarrative = {
+    narrative_version: '1',
+    report_id: compiledReport.report_id,
+    generated_at: compiledReport.compiled_at,
+    authoritative: false,
+    disclaimer: COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER,
+    authoritative_matrix_hash_b64u: compiledReport.matrix_hash_b64u,
+    authoritative_report_hash_b64u: authoritativeReportHashB64u,
+    text: buildDeterministicNarrativeText(compiledReport),
+  };
+
+  if (input.narrative_runtime?.generator_provider) {
+    narrative.generator_provider = input.narrative_runtime.generator_provider;
+  }
+
+  if (input.narrative_runtime?.generator_model) {
+    narrative.generator_model = input.narrative_runtime.generator_model;
+  }
+
+  return {
+    ...compiledReport,
+    narrative,
+  };
+}
+
 function deterministicCompiledReportId(input: AuthoritativeCompilerInput): string {
   const frameworkPart = input.framework.replace(/[^A-Za-z0-9._:-]/g, '_');
   const bundlePart = input.bundle_hash_b64u.slice(0, 24);
@@ -2371,7 +2573,7 @@ export async function buildCompiledEvidenceReport(
     throw new Error('Deterministic compiled report ID generation failed schema constraints.');
   }
 
-  return {
+  const authoritativeReport: CompiledEvidenceReport = {
     report_version: '1',
     report_id: reportId,
     compiled_at: compiledAt,
@@ -2381,6 +2583,8 @@ export async function buildCompiledEvidenceReport(
     matrix_hash_b64u: matrixHash,
     control_results: controlResults,
   };
+
+  return attachNarrativePlaneIfEnabled(input, authoritativeReport);
 }
 
 async function signCompiledReportEnvelope(
@@ -2917,6 +3121,143 @@ function validateCompiledReportPayloadShape(
     }
   }
 
+  if (rawPayload.narrative !== undefined) {
+    const narrative = rawPayload.narrative;
+
+    if (!isRecord(narrative)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: 'payload.narrative must be a JSON object when present.',
+        field: 'payload.narrative',
+      };
+    }
+
+    if (narrative.narrative_version !== '1') {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: 'payload.narrative.narrative_version must equal "1".',
+        field: 'payload.narrative.narrative_version',
+      };
+    }
+
+    if (!isNonEmptyString(narrative.report_id)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: 'payload.narrative.report_id must be a non-empty string.',
+        field: 'payload.narrative.report_id',
+      };
+    }
+
+    if (narrative.report_id !== rawPayload.report_id) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: 'payload.narrative.report_id must match payload.report_id.',
+        field: 'payload.narrative.report_id',
+      };
+    }
+
+    if (!isNonEmptyString(narrative.generated_at) || !STRICT_ISO_UTC_RE.test(narrative.generated_at)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.narrative.generated_at must be a strict UTC ISO-8601 timestamp.',
+        field: 'payload.narrative.generated_at',
+      };
+    }
+
+    if (narrative.authoritative !== false) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: 'payload.narrative.authoritative must equal false.',
+        field: 'payload.narrative.authoritative',
+      };
+    }
+
+    if (narrative.disclaimer !== COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.narrative.disclaimer must match the fixed non-authoritative disclaimer contract.',
+        field: 'payload.narrative.disclaimer',
+      };
+    }
+
+    if (!isBase64UrlString(narrative.authoritative_matrix_hash_b64u, 8)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.narrative.authoritative_matrix_hash_b64u must be base64url (min length 8).',
+        field: 'payload.narrative.authoritative_matrix_hash_b64u',
+      };
+    }
+
+    if (narrative.authoritative_matrix_hash_b64u !== rawPayload.matrix_hash_b64u) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.narrative.authoritative_matrix_hash_b64u must match payload.matrix_hash_b64u.',
+        field: 'payload.narrative.authoritative_matrix_hash_b64u',
+      };
+    }
+
+    if (!isBase64UrlString(narrative.authoritative_report_hash_b64u, 8)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.narrative.authoritative_report_hash_b64u must be base64url (min length 8).',
+        field: 'payload.narrative.authoritative_report_hash_b64u',
+      };
+    }
+
+    if (
+      !isNonEmptyString(narrative.text) ||
+      narrative.text.length > 20000
+    ) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: 'payload.narrative.text must be 1..20000 characters.',
+        field: 'payload.narrative.text',
+      };
+    }
+
+    if (
+      narrative.generator_provider !== undefined &&
+      !isNonEmptyString(narrative.generator_provider)
+    ) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.narrative.generator_provider, when present, must be a non-empty string.',
+        field: 'payload.narrative.generator_provider',
+      };
+    }
+
+    if (
+      narrative.generator_model !== undefined &&
+      !isNonEmptyString(narrative.generator_model)
+    ) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          'payload.narrative.generator_model, when present, must be a non-empty string.',
+        field: 'payload.narrative.generator_model',
+      };
+    }
+  }
+
   const computedOverallStatus = summarizeCompiledOverallStatus(
     rawPayload.control_results as unknown as CompiledEvidenceControlResult[],
   );
@@ -3067,6 +3408,28 @@ export async function verifyCompiledEvidenceReportEnvelope(
   }
 
   const payload = payloadValidation.value;
+
+  if (payload.narrative) {
+    const expectedAuthoritativeReportHash =
+      await computeAuthoritativeReportHashB64u(payload);
+
+    if (
+      expectedAuthoritativeReportHash !==
+      payload.narrative.authoritative_report_hash_b64u
+    ) {
+      return invalid(
+        'HASH_MISMATCH',
+        'Compiled evidence narrative binding hash mismatch.',
+        'payload.narrative.authoritative_report_hash_b64u does not match the canonical authoritative compiled report hash.',
+        'payload.narrative.authoritative_report_hash_b64u',
+        {
+          report_id: payload.report_id,
+          matrix_hash_b64u: payload.matrix_hash_b64u,
+          payload_hash_b64u: rawEnvelope.payload_hash_b64u,
+        },
+      );
+    }
+  }
 
   const expectedMatrixHash = await computeCompiledMatrixHashB64u(payload.control_results);
   if (expectedMatrixHash !== payload.matrix_hash_b64u) {
