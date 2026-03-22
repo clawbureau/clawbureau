@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-03-22
+> **Last reviewed:** 2026-02-18
 > **Source of truth:** `docs/roadmaps/*/prd.json` + `docs/roadmaps/*/progress.txt`
 >
 > **Scope:**
@@ -14,33 +14,21 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## In progress / partially shipped
 
-- None currently active.
+- **Clawsig v1** (identity, encrypted proof visibility, agent skill interface, product decoupling)
+  - Folder: `docs/roadmaps/clawsig-v1/`
+  - Status: roadmap created, 14 P1 stories, 0 shipped
+  - Beads: `monorepo-20a.*`, `monorepo-epv.*`, `monorepo-skl.*`, `monorepo-nxb.*`, `monorepo-dcp.*`
+
+- **Clawcompiler bootstrap** (deterministic compiled-evidence schemas + conformance scaffolding)
+  - Folder: `docs/roadmaps/clawcompiler/`
+  - Status: bootstrap complete for CEC-US-001..003; runtime service not yet scheduled
 
 ## Completed roadmaps
 
-- **Clawbounties Assurance Decision Policy v1** (5/5 ✅ — canonical compiled-evidence decision policy, requester override contract, arena desk adoption, manager autopilot guardrails, and decision audit snapshots)
-  - Folder: `docs/roadmaps/clawbounties-assurance-decision-policy-v1/`
-  - Status: complete (PRs #533/#535)
-
-- **Clawbounties Assurance Review v1** (5/5 ✅ — compiled evidence submission contracts, normalized reviewer trust surfaces, reviewer/requester next-actions, arena/manager-review propagation)
-  - Folder: `docs/roadmaps/clawbounties-assurance-review-v1/`
-  - Status: complete (PRs #527/#530)
-
-- **Clawcompiler Runtime v1** (10/10 ✅ — deterministic runtime, signed compiled reports, AI execution assurance pack, waiver semantics, export/viewer integration, narrative membrane)
-  - Folder: `docs/roadmaps/clawcompiler-runtime-v1/`
-  - Status: complete (PRs #516/#518/#520/#522/#523)
-
-- **Clawsig Framework vNext** (24/24 ✅ — reliability, signed policy, attestation, marketplace enforcement, reviewer/dispute UX, DLP, cross-runtime parity, transparency, revocation)
-  - Folder: `docs/roadmaps/clawsig-framework-vnext/`
-  - Status: complete (PRs #484/#485/#487/#489/#490/#492/#493/#495/#497/#498/#500/#501/#503/#504/#506/#507/#508/#510/#511/#513)
-
-- **Clawcompiler bootstrap** (6/6 ✅ — deterministic compiled-evidence schemas, binary-semantic runtime contracts, conformance scaffolding)
-  - Folder: `docs/roadmaps/clawcompiler/`
-  - Status: complete (bootstrap/contracts complete; Runtime v1 continues in `docs/roadmaps/clawcompiler-runtime-v1/`)
-
-- **Clawsig Privacy Assurance v1** (10/10 ✅ — fail-closed egress, runtime hygiene, sensitivity handling, processor policy, reviewer-facing privacy posture, export packs)
-  - Folder: `docs/roadmaps/clawsig-privacy-v1/`
-  - Status: complete (PRs #475/#476/#477/#478/#479/#480/#481)
+- **E2E Demo Surfaces v1** (7/7 ✅ — public workflow demo, operator showcase, generated registry, reviewer drill-downs, staging-safe snapshots, scheduled refresh)
+  - Folder: `docs/roadmaps/e2e-demo-surfaces-v1/`
+  - Status: complete — Waves 1-3 shipped, deployed to staging + production on 2026-03-22, feature packaged in PR #539
+  - Beads: `monorepo-e2edemo.*`
 
 - **Clawsig Protocol v0.2** (5/5 ✅ — co-signatures, TTL semantics, selective disclosure, aggregate bundles, deterministic rate-limit claims)
   - Folder: `docs/roadmaps/clawsig-protocol-v0.2/`

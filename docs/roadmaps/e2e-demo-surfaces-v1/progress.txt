@@ -1,0 +1,126 @@
+## Codebase Patterns
+- Public narrative pages should feel poster-like and sparse; operator pages should be utility-first and evidence-dense.
+- Use real artifact values, not synthetic marketing placeholders.
+- Follow ~/.agents/skills/frontend-skill/SKILL.md for visual thesis, section jobs, and restraint.
+
+# Ralph Progress Log
+Started: 2026-03-19T23:30:00Z
+---
+
+## 2026-03-19T23:30:00Z - Wave 1 seed + UI delivery
+- What was implemented
+  - Added the roadmap folder for `e2e-demo-surfaces-v1` with README, PRD, and progress log.
+  - Added a dedicated public workflow demo page:
+    - `services/clawea-www/src/pages/e2e-proof-workflows.ts`
+    - route: `/case-studies/e2e-proof-workflows`
+  - Added a dedicated operator showcase page:
+    - `services/clawsig-explorer/src/pages/e2e.ts`
+    - route: `/showcase/e2e`
+  - Updated existing entry points to route traffic into the new surfaces:
+    - `services/clawea-www/src/pages/case-studies.ts`
+    - `services/clawea-www/src/pages/proof-points.ts`
+    - `services/clawsig-explorer/src/layout.ts`
+  - Registered the new page routes in:
+    - `services/clawea-www/src/index.ts`
+    - `services/clawsig-explorer/src/index.ts`
+  - Updated roadmap index + Beads tracker for wave-1 epic/stories.
+- Real artifact anchors used
+  - `proofs/feat/clawsig/human-readable-proofs/commit.sig.json`
+  - `/tmp/pi-proxy-prod-e2e.x4n3cN/work/.clawsig/run_summary.json`
+  - `/tmp/pi-proxy-prod-e2e.x4n3cN/work/.clawsig/proof_bundle.json`
+  - `artifacts/arena/arena_bty_arena_001/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json`
+- Quality checks
+  - `npx -y tsc -p services/clawea-www/tsconfig.json --noEmit`
+  - `npx -y tsc -p services/clawsig-explorer/tsconfig.json --noEmit`
+  - `git diff --check`
+---
+
+## 2026-03-22T16:50:00Z - Wave 2 registry generation
+- What was implemented
+  - Added `scripts/ops/generate-e2e-demo-registry.mjs` to read canonical source artifacts and emit a generated workflow registry JSON.
+  - Generated and committed:
+    - `services/clawea-www/src/generated/e2e-demo-registry.json`
+    - `services/clawsig-explorer/src/generated/e2e-demo-registry.json`
+  - Refactored both demo surfaces to consume the generated registry instead of hand-maintained constants:
+    - `services/clawea-www/src/pages/e2e-proof-workflows.ts`
+    - `services/clawsig-explorer/src/pages/e2e.ts`
+  - Added freshness + source-artifact disclosure blocks to both surfaces.
+- Canonical source artifacts used
+  - `proofs/feat/clawsig/human-readable-proofs/commit.sig.json`
+  - `/tmp/pi-proxy-prod-e2e.x4n3cN/work/.clawsig/run_summary.json`
+  - `/tmp/pi-proxy-prod-e2e.x4n3cN/work/.clawsig/proof_bundle.json`
+  - `artifacts/arena/arena_bty_arena_001/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json`
+- Quality checks
+  - `node scripts/ops/generate-e2e-demo-registry.mjs`
+  - `npx -y tsc -p services/clawea-www/tsconfig.json --noEmit`
+  - `npx -y tsc -p services/clawsig-explorer/tsconfig.json --noEmit`
+  - `git diff --check`
+---
+
+## 2026-03-22T17:05:00Z - Wave 2 reviewer drill-downs
+- What was implemented
+  - Added shared explorer workflow helper:
+    - `services/clawsig-explorer/src/e2e-workflow.ts`
+  - Added workflow-context drill-down cards to the relevant operator surfaces:
+    - `services/clawsig-explorer/src/pages/run.ts`
+    - `services/clawsig-explorer/src/pages/inspect.ts`
+    - `services/clawsig-explorer/src/pages/arena.ts`
+  - Updated showcase routing links so reviewers can jump from overview into the relevant inspect/arena anchors and run-review surface.
+  - Extended generated registry shape with structured workflow references for future deeper linking.
+- UX intent
+  - Keep public narrative separate from operator review work.
+  - Make the explorer surfaces feel like connected stages of one workflow, not isolated pages.
+  - Keep copy utility-first and evidence-grounded per `frontend-skill` guidance.
+- Quality checks
+  - `node scripts/ops/generate-e2e-demo-registry.mjs`
+  - `npx -y tsc -p services/clawea-www/tsconfig.json --noEmit`
+  - `npx -y tsc -p services/clawsig-explorer/tsconfig.json --noEmit`
+  - `git diff --check`
+---
+
+## 2026-03-22T18:10:00Z - Wave 3 staging-safe snapshots + scheduled refresh
+- What was implemented
+  - Added `scripts/ops/generate-e2e-demo-snapshots.mjs`.
+  - Regenerated a repo-contained proof-bundle trace from:
+    - `artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/proof-bundle.json`
+  - Wrote stable demo snapshot artifacts:
+    - `artifacts/ops/e2e-demo/public/commit-proof.snapshot.json`
+    - `artifacts/ops/e2e-demo/public/bundle-review.snapshot.json`
+    - `artifacts/ops/e2e-demo/public/arena-decision.snapshot.json`
+    - `artifacts/ops/e2e-demo/public/manifest.json`
+    - `artifacts/ops/e2e-demo/traces/settlement-prod.trace.json`
+  - Updated `scripts/ops/generate-e2e-demo-registry.mjs` to build both service registries from the new snapshot artifacts instead of local `/tmp` inputs.
+  - Added scheduled/manual refresh workflow:
+    - `.github/workflows/e2e-demo-refresh.yml`
+- Why this matters
+  - The demo no longer depends on transient local `/tmp` artifact paths.
+  - CI can regenerate the artifact pack and registries from repo-contained evidence.
+  - The workflow is now staging-safe and refreshable without deployment.
+- Quality checks
+  - `node scripts/ops/generate-e2e-demo-snapshots.mjs`
+  - `node scripts/ops/generate-e2e-demo-registry.mjs`
+  - `npx -y tsc -p services/clawea-www/tsconfig.json --noEmit`
+  - `npx -y tsc -p services/clawsig-explorer/tsconfig.json --noEmit`
+  - `git diff --check`
+---
+
+## 2026-03-22T17:40:38Z - Repo-history packaging + deploy closeout
+- What was packaged
+  - Feature PR #539 captured Waves 1-3 in `feat/e2edemo/E2E-UI-002-007-demo-surfaces-v1`.
+  - Feature closure commit: `5a40761559a1533568928becf70d97080af4ce99`.
+  - DID proof commit: `15a477f57f966bd15fb2b388bc4dbddc3d5e4dca` at `proofs/feat/e2edemo/E2E-UI-002-007-demo-surfaces-v1/commit.sig.json`.
+  - PoH evidence pack captured for the validation run under `artifacts/poh/feat/e2edemo/E2E-UI-002-007-demo-surfaces-v1/`.
+- Deployment state
+  - `clawea-www-staging` version `1286437c-eda5-4ac4-a52f-ecac9e32dc7d`
+  - `clawea-www` version `8fcaf317-b748-4f45-93e9-d5bfa15695f6`
+  - `clawsig-explorer-staging` version `47717608-5be0-423d-8db2-c4b2ed084954`
+  - `clawsig-explorer` version `3f35c309-bc9a-436f-aac6-d69b77574cf6`
+- Smoke summary
+  - Production custom domains passed for both services.
+  - `staging-explorer.clawsig.com` passed.
+  - `staging-www.clawea.com` was DNS-unresolved during smoke, while `https://clawea-www-staging.generaite.workers.dev` served the new page correctly.
+- Evidence
+  - Deploy summary: `artifacts/ops/e2e-demo/deploys/2026-03-22T17-21-22Z/deploy-summary.json`
+---

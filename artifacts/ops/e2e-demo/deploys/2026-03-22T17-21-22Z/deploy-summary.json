@@ -1,0 +1,34 @@
+{
+  "summary": "E2E Demo Surfaces v1 deploy",
+  "deployed_at": "2026-03-22T17:21:22Z",
+  "feature_pr": 539,
+  "feature_branch": "feat/e2edemo/E2E-UI-002-007-demo-surfaces-v1",
+  "feature_commit": "5a40761559a1533568928becf70d97080af4ce99",
+  "proof_commit": "15a477f57f966bd15fb2b388bc4dbddc3d5e4dca",
+  "services": {
+    "clawea_www": {
+      "staging_version_id": "1286437c-eda5-4ac4-a52f-ecac9e32dc7d",
+      "production_version_id": "8fcaf317-b748-4f45-93e9-d5bfa15695f6",
+      "staging_workers_dev": "https://clawea-www-staging.generaite.workers.dev",
+      "production_custom_domain": "https://www.clawea.com"
+    },
+    "clawsig_explorer": {
+      "staging_version_id": "47717608-5be0-423d-8db2-c4b2ed084954",
+      "production_version_id": "3f35c309-bc9a-436f-aac6-d69b77574cf6",
+      "staging_custom_domain": "https://staging-explorer.clawsig.com",
+      "production_custom_domain": "https://explorer.clawsig.com"
+    }
+  },
+  "smoke": {
+    "production": {
+      "clawea_www": "pass",
+      "clawsig_explorer": "pass"
+    },
+    "staging": {
+      "clawea_www_workers_dev": "pass",
+      "clawea_www_custom_domain": "dns_unresolved_during_smoke",
+      "clawsig_explorer_workers_dev": "pass",
+      "clawsig_explorer_custom_domain": "pass"
+    }
+  }
+}
