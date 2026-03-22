@@ -950,6 +950,143 @@ interface BountyReviewArenaFlowView {
   decision_capture: ArenaDecisionCaptureView | null;
 }
 
+type CompiledEvidenceAttachmentKind = 'envelope' | 'reference';
+type CompiledEvidenceOverallStatus = 'PASS' | 'FAIL' | 'PARTIAL' | 'FAIL_CLOSED_INVALID_EVIDENCE';
+type CompiledEvidenceControlStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'PARTIAL'
+  | 'INAPPLICABLE'
+  | 'FAIL_CLOSED_INVALID_EVIDENCE';
+
+interface CompiledEvidenceReportEvidenceRefs {
+  proof_bundle_hash_b64u: string;
+  ontology_hash_b64u: string;
+  mapping_rules_hash_b64u: string;
+  verify_result_hash_b64u: string;
+}
+
+interface CompiledEvidenceControlResult {
+  control_id: string;
+  status: CompiledEvidenceControlStatus;
+  reason_codes: string[];
+  evidence_hashes_b64u: string[];
+  waiver_applied: boolean;
+}
+
+interface CompiledEvidenceNarrative {
+  narrative_version: '1';
+  report_id: string;
+  generated_at: string;
+  authoritative: false;
+  disclaimer: string;
+  authoritative_matrix_hash_b64u: string;
+  authoritative_report_hash_b64u: string;
+  text: string;
+  generator_provider?: string;
+  generator_model?: string;
+}
+
+interface CompiledEvidenceReportPayload {
+  report_version: '1';
+  report_id: string;
+  compiled_at: string;
+  compiler_version: string;
+  evidence_refs: CompiledEvidenceReportEvidenceRefs;
+  overall_status: CompiledEvidenceOverallStatus;
+  matrix_hash_b64u: string;
+  control_results: CompiledEvidenceControlResult[];
+  narrative?: CompiledEvidenceNarrative;
+}
+
+interface CompiledEvidenceReportEnvelope {
+  envelope_version: '1';
+  envelope_type: 'compiled_evidence_report';
+  payload: CompiledEvidenceReportPayload;
+  payload_hash_b64u: string;
+  hash_algorithm: 'SHA-256';
+  signature_b64u: string;
+  algorithm: 'Ed25519';
+  signer_did: string;
+  issued_at: string;
+}
+
+interface SubmissionCompiledEvidenceReferenceV1 {
+  schema_version: '1';
+  report_id: string;
+  payload_hash_b64u: string;
+  matrix_hash_b64u: string;
+  proof_bundle_hash_b64u: string;
+  signer_did: string;
+  issued_at: string;
+  uri: string | null;
+}
+
+interface SubmissionCompiledEvidenceAttachmentV1 {
+  contract_version: '1';
+  attachment_kind: CompiledEvidenceAttachmentKind;
+  reference: SubmissionCompiledEvidenceReferenceV1;
+}
+
+interface SubmissionCompiledEvidenceControlOutcomeCounts {
+  total: number;
+  pass: number;
+  fail: number;
+  partial: number;
+  inapplicable: number;
+  fail_closed_invalid_evidence: number;
+}
+
+interface SubmissionCompiledEvidenceNonPassControlSummary {
+  control_id: string;
+  status: CompiledEvidenceControlStatus;
+  reason_codes: string[];
+}
+
+interface SubmissionCompiledEvidenceNarrativeSummary {
+  present: boolean;
+  valid: boolean | null;
+  boundary_warning_codes: string[];
+}
+
+interface SubmissionCompiledEvidenceSummaryV1 {
+  schema_version: '1';
+  attachment_kind: CompiledEvidenceAttachmentKind;
+  authoritative_report: {
+    provided: boolean;
+    valid: boolean;
+    report_id: string | null;
+    compiler_version: string | null;
+    overall_status: CompiledEvidenceOverallStatus | null;
+    matrix_hash_b64u: string | null;
+    payload_hash_b64u: string | null;
+    signer_did: string | null;
+    issued_at: string | null;
+    verification_reason: string;
+    verification_code: string | null;
+  };
+  narrative: SubmissionCompiledEvidenceNarrativeSummary;
+  control_outcome_counts: SubmissionCompiledEvidenceControlOutcomeCounts;
+  non_pass_controls: SubmissionCompiledEvidenceNonPassControlSummary[];
+  important_reason_codes: string[];
+  warnings: string[];
+}
+
+interface VerifyCompiledEvidenceResult {
+  status: VerificationStatus;
+  reason: string;
+  verified_at: string;
+  signer_did?: string;
+}
+
+interface VerifyCompiledEvidenceResponse {
+  result: VerifyCompiledEvidenceResult;
+  report_id?: string;
+  matrix_hash_b64u?: string;
+  payload_hash_b64u?: string;
+  error?: { code: string; message: string; field?: string };
+}
+
 interface SubmissionSummaryView {
   submission_id: string;
   bounty_id: string;
@@ -971,6 +1108,7 @@ interface SubmissionSummaryView {
     completed_at: string;
     error: string | null;
   } | null;
+  compiled_evidence: SubmissionCompiledEvidenceSummaryV1 | null;
   arena_review_flow: BountyReviewArenaFlowView;
 }
 
@@ -1020,6 +1158,7 @@ interface SubmissionDetailView {
     completed_at: string;
     error: string | null;
   } | null;
+  compiled_evidence: SubmissionCompiledEvidenceSummaryV1 | null;
   arena_review_flow: BountyReviewArenaFlowView;
   arena?: Record<string, unknown> | null;
   created_at: string;
@@ -1149,6 +1288,9 @@ interface SubmissionRecord {
   artifacts: unknown[] | null;
   agent_pack: Record<string, unknown> | null;
   result_summary: string | null;
+
+  compiled_evidence_attachment: SubmissionCompiledEvidenceAttachmentV1 | null;
+  compiled_evidence_summary: SubmissionCompiledEvidenceSummaryV1 | null;
 
   created_at: string;
   updated_at: string;
@@ -1438,6 +1580,22 @@ function parseProofVerifyStatus(input: unknown): ProofVerifyStatus | null {
   if (!isNonEmptyString(input)) return null;
   const v = input.trim();
   if (v === 'not_provided' || v === 'pending' || v === 'valid' || v === 'invalid') return v;
+  return null;
+}
+
+function parseCompiledEvidenceOverallStatus(input: unknown): CompiledEvidenceOverallStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'PASS' || v === 'FAIL' || v === 'PARTIAL' || v === 'FAIL_CLOSED_INVALID_EVIDENCE') return v;
+  return null;
+}
+
+function parseCompiledEvidenceControlStatus(input: unknown): CompiledEvidenceControlStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'PASS' || v === 'FAIL' || v === 'PARTIAL' || v === 'INAPPLICABLE' || v === 'FAIL_CLOSED_INVALID_EVIDENCE') {
+    return v;
+  }
   return null;
 }
 
@@ -4873,6 +5031,1024 @@ async function verifyGatewayReceipt(env: Env, envelope: unknown): Promise<Verify
   return json as unknown as VerifyReceiptResponse;
 }
 
+function hasOnlyAllowedObjectKeys(record: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(record).every((key) => allowed.has(key));
+}
+
+function parseCompiledEvidenceControlResult(value: unknown): CompiledEvidenceControlResult | null {
+  if (!isRecord(value)) return null;
+
+  const control_id = isNonEmptyString(value.control_id) ? value.control_id.trim() : null;
+  const status = parseCompiledEvidenceControlStatus(value.status);
+
+  if (!Array.isArray(value.reason_codes) || value.reason_codes.length === 0) return null;
+  const reason_codes: string[] = [];
+  for (const entry of value.reason_codes) {
+    if (!isNonEmptyString(entry)) return null;
+    reason_codes.push(entry.trim());
+  }
+
+  if (!Array.isArray(value.evidence_hashes_b64u) || value.evidence_hashes_b64u.length === 0) return null;
+  const evidence_hashes_b64u: string[] = [];
+  for (const entry of value.evidence_hashes_b64u) {
+    if (!isBase64UrlMin8(entry)) return null;
+    evidence_hashes_b64u.push(entry.trim());
+  }
+
+  if (!control_id || !status) {
+    return null;
+  }
+
+  if (typeof value.waiver_applied !== 'boolean') {
+    return null;
+  }
+
+  return {
+    control_id,
+    status,
+    reason_codes,
+    evidence_hashes_b64u,
+    waiver_applied: value.waiver_applied,
+  };
+}
+
+function parseCompiledEvidenceReportPayload(value: unknown): CompiledEvidenceReportPayload | null {
+  if (!isRecord(value)) return null;
+
+  const report_version = value.report_version === '1' ? '1' : null;
+  const report_id = isNonEmptyString(value.report_id) && COMPILED_REPORT_ID_RE.test(value.report_id.trim())
+    ? value.report_id.trim()
+    : null;
+  const compiled_at = isStrictIsoUtcTimestamp(value.compiled_at) ? value.compiled_at.trim() : null;
+  const compiler_version = isNonEmptyString(value.compiler_version) ? value.compiler_version.trim() : null;
+  const overall_status = parseCompiledEvidenceOverallStatus(value.overall_status);
+  const matrix_hash_b64u = isBase64UrlMin8(value.matrix_hash_b64u) ? value.matrix_hash_b64u.trim() : null;
+
+  if (!report_version || !report_id || !compiled_at || !compiler_version || !overall_status || !matrix_hash_b64u) {
+    return null;
+  }
+
+  if (!isRecord(value.evidence_refs)) return null;
+  const evidence_refs: CompiledEvidenceReportEvidenceRefs = {
+    proof_bundle_hash_b64u: isBase64UrlMin8(value.evidence_refs.proof_bundle_hash_b64u)
+      ? value.evidence_refs.proof_bundle_hash_b64u.trim()
+      : '',
+    ontology_hash_b64u: isBase64UrlMin8(value.evidence_refs.ontology_hash_b64u)
+      ? value.evidence_refs.ontology_hash_b64u.trim()
+      : '',
+    mapping_rules_hash_b64u: isBase64UrlMin8(value.evidence_refs.mapping_rules_hash_b64u)
+      ? value.evidence_refs.mapping_rules_hash_b64u.trim()
+      : '',
+    verify_result_hash_b64u: isBase64UrlMin8(value.evidence_refs.verify_result_hash_b64u)
+      ? value.evidence_refs.verify_result_hash_b64u.trim()
+      : '',
+  };
+
+  if (
+    !evidence_refs.proof_bundle_hash_b64u ||
+    !evidence_refs.ontology_hash_b64u ||
+    !evidence_refs.mapping_rules_hash_b64u ||
+    !evidence_refs.verify_result_hash_b64u
+  ) {
+    return null;
+  }
+
+  if (!Array.isArray(value.control_results) || value.control_results.length === 0) {
+    return null;
+  }
+
+  const control_results: CompiledEvidenceControlResult[] = [];
+  for (const control of value.control_results) {
+    const parsed = parseCompiledEvidenceControlResult(control);
+    if (!parsed) return null;
+    control_results.push(parsed);
+  }
+
+  let narrative: CompiledEvidenceNarrative | undefined;
+  if (value.narrative !== undefined) {
+    if (!isRecord(value.narrative)) return null;
+
+    const narrativeReportId = isNonEmptyString(value.narrative.report_id)
+      ? value.narrative.report_id.trim()
+      : null;
+    const narrativeGeneratedAt = isStrictIsoUtcTimestamp(value.narrative.generated_at)
+      ? value.narrative.generated_at.trim()
+      : null;
+    const narrativeDisclaimer = isNonEmptyString(value.narrative.disclaimer)
+      ? value.narrative.disclaimer.trim()
+      : null;
+    const narrativeMatrixHash = isBase64UrlMin8(value.narrative.authoritative_matrix_hash_b64u)
+      ? value.narrative.authoritative_matrix_hash_b64u.trim()
+      : null;
+    const narrativeReportHash = isBase64UrlMin8(value.narrative.authoritative_report_hash_b64u)
+      ? value.narrative.authoritative_report_hash_b64u.trim()
+      : null;
+    const narrativeText = isNonEmptyString(value.narrative.text)
+      ? value.narrative.text
+      : null;
+
+    if (
+      value.narrative.narrative_version !== '1' ||
+      !narrativeReportId ||
+      !narrativeGeneratedAt ||
+      value.narrative.authoritative !== false ||
+      !narrativeDisclaimer ||
+      !narrativeMatrixHash ||
+      !narrativeReportHash ||
+      !narrativeText ||
+      narrativeText.length > 20000
+    ) {
+      return null;
+    }
+
+    const parsedNarrative: CompiledEvidenceNarrative = {
+      narrative_version: '1',
+      report_id: narrativeReportId,
+      generated_at: narrativeGeneratedAt,
+      authoritative: false,
+      disclaimer: narrativeDisclaimer,
+      authoritative_matrix_hash_b64u: narrativeMatrixHash,
+      authoritative_report_hash_b64u: narrativeReportHash,
+      text: narrativeText,
+    };
+
+    if (value.narrative.generator_provider !== undefined) {
+      if (!isNonEmptyString(value.narrative.generator_provider)) return null;
+      parsedNarrative.generator_provider = value.narrative.generator_provider.trim();
+    }
+
+    if (value.narrative.generator_model !== undefined) {
+      if (!isNonEmptyString(value.narrative.generator_model)) return null;
+      parsedNarrative.generator_model = value.narrative.generator_model.trim();
+    }
+
+    narrative = parsedNarrative;
+  }
+
+  return {
+    report_version,
+    report_id,
+    compiled_at,
+    compiler_version,
+    evidence_refs,
+    overall_status,
+    matrix_hash_b64u,
+    control_results,
+    ...(narrative ? { narrative } : {}),
+  };
+}
+
+function parseCompiledEvidenceReportEnvelope(value: unknown): CompiledEvidenceReportEnvelope | null {
+  if (!isRecord(value)) return null;
+
+  const envelope_version = value.envelope_version === '1' ? '1' : null;
+  const envelope_type = value.envelope_type === 'compiled_evidence_report' ? 'compiled_evidence_report' : null;
+  const payload = parseCompiledEvidenceReportPayload(value.payload);
+  const payload_hash_b64u = isBase64UrlMin8(value.payload_hash_b64u) ? value.payload_hash_b64u.trim() : null;
+  const hash_algorithm = value.hash_algorithm === 'SHA-256' ? 'SHA-256' : null;
+  const signature_b64u = isBase64UrlMin8(value.signature_b64u) ? value.signature_b64u.trim() : null;
+  const algorithm = value.algorithm === 'Ed25519' ? 'Ed25519' : null;
+  const signer_did = isNonEmptyString(value.signer_did) ? value.signer_did.trim() : null;
+  const issued_at = isStrictIsoUtcTimestamp(value.issued_at) ? value.issued_at.trim() : null;
+
+  if (
+    !envelope_version ||
+    !envelope_type ||
+    !payload ||
+    !payload_hash_b64u ||
+    !hash_algorithm ||
+    !signature_b64u ||
+    !algorithm ||
+    !signer_did ||
+    !issued_at
+  ) {
+    return null;
+  }
+
+  return {
+    envelope_version,
+    envelope_type,
+    payload,
+    payload_hash_b64u,
+    hash_algorithm,
+    signature_b64u,
+    algorithm,
+    signer_did,
+    issued_at,
+  };
+}
+
+function parseCompiledEvidenceReferenceInput(
+  value: unknown,
+):
+  | { ok: true; reference: SubmissionCompiledEvidenceReferenceV1 }
+  | { ok: false; message: string; field: string } {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref must be an object when provided',
+      field: 'compiled_evidence_report_ref',
+    };
+  }
+
+  if (
+    !hasOnlyAllowedObjectKeys(value, [
+      'schema_version',
+      'report_id',
+      'payload_hash_b64u',
+      'matrix_hash_b64u',
+      'proof_bundle_hash_b64u',
+      'signer_did',
+      'issued_at',
+      'uri',
+    ])
+  ) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref contains unsupported fields',
+      field: 'compiled_evidence_report_ref',
+    };
+  }
+
+  if (value.schema_version !== '1') {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref.schema_version must be "1"',
+      field: 'compiled_evidence_report_ref.schema_version',
+    };
+  }
+
+  const report_id = isNonEmptyString(value.report_id) && COMPILED_REPORT_ID_RE.test(value.report_id.trim())
+    ? value.report_id.trim()
+    : null;
+  if (!report_id) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref.report_id must match /^cer_[A-Za-z0-9._:-]+$/',
+      field: 'compiled_evidence_report_ref.report_id',
+    };
+  }
+
+  const payload_hash_b64u = isBase64UrlMin8(value.payload_hash_b64u) ? value.payload_hash_b64u.trim() : null;
+  if (!payload_hash_b64u) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref.payload_hash_b64u must be base64url (min length 8)',
+      field: 'compiled_evidence_report_ref.payload_hash_b64u',
+    };
+  }
+
+  const matrix_hash_b64u = isBase64UrlMin8(value.matrix_hash_b64u) ? value.matrix_hash_b64u.trim() : null;
+  if (!matrix_hash_b64u) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref.matrix_hash_b64u must be base64url (min length 8)',
+      field: 'compiled_evidence_report_ref.matrix_hash_b64u',
+    };
+  }
+
+  const proof_bundle_hash_b64u = isBase64UrlMin8(value.proof_bundle_hash_b64u)
+    ? value.proof_bundle_hash_b64u.trim()
+    : null;
+  if (!proof_bundle_hash_b64u) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref.proof_bundle_hash_b64u must be base64url (min length 8)',
+      field: 'compiled_evidence_report_ref.proof_bundle_hash_b64u',
+    };
+  }
+
+  const signer_did = isNonEmptyString(value.signer_did) ? value.signer_did.trim() : null;
+  if (!signer_did || !signer_did.startsWith('did:')) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref.signer_did must be a DID string',
+      field: 'compiled_evidence_report_ref.signer_did',
+    };
+  }
+
+  const issued_at = isStrictIsoUtcTimestamp(value.issued_at) ? value.issued_at.trim() : null;
+  if (!issued_at) {
+    return {
+      ok: false,
+      message: 'compiled_evidence_report_ref.issued_at must be a strict UTC ISO-8601 timestamp',
+      field: 'compiled_evidence_report_ref.issued_at',
+    };
+  }
+
+  let uri: string | null = null;
+  if (value.uri !== undefined && value.uri !== null) {
+    if (!isNonEmptyString(value.uri)) {
+      return {
+        ok: false,
+        message: 'compiled_evidence_report_ref.uri must be a non-empty string when provided',
+        field: 'compiled_evidence_report_ref.uri',
+      };
+    }
+    uri = value.uri.trim();
+  }
+
+  return {
+    ok: true,
+    reference: {
+      schema_version: '1',
+      report_id,
+      payload_hash_b64u,
+      matrix_hash_b64u,
+      proof_bundle_hash_b64u,
+      signer_did,
+      issued_at,
+      uri,
+    },
+  };
+}
+
+function parseCompiledEvidenceAttachmentInput(raw: {
+  envelope: unknown;
+  reference: unknown;
+}):
+  | {
+      ok: true;
+      envelope: CompiledEvidenceReportEnvelope | null;
+      reference: SubmissionCompiledEvidenceReferenceV1 | null;
+    }
+  | { ok: false; status: number; code: string; message: string; field?: string } {
+  const hasEnvelope = raw.envelope !== undefined && raw.envelope !== null;
+  const hasReference = raw.reference !== undefined && raw.reference !== null;
+
+  if (hasEnvelope && hasReference) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'COMPILED_EVIDENCE_CONTRACT_CONFLICT',
+      message: 'Provide either compiled_evidence_report_envelope or compiled_evidence_report_ref, not both',
+    };
+  }
+
+  if (!hasEnvelope && !hasReference) {
+    return {
+      ok: true,
+      envelope: null,
+      reference: null,
+    };
+  }
+
+  if (hasEnvelope) {
+    const parsedEnvelope = parseCompiledEvidenceReportEnvelope(raw.envelope);
+    if (!parsedEnvelope) {
+      return {
+        ok: false,
+        status: 400,
+        code: 'COMPILED_EVIDENCE_CONTRACT_INVALID',
+        message: 'compiled_evidence_report_envelope must satisfy compiled evidence envelope schema',
+        field: 'compiled_evidence_report_envelope',
+      };
+    }
+
+    return {
+      ok: true,
+      envelope: parsedEnvelope,
+      reference: null,
+    };
+  }
+
+  const parsedReference = parseCompiledEvidenceReferenceInput(raw.reference);
+  if (!parsedReference.ok) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'COMPILED_EVIDENCE_CONTRACT_INVALID',
+      message: parsedReference.message,
+      field: parsedReference.field,
+    };
+  }
+
+  return {
+    ok: true,
+    envelope: null,
+    reference: parsedReference.reference,
+  };
+}
+
+function toAuthoritativeCompiledPayload(payload: CompiledEvidenceReportPayload): Omit<CompiledEvidenceReportPayload, 'narrative'> {
+  const { narrative: _ignoredNarrative, ...authoritative } = payload;
+  return authoritative;
+}
+
+function toAuthoritativeCompiledEnvelope(envelope: CompiledEvidenceReportEnvelope): CompiledEvidenceReportEnvelope {
+  return {
+    ...envelope,
+    payload: {
+      ...toAuthoritativeCompiledPayload(envelope.payload),
+    },
+  };
+}
+
+async function computeAuthoritativeCompiledReportHashB64u(
+  payload: CompiledEvidenceReportPayload,
+): Promise<string> {
+  return sha256B64uUtf8(jcsCanonicalize(toAuthoritativeCompiledPayload(payload)));
+}
+
+function buildDefaultCompiledEvidenceControlOutcomeCounts(): SubmissionCompiledEvidenceControlOutcomeCounts {
+  return {
+    total: 0,
+    pass: 0,
+    fail: 0,
+    partial: 0,
+    inapplicable: 0,
+    fail_closed_invalid_evidence: 0,
+  };
+}
+
+function buildCompiledEvidenceControlOutcomeCounts(
+  controls: CompiledEvidenceControlResult[],
+): SubmissionCompiledEvidenceControlOutcomeCounts {
+  const counts = buildDefaultCompiledEvidenceControlOutcomeCounts();
+  counts.total = controls.length;
+
+  for (const control of controls) {
+    switch (control.status) {
+      case 'PASS':
+        counts.pass += 1;
+        break;
+      case 'FAIL':
+        counts.fail += 1;
+        break;
+      case 'PARTIAL':
+        counts.partial += 1;
+        break;
+      case 'INAPPLICABLE':
+        counts.inapplicable += 1;
+        break;
+      case 'FAIL_CLOSED_INVALID_EVIDENCE':
+        counts.fail_closed_invalid_evidence += 1;
+        break;
+    }
+  }
+
+  return counts;
+}
+
+function summarizeCompiledEvidenceOverallStatus(
+  controls: CompiledEvidenceControlResult[],
+): CompiledEvidenceOverallStatus {
+  if (controls.some((control) => control.status === 'FAIL_CLOSED_INVALID_EVIDENCE')) {
+    return 'FAIL_CLOSED_INVALID_EVIDENCE';
+  }
+
+  if (controls.some((control) => control.status === 'FAIL')) {
+    return 'FAIL';
+  }
+
+  if (controls.some((control) => control.status === 'PARTIAL')) {
+    return 'PARTIAL';
+  }
+
+  return 'PASS';
+}
+
+function normalizeCompiledEvidenceControlResultsForHash(
+  controls: CompiledEvidenceControlResult[],
+): CompiledEvidenceControlResult[] {
+  return [...controls]
+    .map((control) => ({
+      control_id: control.control_id,
+      status: control.status,
+      reason_codes: [...control.reason_codes],
+      evidence_hashes_b64u: [...control.evidence_hashes_b64u],
+      waiver_applied: control.waiver_applied,
+    }))
+    .sort((a, b) => a.control_id.localeCompare(b.control_id));
+}
+
+async function computeCompiledEvidenceMatrixHashB64u(
+  controls: CompiledEvidenceControlResult[],
+): Promise<string> {
+  return sha256B64uUtf8(
+    jcsCanonicalize({
+      matrix_version: '1',
+      control_results: normalizeCompiledEvidenceControlResultsForHash(controls),
+    }),
+  );
+}
+
+async function verifyCompiledEvidenceAuthoritativeEnvelope(
+  envelope: CompiledEvidenceReportEnvelope,
+): Promise<{ ok: true } | { ok: false; code: string; reason: string; field?: string }> {
+  const expectedOverallStatus = summarizeCompiledEvidenceOverallStatus(
+    envelope.payload.control_results,
+  );
+  if (expectedOverallStatus !== envelope.payload.overall_status) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      reason: `payload.overall_status must equal ${expectedOverallStatus} for the provided control_results.`,
+      field: 'payload.overall_status',
+    };
+  }
+
+  const expectedMatrixHash = await computeCompiledEvidenceMatrixHashB64u(
+    envelope.payload.control_results,
+  );
+  if (expectedMatrixHash !== envelope.payload.matrix_hash_b64u) {
+    return {
+      ok: false,
+      code: 'HASH_MISMATCH',
+      reason: 'payload.matrix_hash_b64u does not match canonical control_results hash.',
+      field: 'payload.matrix_hash_b64u',
+    };
+  }
+
+  const expectedPayloadHash = await sha256B64uUtf8(jcsCanonicalize(envelope.payload));
+  if (expectedPayloadHash !== envelope.payload_hash_b64u) {
+    return {
+      ok: false,
+      code: 'HASH_MISMATCH',
+      reason: 'payload_hash_b64u does not match canonical payload hash.',
+      field: 'payload_hash_b64u',
+    };
+  }
+
+  const signatureValid = await verifyEd25519DidKeySignature({
+    signer_did: envelope.signer_did,
+    signature_b64u: envelope.signature_b64u,
+    message: envelope.payload_hash_b64u,
+  });
+  if (!signatureValid) {
+    return {
+      ok: false,
+      code: 'SIGNATURE_INVALID',
+      reason: 'signature_b64u does not verify payload_hash_b64u with signer_did key.',
+      field: 'signature_b64u',
+    };
+  }
+
+  return { ok: true };
+}
+
+function toCompiledEvidenceAttachmentFromReference(
+  attachment_kind: CompiledEvidenceAttachmentKind,
+  reference: SubmissionCompiledEvidenceReferenceV1,
+): SubmissionCompiledEvidenceAttachmentV1 {
+  return {
+    contract_version: '1',
+    attachment_kind,
+    reference,
+  };
+}
+
+function toCompiledEvidenceReferenceFromEnvelope(
+  envelope: CompiledEvidenceReportEnvelope,
+): SubmissionCompiledEvidenceReferenceV1 {
+  return {
+    schema_version: '1',
+    report_id: envelope.payload.report_id,
+    payload_hash_b64u: envelope.payload_hash_b64u,
+    matrix_hash_b64u: envelope.payload.matrix_hash_b64u,
+    proof_bundle_hash_b64u: envelope.payload.evidence_refs.proof_bundle_hash_b64u,
+    signer_did: envelope.signer_did,
+    issued_at: envelope.issued_at,
+    uri: null,
+  };
+}
+
+function isReviewerRelevantCompiledControlStatus(
+  status: CompiledEvidenceControlStatus,
+): boolean {
+  return status === 'FAIL' || status === 'PARTIAL' || status === 'FAIL_CLOSED_INVALID_EVIDENCE';
+}
+
+function collectImportantCompiledReasonCodes(
+  controls: SubmissionCompiledEvidenceNonPassControlSummary[],
+): string[] {
+  const weightedCounts = new Map<string, number>();
+
+  for (const control of controls) {
+    if (!isReviewerRelevantCompiledControlStatus(control.status)) continue;
+
+    const statusWeight = control.status === 'FAIL_CLOSED_INVALID_EVIDENCE'
+      ? 5
+      : control.status === 'FAIL'
+        ? 3
+        : 2;
+
+    for (const reasonCode of control.reason_codes) {
+      const prior = weightedCounts.get(reasonCode) ?? 0;
+      weightedCounts.set(reasonCode, prior + statusWeight);
+    }
+  }
+
+  return [...weightedCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 12)
+    .map(([code]) => code);
+}
+
+async function evaluateCompiledEvidenceNarrativeBoundary(
+  payload: CompiledEvidenceReportPayload,
+): Promise<SubmissionCompiledEvidenceNarrativeSummary> {
+  if (!payload.narrative) {
+    return {
+      present: false,
+      valid: null,
+      boundary_warning_codes: [],
+    };
+  }
+
+  const warnings: string[] = [];
+  const narrative = payload.narrative;
+
+  if (!hasOnlyAllowedObjectKeys(narrative as unknown as Record<string, unknown>, [
+    'narrative_version',
+    'report_id',
+    'generated_at',
+    'authoritative',
+    'disclaimer',
+    'authoritative_matrix_hash_b64u',
+    'authoritative_report_hash_b64u',
+    'text',
+    'generator_provider',
+    'generator_model',
+  ])) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_UNSUPPORTED_FIELDS');
+  }
+
+  if (narrative.narrative_version !== '1') {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_VERSION_INVALID');
+  }
+  if (narrative.report_id !== payload.report_id) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_REPORT_ID_MISMATCH');
+  }
+  if (!isStrictIsoUtcTimestamp(narrative.generated_at)) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_GENERATED_AT_INVALID');
+  }
+  if (narrative.authoritative !== false) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_AUTHORITATIVE_FLAG_INVALID');
+  }
+  if (narrative.disclaimer !== COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER_INVALID');
+  }
+  if (narrative.authoritative_matrix_hash_b64u !== payload.matrix_hash_b64u) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_MATRIX_HASH_MISMATCH');
+  }
+  if (!isNonEmptyString(narrative.text) || narrative.text.length > 20000) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_TEXT_INVALID');
+  }
+
+  if (narrative.generator_provider !== undefined && !isNonEmptyString(narrative.generator_provider)) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_PROVIDER_INVALID');
+  }
+  if (narrative.generator_model !== undefined && !isNonEmptyString(narrative.generator_model)) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_MODEL_INVALID');
+  }
+
+  const expectedAuthoritativeReportHash = await computeAuthoritativeCompiledReportHashB64u(payload);
+  if (narrative.authoritative_report_hash_b64u !== expectedAuthoritativeReportHash) {
+    warnings.push('COMPILED_EVIDENCE_NARRATIVE_REPORT_HASH_MISMATCH');
+  }
+
+  return {
+    present: true,
+    valid: warnings.length === 0,
+    boundary_warning_codes: [...new Set(warnings)],
+  };
+}
+
+function parseSubmissionCompiledEvidenceAttachment(
+  value: unknown,
+): SubmissionCompiledEvidenceAttachmentV1 | null {
+  if (!isRecord(value)) return null;
+  if (value.contract_version !== '1') return null;
+
+  const attachment_kind = value.attachment_kind;
+  if (attachment_kind !== 'envelope' && attachment_kind !== 'reference') return null;
+
+  const parsedReference = parseCompiledEvidenceReferenceInput(value.reference);
+  if (!parsedReference.ok) return null;
+
+  return {
+    contract_version: '1',
+    attachment_kind,
+    reference: parsedReference.reference,
+  };
+}
+
+function parseSubmissionCompiledEvidenceSummary(
+  value: unknown,
+): SubmissionCompiledEvidenceSummaryV1 | null {
+  if (!isRecord(value)) return null;
+  if (value.schema_version !== '1') return null;
+
+  const attachment_kind = value.attachment_kind;
+  if (attachment_kind !== 'envelope' && attachment_kind !== 'reference') return null;
+  if (!isRecord(value.authoritative_report) || !isRecord(value.narrative)) return null;
+
+  const controlCountsRaw = isRecord(value.control_outcome_counts) ? value.control_outcome_counts : null;
+  if (!controlCountsRaw) return null;
+
+  const authoritative_overall_status =
+    value.authoritative_report.overall_status === null
+      ? null
+      : parseCompiledEvidenceOverallStatus(value.authoritative_report.overall_status);
+
+  const nonPassControlsRaw = Array.isArray(value.non_pass_controls) ? value.non_pass_controls : [];
+  const non_pass_controls: SubmissionCompiledEvidenceNonPassControlSummary[] = [];
+  for (const entry of nonPassControlsRaw) {
+    if (!isRecord(entry)) continue;
+    const control_id = isNonEmptyString(entry.control_id) ? entry.control_id.trim() : null;
+    const status = parseCompiledEvidenceControlStatus(entry.status);
+    const reason_codes = Array.isArray(entry.reason_codes)
+      ? entry.reason_codes
+          .map((reason) => (isNonEmptyString(reason) ? reason.trim() : null))
+          .filter((reason): reason is string => reason !== null)
+      : [];
+
+    if (!control_id || !status || reason_codes.length === 0) continue;
+    non_pass_controls.push({ control_id, status, reason_codes });
+  }
+
+  const importantReasonCodes = Array.isArray(value.important_reason_codes)
+    ? value.important_reason_codes
+        .map((reason) => (isNonEmptyString(reason) ? reason.trim() : null))
+        .filter((reason): reason is string => reason !== null)
+    : [];
+
+  const warnings = Array.isArray(value.warnings)
+    ? value.warnings
+        .map((warning) => (isNonEmptyString(warning) ? warning.trim() : null))
+        .filter((warning): warning is string => warning !== null)
+    : [];
+
+  const narrativeBoundaryCodes = Array.isArray(value.narrative.boundary_warning_codes)
+    ? value.narrative.boundary_warning_codes
+        .map((code) => (isNonEmptyString(code) ? code.trim() : null))
+        .filter((code): code is string => code !== null)
+    : [];
+
+  const authoritativeProvided = value.authoritative_report.provided === true || value.authoritative_report.provided === false
+    ? value.authoritative_report.provided
+    : null;
+  const authoritativeValid = value.authoritative_report.valid === true || value.authoritative_report.valid === false
+    ? value.authoritative_report.valid
+    : null;
+
+  if (authoritativeProvided === null || authoritativeValid === null) return null;
+
+  if (
+    typeof controlCountsRaw.total !== 'number' ||
+    typeof controlCountsRaw.pass !== 'number' ||
+    typeof controlCountsRaw.fail !== 'number' ||
+    typeof controlCountsRaw.partial !== 'number' ||
+    typeof controlCountsRaw.inapplicable !== 'number' ||
+    typeof controlCountsRaw.fail_closed_invalid_evidence !== 'number'
+  ) {
+    return null;
+  }
+
+  const narrativePresent = value.narrative.present === true || value.narrative.present === false
+    ? value.narrative.present
+    : null;
+  const narrativeValidRaw = value.narrative.valid;
+  if (narrativeValidRaw !== true && narrativeValidRaw !== false && narrativeValidRaw !== null) {
+    return null;
+  }
+  const narrativeValid = narrativeValidRaw;
+
+  if (narrativePresent === null) return null;
+
+  return {
+    schema_version: '1',
+    attachment_kind,
+    authoritative_report: {
+      provided: authoritativeProvided,
+      valid: authoritativeValid,
+      report_id: isNonEmptyString(value.authoritative_report.report_id)
+        ? value.authoritative_report.report_id.trim()
+        : null,
+      compiler_version: isNonEmptyString(value.authoritative_report.compiler_version)
+        ? value.authoritative_report.compiler_version.trim()
+        : null,
+      overall_status: authoritative_overall_status,
+      matrix_hash_b64u: isBase64UrlMin8(value.authoritative_report.matrix_hash_b64u)
+        ? value.authoritative_report.matrix_hash_b64u.trim()
+        : null,
+      payload_hash_b64u: isBase64UrlMin8(value.authoritative_report.payload_hash_b64u)
+        ? value.authoritative_report.payload_hash_b64u.trim()
+        : null,
+      signer_did: isNonEmptyString(value.authoritative_report.signer_did)
+        ? value.authoritative_report.signer_did.trim()
+        : null,
+      issued_at: isStrictIsoUtcTimestamp(value.authoritative_report.issued_at)
+        ? value.authoritative_report.issued_at.trim()
+        : null,
+      verification_reason: isNonEmptyString(value.authoritative_report.verification_reason)
+        ? value.authoritative_report.verification_reason.trim()
+        : 'unknown',
+      verification_code: isNonEmptyString(value.authoritative_report.verification_code)
+        ? value.authoritative_report.verification_code.trim()
+        : null,
+    },
+    narrative: {
+      present: narrativePresent,
+      valid: narrativeValid,
+      boundary_warning_codes: [...new Set(narrativeBoundaryCodes)],
+    },
+    control_outcome_counts: {
+      total: controlCountsRaw.total,
+      pass: controlCountsRaw.pass,
+      fail: controlCountsRaw.fail,
+      partial: controlCountsRaw.partial,
+      inapplicable: controlCountsRaw.inapplicable,
+      fail_closed_invalid_evidence: controlCountsRaw.fail_closed_invalid_evidence,
+    },
+    non_pass_controls: non_pass_controls.slice(0, 40),
+    important_reason_codes: [...new Set(importantReasonCodes)].slice(0, 12),
+    warnings: [...new Set(warnings)],
+  };
+}
+
+async function verifyCompiledEvidenceReportEnvelope(
+  env: Env,
+  envelope: unknown,
+): Promise<VerifyCompiledEvidenceResponse> {
+  const url = `${resolveVerifyBaseUrl(env)}/v1/verify/compiled-report`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ envelope }),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (response.status >= 500) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isRecord(json.result)) {
+    throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
+  }
+
+  const result = json.result as Record<string, unknown>;
+  if (!isNonEmptyString(result.status) || !isNonEmptyString(result.reason) || !isNonEmptyString(result.verified_at)) {
+    throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
+  }
+
+  return json as unknown as VerifyCompiledEvidenceResponse;
+}
+
+async function buildCompiledEvidenceSummaryFromEnvelope(args: {
+  envelope: CompiledEvidenceReportEnvelope;
+  verification: VerifyCompiledEvidenceResponse;
+  narrativeBoundary: SubmissionCompiledEvidenceNarrativeSummary;
+  warnings?: string[];
+}): Promise<SubmissionCompiledEvidenceSummaryV1> {
+  const nonPassControls: SubmissionCompiledEvidenceNonPassControlSummary[] = args.envelope.payload.control_results
+    .filter((control) => isReviewerRelevantCompiledControlStatus(control.status))
+    .map((control) => ({
+      control_id: control.control_id,
+      status: control.status,
+      reason_codes: [...new Set(control.reason_codes.map((reason) => reason.trim()))],
+    }));
+
+  return {
+    schema_version: '1',
+    attachment_kind: 'envelope',
+    authoritative_report: {
+      provided: true,
+      valid: args.verification.result.status === 'VALID',
+      report_id: args.envelope.payload.report_id,
+      compiler_version: args.envelope.payload.compiler_version,
+      overall_status: args.envelope.payload.overall_status,
+      matrix_hash_b64u: args.envelope.payload.matrix_hash_b64u,
+      payload_hash_b64u: args.envelope.payload_hash_b64u,
+      signer_did: args.envelope.signer_did,
+      issued_at: args.envelope.issued_at,
+      verification_reason: args.verification.result.reason,
+      verification_code: isNonEmptyString(args.verification.error?.code)
+        ? args.verification.error?.code.trim()
+        : null,
+    },
+    narrative: args.narrativeBoundary,
+    control_outcome_counts: buildCompiledEvidenceControlOutcomeCounts(args.envelope.payload.control_results),
+    non_pass_controls: nonPassControls.slice(0, 40),
+    important_reason_codes: collectImportantCompiledReasonCodes(nonPassControls),
+    warnings: [...new Set(args.warnings ?? [])],
+  };
+}
+
+function buildCompiledEvidenceSummaryFromReference(
+  reference: SubmissionCompiledEvidenceReferenceV1,
+): SubmissionCompiledEvidenceSummaryV1 {
+  return {
+    schema_version: '1',
+    attachment_kind: 'reference',
+    authoritative_report: {
+      provided: false,
+      valid: false,
+      report_id: reference.report_id,
+      compiler_version: null,
+      overall_status: null,
+      matrix_hash_b64u: reference.matrix_hash_b64u,
+      payload_hash_b64u: reference.payload_hash_b64u,
+      signer_did: reference.signer_did,
+      issued_at: reference.issued_at,
+      verification_reason:
+        'Compiled evidence reference provided without authoritative report envelope; marketplace verification is unavailable.',
+      verification_code: 'COMPILED_EVIDENCE_REFERENCE_UNVERIFIED',
+    },
+    narrative: {
+      present: false,
+      valid: null,
+      boundary_warning_codes: ['COMPILED_EVIDENCE_NARRATIVE_UNAVAILABLE_REFERENCE_ONLY'],
+    },
+    control_outcome_counts: buildDefaultCompiledEvidenceControlOutcomeCounts(),
+    non_pass_controls: [],
+    important_reason_codes: [],
+    warnings: ['COMPILED_EVIDENCE_REFERENCE_UNVERIFIED'],
+  };
+}
+
+function normalizeCompiledEvidenceSummaryForView(
+  summary: SubmissionCompiledEvidenceSummaryV1,
+  options?: {
+    maxNonPassControls?: number;
+    maxImportantReasonCodes?: number;
+    maxWarnings?: number;
+    maxBoundaryWarningCodes?: number;
+  },
+): SubmissionCompiledEvidenceSummaryV1 {
+  const reviewerNonPassControls = summary.non_pass_controls
+    .filter((control) => isReviewerRelevantCompiledControlStatus(control.status))
+    .map((control) => ({
+      control_id: control.control_id,
+      status: control.status,
+      reason_codes: [...new Set(control.reason_codes.map((reason) => reason.trim()))],
+    }));
+
+  const importantReasonCodes = collectImportantCompiledReasonCodes(reviewerNonPassControls)
+    .slice(0, options?.maxImportantReasonCodes ?? 12);
+
+  return {
+    ...summary,
+    authoritative_report: {
+      ...summary.authoritative_report,
+      provided: summary.attachment_kind === 'envelope' && summary.authoritative_report.provided,
+    },
+    narrative: {
+      ...summary.narrative,
+      boundary_warning_codes: [...new Set(summary.narrative.boundary_warning_codes)]
+        .slice(0, options?.maxBoundaryWarningCodes ?? summary.narrative.boundary_warning_codes.length),
+    },
+    non_pass_controls: reviewerNonPassControls.slice(0, options?.maxNonPassControls ?? reviewerNonPassControls.length),
+    important_reason_codes: importantReasonCodes,
+    warnings: [...new Set(summary.warnings)].slice(0, options?.maxWarnings ?? summary.warnings.length),
+  };
+}
+
+function deriveCompiledEvidenceSummaryForView(
+  record: SubmissionRecord,
+  mode: 'detail' | 'list' = 'detail',
+): SubmissionCompiledEvidenceSummaryV1 | null {
+  if (!record.compiled_evidence_summary) return null;
+
+  return normalizeCompiledEvidenceSummaryForView(
+    record.compiled_evidence_summary,
+    mode === 'list'
+      ? {
+          maxNonPassControls: 3,
+          maxImportantReasonCodes: 6,
+          maxWarnings: 4,
+          maxBoundaryWarningCodes: 4,
+        }
+      : {
+          maxNonPassControls: 10,
+          maxImportantReasonCodes: 12,
+          maxWarnings: 8,
+          maxBoundaryWarningCodes: 8,
+        },
+  );
+}
+
+export const __submissionCompiledEvidenceInternals = {
+  parseCompiledEvidenceAttachmentInput,
+  parseCompiledEvidenceReferenceInput,
+  parseCompiledEvidenceReportEnvelope,
+  toAuthoritativeCompiledEnvelope,
+  evaluateCompiledEvidenceNarrativeBoundary,
+  buildCompiledEvidenceSummaryFromReference,
+  buildCompiledEvidenceSummaryFromEnvelope,
+  normalizeCompiledEvidenceSummaryForView,
+};
+
 function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
   if (result.status !== 'VALID') return null;
 
@@ -5944,10 +7120,24 @@ async function sha256B64uUtf8(input: string): Promise<string> {
 // Confidential Work Contract (CWC)
 // ---------------------------------------------------------------------------
 
+const STRICT_ISO_UTC_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+const BASE64_URL_MIN8_RE = /^[A-Za-z0-9_-]{8,}$/;
+const COMPILED_REPORT_ID_RE = /^cer_[A-Za-z0-9._:-]+$/;
+const COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER =
+  'NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.';
 const SHA256_B64U_RE = /^[A-Za-z0-9_-]{43}$/;
 
 function isSha256B64u(value: string): boolean {
   return SHA256_B64U_RE.test(value);
+}
+
+function isStrictIsoUtcTimestamp(value: unknown): value is string {
+  return isNonEmptyString(value) && STRICT_ISO_UTC_RE.test(value.trim());
+}
+
+function isBase64UrlMin8(value: unknown): value is string {
+  return isNonEmptyString(value) && BASE64_URL_MIN8_RE.test(value.trim());
 }
 
 type CwcReceiptPrivacyMode = 'hash_only' | 'encrypted';
@@ -7175,6 +8365,8 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
   const artifacts_json = d1String(row.artifacts_json);
   const agent_pack_json = d1String(row.agent_pack_json);
   const result_summary = d1String(row.result_summary);
+  const compiled_evidence_attachment_json = d1String(row.compiled_evidence_attachment_json);
+  const compiled_evidence_summary_json = d1String(row.compiled_evidence_summary_json);
 
   const created_at = d1String(row.created_at);
   const updated_at = d1String(row.updated_at);
@@ -7227,6 +8419,22 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
     execution_attestations = out;
   }
 
+  let compiled_evidence_attachment: SubmissionCompiledEvidenceAttachmentV1 | null = null;
+  if (compiled_evidence_attachment_json) {
+    const parsed = parseJsonObject(compiled_evidence_attachment_json);
+    if (!parsed) return null;
+    compiled_evidence_attachment = parseSubmissionCompiledEvidenceAttachment(parsed);
+    if (!compiled_evidence_attachment) return null;
+  }
+
+  let compiled_evidence_summary: SubmissionCompiledEvidenceSummaryV1 | null = null;
+  if (compiled_evidence_summary_json) {
+    const parsed = parseJsonObject(compiled_evidence_summary_json);
+    if (!parsed) return null;
+    compiled_evidence_summary = parseSubmissionCompiledEvidenceSummary(parsed);
+    if (!compiled_evidence_summary) return null;
+  }
+
   return {
     submission_id,
     bounty_id,
@@ -7251,6 +8459,8 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
     artifacts,
     agent_pack,
     result_summary: result_summary ? result_summary.trim() : null,
+    compiled_evidence_attachment,
+    compiled_evidence_summary,
     created_at,
     updated_at,
   };
@@ -7737,6 +8947,7 @@ function toSubmissionSummaryView(
           error: latestTest.error,
         }
       : null,
+    compiled_evidence: deriveCompiledEvidenceSummaryForView(record, 'list'),
     arena_review_flow: arenaReviewFlow,
   };
 }
@@ -7797,6 +9008,7 @@ function toSubmissionDetailView(
           error: latestTest.error,
         }
       : null,
+    compiled_evidence: deriveCompiledEvidenceSummaryForView(record, 'detail'),
     arena_review_flow: arenaReviewFlow,
     created_at: record.created_at,
     updated_at: record.updated_at,
@@ -8137,9 +9349,11 @@ function prepareInsertSubmission(db: D1Database, record: SubmissionRecord): D1Pr
         artifacts_json,
         agent_pack_json,
         result_summary,
+        compiled_evidence_attachment_json,
+        compiled_evidence_summary_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       record.submission_id,
@@ -8165,6 +9379,8 @@ function prepareInsertSubmission(db: D1Database, record: SubmissionRecord): D1Pr
       record.artifacts ? JSON.stringify(record.artifacts) : null,
       record.agent_pack ? JSON.stringify(record.agent_pack) : null,
       record.result_summary,
+      record.compiled_evidence_attachment ? JSON.stringify(record.compiled_evidence_attachment) : null,
+      record.compiled_evidence_summary ? JSON.stringify(record.compiled_evidence_summary) : null,
       record.created_at,
       record.updated_at
     );
@@ -14596,6 +15812,8 @@ async function handleSubmitBounty(
   const result_summary_raw = bodyRaw.result_summary;
   const trust_pulse_raw = bodyRaw.trust_pulse;
   const execution_attestations_raw = bodyRaw.execution_attestations;
+  const compiled_evidence_report_envelope_raw = bodyRaw.compiled_evidence_report_envelope;
+  const compiled_evidence_report_ref_raw = bodyRaw.compiled_evidence_report_ref;
 
   if (!isNonEmptyString(worker_did_raw) || !worker_did_raw.trim().startsWith('did:')) {
     return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, undefined, version);
@@ -14716,6 +15934,23 @@ async function handleSubmitBounty(
     execution_attestations = out;
   }
 
+  const compiledAttachmentParsed = parseCompiledEvidenceAttachmentInput({
+    envelope: compiled_evidence_report_envelope_raw,
+    reference: compiled_evidence_report_ref_raw,
+  });
+  if (!compiledAttachmentParsed.ok) {
+    return errorResponse(
+      compiledAttachmentParsed.code,
+      compiledAttachmentParsed.message,
+      compiledAttachmentParsed.status,
+      compiledAttachmentParsed.field ? { field: compiledAttachmentParsed.field } : undefined,
+      version,
+    );
+  }
+
+  const compiledEvidenceEnvelopeInput = compiledAttachmentParsed.envelope;
+  const compiledEvidenceReferenceInput = compiledAttachmentParsed.reference;
+
   let idempotency_key: string;
   if (isNonEmptyString(idempotency_key_raw)) {
     idempotency_key = idempotency_key_raw.trim();
@@ -14735,6 +15970,8 @@ async function handleSubmitBounty(
         result_summary: result_summary_raw ?? null,
         trust_pulse: trust_pulse_raw ?? null,
         execution_attestations: execution_attestations ?? null,
+        compiled_evidence_report_envelope: compiledEvidenceEnvelopeInput ?? null,
+        compiled_evidence_report_ref: compiledEvidenceReferenceInput ?? null,
       })
     );
     idempotency_key = `submit:auto:${derived}`;
@@ -15001,6 +16238,160 @@ async function handleSubmitBounty(
     if (isNonEmptyString(commitProofResponse.repo_claim_id)) repo_claim_id = commitProofResponse.repo_claim_id.trim();
   }
 
+  let compiledEvidenceAttachment: SubmissionCompiledEvidenceAttachmentV1 | null = null;
+  let compiledEvidenceSummary: SubmissionCompiledEvidenceSummaryV1 | null = null;
+
+  const compiledEvidenceProofBundleHash =
+    compiledEvidenceEnvelopeInput || compiledEvidenceReferenceInput
+      ? proof_bundle_hash_b64u?.trim() ?? null
+      : null;
+
+  if ((compiledEvidenceEnvelopeInput || compiledEvidenceReferenceInput) && !compiledEvidenceProofBundleHash) {
+    return errorResponse(
+      'COMPILED_EVIDENCE_PROOF_BUNDLE_REQUIRED',
+      'compiled evidence requires proof_bundle_envelope with payload_hash_b64u',
+      400,
+      {
+        field: compiledEvidenceEnvelopeInput
+          ? 'compiled_evidence_report_envelope'
+          : 'compiled_evidence_report_ref',
+      },
+      version,
+    );
+  }
+
+  if (compiledEvidenceEnvelopeInput) {
+    let verification: VerifyCompiledEvidenceResponse;
+    try {
+      verification = await verifyCompiledEvidenceReportEnvelope(env, compiledEvidenceEnvelopeInput);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('COMPILED_EVIDENCE_VERIFY_FAILED', message, 502, undefined, version);
+    }
+
+    let authoritativeVerification = verification;
+    const verificationErrorField = isNonEmptyString(verification.error?.field)
+      ? verification.error.field.trim()
+      : null;
+    const narrativeScopedFailure =
+      verification.result.status !== 'VALID' && verificationErrorField?.startsWith('payload.narrative') === true;
+
+    if (verification.result.status !== 'VALID') {
+      if (!narrativeScopedFailure) {
+        return errorResponse(
+          'COMPILED_EVIDENCE_INVALID',
+          verification.result.reason,
+          422,
+          {
+            report_id: verification.report_id ?? compiledEvidenceEnvelopeInput.payload.report_id,
+            verifier_error: verification.error ?? null,
+            payload_hash_b64u: verification.payload_hash_b64u ?? compiledEvidenceEnvelopeInput.payload_hash_b64u,
+            matrix_hash_b64u: verification.matrix_hash_b64u ?? compiledEvidenceEnvelopeInput.payload.matrix_hash_b64u,
+          },
+          version,
+        );
+      }
+
+      const authoritativeOnlyVerification = await verifyCompiledEvidenceAuthoritativeEnvelope(
+        compiledEvidenceEnvelopeInput,
+      );
+      if (!authoritativeOnlyVerification.ok) {
+        return errorResponse(
+          'COMPILED_EVIDENCE_INVALID',
+          authoritativeOnlyVerification.reason,
+          422,
+          {
+            report_id: compiledEvidenceEnvelopeInput.payload.report_id,
+            verifier_error: {
+              code: authoritativeOnlyVerification.code,
+              message: authoritativeOnlyVerification.reason,
+              field: authoritativeOnlyVerification.field,
+            },
+            payload_hash_b64u: compiledEvidenceEnvelopeInput.payload_hash_b64u,
+            matrix_hash_b64u: compiledEvidenceEnvelopeInput.payload.matrix_hash_b64u,
+          },
+          version,
+        );
+      }
+
+      authoritativeVerification = {
+        ...verification,
+        result: {
+          ...verification.result,
+          status: 'VALID',
+          reason:
+            'Authoritative compiled matrix verified; narrative failed optional boundary checks.',
+        },
+      };
+    }
+
+    const expectedProofBundleHash = compiledEvidenceProofBundleHash!;
+    const compiledProofBundleHash =
+      compiledEvidenceEnvelopeInput.payload.evidence_refs.proof_bundle_hash_b64u.trim();
+    if (compiledProofBundleHash !== expectedProofBundleHash) {
+      return errorResponse(
+        'COMPILED_EVIDENCE_PROOF_BINDING_MISMATCH',
+        'compiled evidence proof_bundle_hash_b64u must match submission proof bundle hash',
+        422,
+        {
+          expected_proof_bundle_hash_b64u: expectedProofBundleHash,
+          observed_proof_bundle_hash_b64u: compiledProofBundleHash,
+        },
+        version,
+      );
+    }
+
+    const narrativeBoundary = await evaluateCompiledEvidenceNarrativeBoundary(
+      compiledEvidenceEnvelopeInput.payload,
+    );
+
+    compiledEvidenceAttachment = toCompiledEvidenceAttachmentFromReference(
+      'envelope',
+      toCompiledEvidenceReferenceFromEnvelope(compiledEvidenceEnvelopeInput),
+    );
+
+    const narrativeWarnings: string[] = [];
+    if (narrativeBoundary.valid === false) {
+      narrativeWarnings.push('COMPILED_EVIDENCE_NARRATIVE_BOUNDARY_WARNING');
+    }
+    if (narrativeScopedFailure) {
+      narrativeWarnings.push('COMPILED_EVIDENCE_NARRATIVE_VERIFIER_REJECTED');
+      const verifierErrorCode = isNonEmptyString(verification.error?.code)
+        ? verification.error.code.trim()
+        : null;
+      if (verifierErrorCode) {
+        narrativeWarnings.push(`COMPILED_EVIDENCE_NARRATIVE_${verifierErrorCode}`);
+      }
+    }
+
+    compiledEvidenceSummary = await buildCompiledEvidenceSummaryFromEnvelope({
+      envelope: compiledEvidenceEnvelopeInput,
+      verification: authoritativeVerification,
+      narrativeBoundary,
+      warnings: narrativeWarnings,
+    });
+  } else if (compiledEvidenceReferenceInput) {
+    const expectedProofBundleHash = compiledEvidenceProofBundleHash!;
+    if (compiledEvidenceReferenceInput.proof_bundle_hash_b64u !== expectedProofBundleHash) {
+      return errorResponse(
+        'COMPILED_EVIDENCE_PROOF_BINDING_MISMATCH',
+        'compiled evidence reference proof_bundle_hash_b64u must match submission proof bundle hash',
+        422,
+        {
+          expected_proof_bundle_hash_b64u: expectedProofBundleHash,
+          observed_proof_bundle_hash_b64u: compiledEvidenceReferenceInput.proof_bundle_hash_b64u,
+        },
+        version,
+      );
+    }
+
+    compiledEvidenceAttachment = toCompiledEvidenceAttachmentFromReference(
+      'reference',
+      compiledEvidenceReferenceInput,
+    );
+    compiledEvidenceSummary = buildCompiledEvidenceSummaryFromReference(compiledEvidenceReferenceInput);
+  }
+
   const submission_id = `sub_${crypto.randomUUID()}`;
 
   const storedTrustPulse: StoredTrustPulseRow | null = trustPulseRow
@@ -15031,6 +16422,8 @@ async function handleSubmitBounty(
     artifacts: Array.isArray(artifacts_raw) ? artifacts_raw : null,
     agent_pack: isRecord(agent_pack_raw) ? agent_pack_raw : null,
     result_summary: isNonEmptyString(result_summary_raw) ? result_summary_raw.trim() : null,
+    compiled_evidence_attachment: compiledEvidenceAttachment,
+    compiled_evidence_summary: compiledEvidenceSummary,
     created_at: now,
     updated_at: now,
   };
