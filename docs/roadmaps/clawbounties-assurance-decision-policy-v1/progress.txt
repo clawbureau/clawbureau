@@ -43,3 +43,27 @@ Started: 2026-03-22T08:09:30Z
   - Requester override inputs should be treated as contracts, not free text: whitespace-only notes and non-code-like reason values create avoidable ambiguity.
   - Already-approved/idempotent approval responses must not echo override receipts from the current request unless that override data is actually trustworthy for the approved decision.
 ---
+
+## 2026-03-22T09:58:04Z - Wave 2 shipped (`CBA-DP-004` / `CBA-DP-005`) and roadmap completed
+- What was implemented
+  - Made manager autopilot consume the canonical compiled-evidence decision policy and fail closed to `manual_review_required` unless the latest decision is `approve_recommended`.
+  - Added compact compiled-evidence decision policy/snapshot propagation to arena routing and autopilot/operator payloads without trusting stale snapshots over the canonical evaluator.
+  - Persisted compact compiled-evidence decision snapshots onto existing requester auth-event control-plane checks for authoritative approval/reject decisions, including replay-safe handling.
+  - Exposed latest persisted decision snapshots on submission summary/detail plus approval/reject response surfaces so operators can inspect what policy state drove the last action.
+- Evidence
+  - Feature PR #535: `feat(clawbounties): add decision policy autopilot guardrails`
+  - Feature commit: `5029ab916af04af6d907a54e23a49f00da8dcd50`
+  - DID proof commit: `0c611d044af6a65c1ad3220ac8fed0e8df6e668a`
+  - DID proof: `proofs/feat/clawbounties/CBA-DP-autopilot-audit/commit.sig.json`
+  - Reviewer verdict: `PASS WITH FIXES` at `/tmp/pi-chain-runs/cba3-wave2-autopilot-audit-20260322-090133/progress.md`
+  - Merge commit: `ad02030da72ef9000f4c8a323d18f6a5086b20be`
+- Validations
+  - `cd services/_archived/clawbounties && npm run typecheck`
+  - `cd services/_archived/clawbounties && npx --yes tsx /tmp/cba3-wave2-runtime-checks.ts`
+  - `git diff --check`
+  - `node /Users/gfw/clawd/02-Projects/clawbureau/monorepo/packages/clawverify-cli/dist/cli.js verify commit-sig --input proofs/feat/clawbounties/CBA-DP-autopilot-audit/commit.sig.json --json`
+- Learnings for future iterations
+  - Persisted decision snapshots should only be written once the underlying approval/reject outcome is authoritative; pre-commit snapshot writes can poison later audit surfaces.
+  - Idempotent replay responses should prefer persisted trustworthy decision history over reconstructing snapshots from current mutable submission state.
+  - Autopilot payloads and previews must canonicalize from the shared decision evaluator even when an incoming snapshot exists, using prior snapshot timestamps only as metadata.
+---

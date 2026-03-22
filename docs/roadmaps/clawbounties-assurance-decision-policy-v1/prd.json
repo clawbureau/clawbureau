@@ -54,7 +54,7 @@
         "Compiled-evidence guardrails remain additive to existing route/circuit/fleet checks and do not weaken other fail-closed gates"
       ],
       "priority": 3,
-      "passes": false
+      "passes": true
     },
     {
       "id": "CBA-DP-005",
@@ -67,12 +67,12 @@
         "Audit surfaces remain deterministic and cannot imply authoritative approval from narrative-only or reference-only evidence"
       ],
       "priority": 3,
-      "passes": false
+      "passes": true
     }
   ],
   "metadata": {
-    "updatedAt": "2026-03-22T08:53:09Z",
-    "status": "active (3/5 shipped; Wave 1 complete)",
+    "updatedAt": "2026-03-22T09:58:04Z",
+    "status": "complete (5/5 shipped; Wave 2 complete)",
     "dependsOn": [
       "docs/roadmaps/clawcompiler-runtime-v1/",
       "docs/roadmaps/clawbounties-assurance-review-v1/"
