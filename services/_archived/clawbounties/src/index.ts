@@ -877,6 +877,7 @@ interface ArenaInlineReviewSummaryView {
     manager_review: string | null;
   };
   compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
+  compiled_evidence_decision_snapshot?: SubmissionCompiledEvidenceDecisionSnapshotV1 | null;
 }
 
 type ArenaOutcomeStatusView = 'ACCEPTED' | 'OVERRIDDEN' | 'REWORK' | 'REJECTED' | 'DISPUTED';
@@ -944,6 +945,7 @@ interface ArenaDecisionCaptureView {
     decision_taxonomy_tags_path: string;
   };
   compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
+  compiled_evidence_decision_snapshot?: SubmissionCompiledEvidenceDecisionSnapshotV1 | null;
 }
 
 interface BountyReviewArenaFlowView {
@@ -951,6 +953,7 @@ interface BountyReviewArenaFlowView {
   latest_arena: ArenaInlineReviewSummaryView | null;
   decision_capture: ArenaDecisionCaptureView | null;
   compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
+  compiled_evidence_decision_snapshot?: SubmissionCompiledEvidenceDecisionSnapshotV1 | null;
 }
 
 type CompiledEvidenceAttachmentKind = 'envelope' | 'reference';
@@ -1142,6 +1145,53 @@ interface RequesterCompiledEvidenceOverrideReceiptV1 {
   override_reason_code: string | null;
 }
 
+type SubmissionCompiledEvidenceDecisionSnapshotAction =
+  | 'approve_bounty'
+  | 'reject_bounty'
+  | 'arena_desk_decision'
+  | 'arena_manager_route'
+  | 'arena_manager_autopilot';
+
+interface SubmissionCompiledEvidenceOverrideSnapshotV1 {
+  trusted: boolean;
+  required: boolean;
+  provided: boolean;
+  acknowledged: boolean;
+  override_note: string | null;
+  override_reason_code: string | null;
+}
+
+interface SubmissionCompiledEvidenceDecisionSnapshotV1 {
+  schema_version: 'submission_compiled_evidence_decision_snapshot.v1';
+  action: SubmissionCompiledEvidenceDecisionSnapshotAction;
+  captured_at: string;
+  decision_state: SubmissionCompiledEvidencePolicyDecisionState;
+  posture: SubmissionCompiledEvidenceDecisionPosture;
+  reason_codes: string[];
+  warning_codes: string[];
+  evidence_reason_codes: string[];
+  decision_surface_summary: {
+    available: boolean;
+    posture: SubmissionCompiledEvidenceDecisionPosture;
+    authoritative_report: {
+      authoritative: true;
+      provided: boolean;
+      valid: boolean;
+      report_id: string | null;
+      overall_status: CompiledEvidenceOverallStatus | null;
+      verification_code: string | null;
+    } | null;
+    narrative_layer: {
+      authoritative: false;
+      present: boolean;
+      valid: boolean | null;
+      boundary_warning_codes: string[];
+    } | null;
+    key_non_pass_controls: SubmissionCompiledEvidenceNonPassControlSummary[];
+  };
+  override_receipt: SubmissionCompiledEvidenceOverrideSnapshotV1 | null;
+}
+
 interface RequesterCompiledEvidenceApprovalGateResult {
   status: 'allow' | 'override_required' | 'blocked_fix_required';
   reason_code: string;
@@ -1189,6 +1239,7 @@ interface SubmissionSummaryView {
     error: string | null;
   } | null;
   compiled_evidence: SubmissionCompiledEvidenceSummaryV1 | null;
+  compiled_evidence_decision_snapshot?: SubmissionCompiledEvidenceDecisionSnapshotV1 | null;
   arena_review_flow: BountyReviewArenaFlowView;
 }
 
@@ -1239,6 +1290,7 @@ interface SubmissionDetailView {
     error: string | null;
   } | null;
   compiled_evidence: SubmissionCompiledEvidenceSummaryV1 | null;
+  compiled_evidence_decision_snapshot?: SubmissionCompiledEvidenceDecisionSnapshotV1 | null;
   arena_review_flow: BountyReviewArenaFlowView;
   arena?: Record<string, unknown> | null;
   created_at: string;
@@ -1431,6 +1483,7 @@ interface ApproveBountyResponseV1 {
   compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
   compiled_evidence_decision_policy?: SubmissionCompiledEvidenceDecisionPolicyV1 | null;
   compiled_evidence_override?: RequesterCompiledEvidenceOverrideReceiptV1 | null;
+  compiled_evidence_decision_snapshot?: SubmissionCompiledEvidenceDecisionSnapshotV1 | null;
 }
 
 interface RejectBountyResponseV1 {
@@ -1441,6 +1494,9 @@ interface RejectBountyResponseV1 {
   trial_case: TrialCaseSummary;
   decided_at: string;
   compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
+  compiled_evidence_decision_policy?: SubmissionCompiledEvidenceDecisionPolicyV1 | null;
+  compiled_evidence_override?: RequesterCompiledEvidenceOverrideReceiptV1 | null;
+  compiled_evidence_decision_snapshot?: SubmissionCompiledEvidenceDecisionSnapshotV1 | null;
 }
 
 type WorkerStatus = 'online' | 'offline' | 'paused';
@@ -6471,6 +6527,287 @@ function evaluateRequesterCompiledEvidenceApprovalGate(
   };
 }
 
+function parseSubmissionCompiledEvidenceDecisionPosture(
+  input: unknown,
+): SubmissionCompiledEvidenceDecisionPosture | null {
+  const value = d1String(input)?.trim() ?? null;
+  if (
+    value === 'unavailable'
+    || value === 'authoritative_pass'
+    || value === 'authoritative_non_pass'
+    || value === 'authoritative_unverified_or_invalid'
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function parseSubmissionCompiledEvidencePolicyDecisionState(
+  input: unknown,
+): SubmissionCompiledEvidencePolicyDecisionState | null {
+  const value = d1String(input)?.trim() ?? null;
+  if (
+    value === 'approve_recommended'
+    || value === 'manual_review_required'
+    || value === 'fix_required'
+    || value === 'unavailable'
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function parseSubmissionCompiledEvidenceDecisionSnapshotAction(
+  input: unknown,
+): SubmissionCompiledEvidenceDecisionSnapshotAction | null {
+  const value = d1String(input)?.trim() ?? null;
+  if (
+    value === 'approve_bounty'
+    || value === 'reject_bounty'
+    || value === 'arena_desk_decision'
+    || value === 'arena_manager_route'
+    || value === 'arena_manager_autopilot'
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function resolveCompiledEvidenceDecisionPolicy(
+  decisionSurface: SubmissionCompiledEvidenceDecisionSurfaceV1 | null,
+): SubmissionCompiledEvidenceDecisionPolicyV1 {
+  if (decisionSurface) {
+    return evaluateCompiledEvidenceDecisionPolicy(decisionSurface);
+  }
+
+  return evaluateCompiledEvidenceDecisionPolicy(
+    buildCompiledEvidenceDecisionSurface(null, {
+      maxNonPassControls: 4,
+      maxImportantReasonCodes: 8,
+      maxWarnings: 6,
+      maxBoundaryWarningCodes: 6,
+    }),
+  );
+}
+
+function buildCompiledEvidenceDecisionSnapshot(
+  params: {
+    action: SubmissionCompiledEvidenceDecisionSnapshotAction;
+    decisionPolicy: SubmissionCompiledEvidenceDecisionPolicyV1 | null;
+    capturedAt?: string;
+    overrideReceipt?: RequesterCompiledEvidenceOverrideReceiptV1 | null;
+    overrideReceiptTrusted?: boolean;
+  },
+): SubmissionCompiledEvidenceDecisionSnapshotV1 {
+  const decisionPolicy = params.decisionPolicy ?? resolveCompiledEvidenceDecisionPolicy(null);
+  const capturedAt = params.capturedAt && params.capturedAt.trim().length > 0
+    ? params.capturedAt
+    : new Date().toISOString();
+
+  const decisionSurface = decisionPolicy.decision_surface;
+  const overrideReceipt = params.overrideReceipt && params.overrideReceiptTrusted === true
+    ? {
+        trusted: true,
+        required: params.overrideReceipt.required,
+        provided: params.overrideReceipt.provided,
+        acknowledged: params.overrideReceipt.acknowledged,
+        override_note: params.overrideReceipt.override_note,
+        override_reason_code: params.overrideReceipt.override_reason_code,
+      }
+    : null;
+
+  return {
+    schema_version: 'submission_compiled_evidence_decision_snapshot.v1',
+    action: params.action,
+    captured_at: capturedAt,
+    decision_state: decisionPolicy.decision,
+    posture: decisionPolicy.posture,
+    reason_codes: dedupeStrings(decisionPolicy.reason_codes).slice(0, 16),
+    warning_codes: dedupeStrings(decisionPolicy.warning_codes).slice(0, 12),
+    evidence_reason_codes: dedupeStrings(decisionPolicy.evidence_reason_codes).slice(0, 12),
+    decision_surface_summary: {
+      available: decisionSurface.available,
+      posture: decisionSurface.posture,
+      authoritative_report: decisionSurface.authoritative_report
+        ? {
+            authoritative: true,
+            provided: decisionSurface.authoritative_report.provided,
+            valid: decisionSurface.authoritative_report.valid,
+            report_id: decisionSurface.authoritative_report.report_id,
+            overall_status: decisionSurface.authoritative_report.overall_status,
+            verification_code: decisionSurface.authoritative_report.verification_code,
+          }
+        : null,
+      narrative_layer: decisionSurface.narrative_layer
+        ? {
+            authoritative: false,
+            present: decisionSurface.narrative_layer.present,
+            valid: decisionSurface.narrative_layer.valid,
+            boundary_warning_codes: dedupeStrings(decisionSurface.narrative_layer.boundary_warning_codes).slice(0, 8),
+          }
+        : null,
+      key_non_pass_controls: decisionSurface.key_non_pass_controls
+        .slice(0, 5)
+        .map((entry) => ({
+          control_id: entry.control_id,
+          status: entry.status,
+          reason_codes: dedupeStrings(entry.reason_codes).slice(0, 6),
+        })),
+    },
+    override_receipt: overrideReceipt,
+  };
+}
+
+function parseSubmissionCompiledEvidenceDecisionSnapshot(
+  input: unknown,
+): SubmissionCompiledEvidenceDecisionSnapshotV1 | null {
+  if (!isRecord(input)) return null;
+  if (d1String(input.schema_version) !== 'submission_compiled_evidence_decision_snapshot.v1') return null;
+
+  const action = parseSubmissionCompiledEvidenceDecisionSnapshotAction(input.action);
+  const capturedAt = d1String(input.captured_at)?.trim() ?? null;
+  const decisionState = parseSubmissionCompiledEvidencePolicyDecisionState(input.decision_state);
+  const posture = parseSubmissionCompiledEvidenceDecisionPosture(input.posture);
+  const summary = isRecord(input.decision_surface_summary) ? input.decision_surface_summary : null;
+
+  if (!action || !capturedAt || !decisionState || !posture || !summary) {
+    return null;
+  }
+
+  const parseCodes = (value: unknown, maxItems: number, maxLen: number): string[] => {
+    if (!Array.isArray(value)) return [];
+    return parseStringList(value, maxItems, maxLen, true) ?? [];
+  };
+
+  const summaryPosture = parseSubmissionCompiledEvidenceDecisionPosture(summary.posture) ?? posture;
+  const summaryAvailable = d1Boolean(summary.available) ?? false;
+
+  let authoritativeReport: SubmissionCompiledEvidenceDecisionSnapshotV1['decision_surface_summary']['authoritative_report'] = null;
+  if (isRecord(summary.authoritative_report)) {
+    const provided = d1Boolean(summary.authoritative_report.provided);
+    const valid = d1Boolean(summary.authoritative_report.valid);
+
+    if (provided !== null && valid !== null) {
+      authoritativeReport = {
+        authoritative: true,
+        provided,
+        valid,
+        report_id: d1String(summary.authoritative_report.report_id),
+        overall_status: parseCompiledEvidenceOverallStatus(summary.authoritative_report.overall_status),
+        verification_code: d1String(summary.authoritative_report.verification_code),
+      };
+    }
+  }
+
+  let narrativeLayer: SubmissionCompiledEvidenceDecisionSnapshotV1['decision_surface_summary']['narrative_layer'] = null;
+  if (isRecord(summary.narrative_layer)) {
+    const present = d1Boolean(summary.narrative_layer.present);
+    const valid = d1Boolean(summary.narrative_layer.valid);
+
+    if (present !== null) {
+      narrativeLayer = {
+        authoritative: false,
+        present,
+        valid,
+        boundary_warning_codes: parseCodes(summary.narrative_layer.boundary_warning_codes, 12, 180),
+      };
+    }
+  }
+
+  const controlsRaw = Array.isArray(summary.key_non_pass_controls) ? summary.key_non_pass_controls : [];
+  const controls: SubmissionCompiledEvidenceNonPassControlSummary[] = [];
+  for (const rawControl of controlsRaw) {
+    if (!isRecord(rawControl)) continue;
+
+    const controlId = d1String(rawControl.control_id)?.trim() ?? null;
+    const controlStatus = parseCompiledEvidenceControlStatus(rawControl.status);
+    if (!controlId || !controlStatus) continue;
+
+    controls.push({
+      control_id: controlId,
+      status: controlStatus,
+      reason_codes: parseCodes(rawControl.reason_codes, 12, 180),
+    });
+
+    if (controls.length >= 5) break;
+  }
+
+  let overrideReceipt: SubmissionCompiledEvidenceDecisionSnapshotV1['override_receipt'] = null;
+  if (isRecord(input.override_receipt)) {
+    const trusted = d1Boolean(input.override_receipt.trusted);
+    const required = d1Boolean(input.override_receipt.required);
+    const provided = d1Boolean(input.override_receipt.provided);
+    const acknowledged = d1Boolean(input.override_receipt.acknowledged);
+
+    if (trusted !== null && required !== null && provided !== null && acknowledged !== null) {
+      overrideReceipt = {
+        trusted,
+        required,
+        provided,
+        acknowledged,
+        override_note: d1String(input.override_receipt.override_note),
+        override_reason_code: d1String(input.override_receipt.override_reason_code),
+      };
+    }
+  }
+
+  return {
+    schema_version: 'submission_compiled_evidence_decision_snapshot.v1',
+    action,
+    captured_at: capturedAt,
+    decision_state: decisionState,
+    posture,
+    reason_codes: dedupeStrings(parseCodes(input.reason_codes, 24, 180)).slice(0, 16),
+    warning_codes: dedupeStrings(parseCodes(input.warning_codes, 20, 180)).slice(0, 12),
+    evidence_reason_codes: dedupeStrings(parseCodes(input.evidence_reason_codes, 20, 180)).slice(0, 12),
+    decision_surface_summary: {
+      available: summaryAvailable,
+      posture: summaryPosture,
+      authoritative_report: authoritativeReport,
+      narrative_layer: narrativeLayer,
+      key_non_pass_controls: controls,
+    },
+    override_receipt: overrideReceipt,
+  };
+}
+
+function buildControlPlaneCheckWithCompiledEvidenceDecisionSnapshot(
+  controlPlaneCheck: Record<string, unknown> | null,
+  decisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null,
+): Record<string, unknown> | null {
+  if (!controlPlaneCheck && !decisionSnapshot) return null;
+
+  const enriched: Record<string, unknown> = controlPlaneCheck
+    ? { ...controlPlaneCheck }
+    : {};
+
+  if (decisionSnapshot) {
+    enriched.compiled_evidence_decision_snapshot = decisionSnapshot;
+  }
+
+  return enriched;
+}
+
+function deriveRequesterCompiledEvidenceOverrideReceiptFromDecisionSnapshot(
+  decisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null,
+): RequesterCompiledEvidenceOverrideReceiptV1 | null {
+  const overrideReceipt = decisionSnapshot?.override_receipt;
+  if (!overrideReceipt || overrideReceipt.trusted !== true) {
+    return null;
+  }
+
+  return {
+    required: overrideReceipt.required,
+    provided: overrideReceipt.provided,
+    acknowledged: overrideReceipt.acknowledged,
+    override_note: overrideReceipt.override_note,
+    override_reason_code: overrideReceipt.override_reason_code,
+  };
+}
+
 export const __submissionCompiledEvidenceInternals = {
   parseCompiledEvidenceAttachmentInput,
   parseCompiledEvidenceReferenceInput,
@@ -6485,10 +6822,16 @@ export const __submissionCompiledEvidenceInternals = {
   evaluateCompiledEvidenceDecisionPolicy,
   buildCompiledEvidenceDecisionPolicy,
   deriveCompiledEvidenceDecisionPolicyForRecord,
+  resolveCompiledEvidenceDecisionPolicy,
+  buildCompiledEvidenceDecisionSnapshot,
+  parseSubmissionCompiledEvidenceDecisionSnapshot,
+  buildControlPlaneCheckWithCompiledEvidenceDecisionSnapshot,
+  getLatestSubmissionCompiledEvidenceDecisionSnapshot,
   parseRequesterCompiledEvidenceOverrideContract,
   buildRequesterCompiledEvidenceOverrideReceipt,
   evaluateRequesterCompiledEvidenceApprovalGate,
   planArenaDeskDecisionAction,
+  buildArenaManagerAutopilotPayload,
 };
 
 function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
@@ -9208,6 +9551,7 @@ function buildArenaInlineReviewSummaryView(
   winnerContender: ArenaContenderResult | null,
   arenaExplorerBaseUrl: string,
   compiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null,
+  compiledEvidenceDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null,
 ): ArenaInlineReviewSummaryView | null {
   if (!run) return null;
 
@@ -9238,6 +9582,7 @@ function buildArenaInlineReviewSummaryView(
     tradeoffs,
     review_links: reviewLinks,
     compiled_evidence_review: compiledEvidenceReview,
+    compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
   };
 }
 
@@ -9253,6 +9598,7 @@ function scopeArenaInlineReviewSummaryToSubmission(
     return {
       ...summary,
       compiled_evidence_review: null,
+      compiled_evidence_decision_snapshot: null,
     };
   }
 
@@ -9278,11 +9624,15 @@ function scopeArenaPayloadCompiledEvidenceToSubmission(
     return {
       ...payload,
       submission_compiled_evidence_review: null,
+      submission_compiled_evidence_decision_policy: null,
+      submission_compiled_evidence_decision_snapshot: null,
       contenders: Array.isArray(payload.contenders)
         ? payload.contenders.map((entry) => (isRecord(entry)
           ? {
               ...entry,
               submission_compiled_evidence_review: null,
+              submission_compiled_evidence_decision_policy: null,
+              submission_compiled_evidence_decision_snapshot: null,
             }
           : entry))
         : payload.contenders,
@@ -9290,10 +9640,14 @@ function scopeArenaPayloadCompiledEvidenceToSubmission(
         ? {
             ...scopedDelegationInsights,
             compiled_evidence_review: null,
+            compiled_evidence_decision_policy: null,
+            compiled_evidence_decision_snapshot: null,
             manager_routing: scopedManagerRouting
               ? {
                   ...scopedManagerRouting,
                   compiled_evidence_review: null,
+                  compiled_evidence_decision_policy: null,
+                  compiled_evidence_decision_snapshot: null,
                 }
               : scopedDelegationInsights.manager_routing,
           }
@@ -9401,6 +9755,12 @@ function buildArenaDecisionCaptureView(
       : 'REJECTED';
 
   const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail');
+  const compiledEvidenceDecisionPolicy = resolveCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
+  const compiledEvidenceDecisionSnapshot = buildCompiledEvidenceDecisionSnapshot({
+    action: 'arena_desk_decision',
+    decisionPolicy: compiledEvidenceDecisionPolicy,
+    capturedAt: run.updated_at,
+  });
 
   return {
     outcome_endpoint: {
@@ -9441,6 +9801,7 @@ function buildArenaDecisionCaptureView(
       decision_taxonomy_tags_path: 'decision_taxonomy_tags',
     },
     compiled_evidence_review: compiledEvidenceReview,
+    compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
   };
 }
 
@@ -9451,11 +9812,19 @@ async function buildBountyReviewArenaFlowView(
   latestArena: ArenaInlineReviewSummaryView | null,
   decisionCapture: ArenaDecisionCaptureView | null,
 ): Promise<BountyReviewArenaFlowView> {
+  const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail');
+  const compiledEvidenceDecisionPolicy = resolveCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
+
   return {
     start_arena: await buildArenaStartActionTemplateView(bounty, submission),
     latest_arena: scopeArenaInlineReviewSummaryToSubmission(latestArena, latestArenaRun, submission),
     decision_capture: decisionCapture,
-    compiled_evidence_review: deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail'),
+    compiled_evidence_review: compiledEvidenceReview,
+    compiled_evidence_decision_snapshot: buildCompiledEvidenceDecisionSnapshot({
+      action: 'arena_desk_decision',
+      decisionPolicy: compiledEvidenceDecisionPolicy,
+      capturedAt: latestArenaRun?.updated_at ?? submission.updated_at,
+    }),
   };
 }
 
@@ -9465,6 +9834,7 @@ function toSubmissionSummaryView(
   arenaReviewFlow: BountyReviewArenaFlowView,
   assuranceGating: SubmissionAssuranceGatingView | null,
   payoutReviewPolicy: SubmissionPayoutReviewPolicyView,
+  compiledEvidenceDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null,
 ): SubmissionSummaryView {
   const reasonCodes = assuranceGating?.reason_codes ?? [];
   return {
@@ -9491,6 +9861,7 @@ function toSubmissionSummaryView(
         }
       : null,
     compiled_evidence: deriveCompiledEvidenceSummaryForView(record, 'list'),
+    compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
     arena_review_flow: arenaReviewFlow,
   };
 }
@@ -9501,6 +9872,7 @@ function toSubmissionDetailView(
   arenaReviewFlow: BountyReviewArenaFlowView,
   assuranceGating: SubmissionAssuranceGatingView | null,
   payoutReviewPolicy: SubmissionPayoutReviewPolicyView,
+  compiledEvidenceDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null,
 ): SubmissionDetailView {
   const reasonCodes = assuranceGating?.reason_codes ?? [];
   return {
@@ -9552,6 +9924,7 @@ function toSubmissionDetailView(
         }
       : null,
     compiled_evidence: deriveCompiledEvidenceSummaryForView(record, 'detail'),
+    compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
     arena_review_flow: arenaReviewFlow,
     created_at: record.created_at,
     updated_at: record.updated_at,
@@ -10137,7 +10510,9 @@ async function insertRequesterAuthEvent(
     sensitive_transition: boolean;
     control_plane_check?: Record<string, unknown> | null;
   }
-): Promise<void> {
+): Promise<string> {
+  const authEventId = `rae_${crypto.randomUUID()}`;
+
   await db
     .prepare(
       `INSERT INTO requester_auth_events (
@@ -10161,7 +10536,7 @@ async function insertRequesterAuthEvent(
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
-      `rae_${crypto.randomUUID()}`,
+      authEventId,
       params.action,
       params.bounty_id,
       params.submission_id,
@@ -10180,6 +10555,76 @@ async function insertRequesterAuthEvent(
       params.created_at
     )
     .run();
+
+  return authEventId;
+}
+
+async function updateRequesterAuthEventControlPlaneCheck(
+  db: D1Database,
+  params: {
+    auth_event_id: string;
+    control_plane_check: Record<string, unknown> | null;
+  },
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE requester_auth_events
+          SET control_plane_check_json = ?
+        WHERE auth_event_id = ?`
+    )
+    .bind(
+      params.control_plane_check ? stableStringify(params.control_plane_check) : null,
+      params.auth_event_id,
+    )
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('REQUESTER_AUTH_EVENT_UPDATE_FAILED');
+  }
+}
+
+async function getLatestSubmissionCompiledEvidenceDecisionSnapshot(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    submission_id: string;
+    limit?: number;
+  },
+): Promise<SubmissionCompiledEvidenceDecisionSnapshotV1 | null> {
+  const limit = Math.max(1, Math.min(params.limit ?? 100, 100));
+
+  const rows = await db
+    .prepare(
+      `SELECT control_plane_check_json
+         FROM requester_auth_events
+        WHERE bounty_id = ?
+          AND submission_id = ?
+          AND action IN ('approve_bounty', 'reject_bounty')
+        ORDER BY created_at DESC, auth_event_id DESC
+        LIMIT ?`
+    )
+    .bind(params.bounty_id, params.submission_id, limit)
+    .all<Record<string, unknown>>();
+
+  for (const row of rows.results ?? []) {
+    if (!isRecord(row)) continue;
+
+    const controlPlaneCheckJson = d1String(row.control_plane_check_json);
+    if (!controlPlaneCheckJson) continue;
+
+    const controlPlaneCheck = parseJsonObject(controlPlaneCheckJson);
+    if (!controlPlaneCheck) continue;
+
+    const snapshot = parseSubmissionCompiledEvidenceDecisionSnapshot(
+      controlPlaneCheck.compiled_evidence_decision_snapshot,
+    );
+
+    if (snapshot) {
+      return snapshot;
+    }
+  }
+
+  return null;
 }
 
 async function getSubmissionById(db: D1Database, submissionId: string): Promise<SubmissionRecord | null> {
@@ -13658,6 +14103,8 @@ function buildArenaDelegationInsights(
   contenders: ArenaContenderResult[],
   winnerContenderId: string | null,
   compiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null,
+  compiledEvidenceDecisionPolicy: SubmissionCompiledEvidenceDecisionPolicyV1 | null = null,
+  compiledEvidenceDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null,
 ): Record<string, unknown> {
   const winner = winnerContenderId
     ? contenders.find((contender) => contender.contender_id === winnerContenderId) ?? null
@@ -13666,6 +14113,13 @@ function buildArenaDelegationInsights(
   const allBottlenecks = dedupeStrings(contenders.flatMap((contender) => contender.insights.bottlenecks));
   const allContractImprovements = dedupeStrings(contenders.flatMap((contender) => contender.insights.contract_improvements));
   const allNextHints = dedupeStrings(contenders.flatMap((contender) => contender.insights.next_delegation_hints));
+  const resolvedDecisionPolicy = compiledEvidenceDecisionPolicy
+    ?? resolveCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
+  const resolvedDecisionSnapshot = compiledEvidenceDecisionSnapshot
+    ?? buildCompiledEvidenceDecisionSnapshot({
+      action: 'arena_manager_route',
+      decisionPolicy: resolvedDecisionPolicy,
+    });
 
   const eligibleBackups = contenders
     .filter((contender) => contender.hard_gate_pass)
@@ -13681,10 +14135,14 @@ function buildArenaDelegationInsights(
     contract_improvements: allContractImprovements,
     next_delegation_hints: allNextHints,
     compiled_evidence_review: compiledEvidenceReview,
+    compiled_evidence_decision_policy: resolvedDecisionPolicy,
+    compiled_evidence_decision_snapshot: resolvedDecisionSnapshot,
     manager_routing: {
       default_contender_id: winnerContenderId,
       backup_contenders: eligibleBackups,
       compiled_evidence_review: compiledEvidenceReview,
+      compiled_evidence_decision_policy: resolvedDecisionPolicy,
+      compiled_evidence_decision_snapshot: resolvedDecisionSnapshot,
     },
     contenders: contenders
       .sort((a, b) => b.score - a.score)
@@ -13718,6 +14176,20 @@ async function buildArenaPayloadFromRun(
   const reasonCodes = run.reason_codes_json ? (parseJsonStringArray(run.reason_codes_json) ?? []) : [];
   const tradeoffs = run.tradeoffs_json ? (parseJsonStringArray(run.tradeoffs_json) ?? []) : [];
   const runCompiledEvidenceReview = await resolveArenaRunCompiledEvidenceReview(db, run);
+  const runCompiledEvidenceDecisionPolicy = resolveCompiledEvidenceDecisionPolicy(runCompiledEvidenceReview);
+  const runSubmissionId = deriveArenaRunSubmissionId(run);
+  const persistedDecisionSnapshot = runSubmissionId
+    ? await getLatestSubmissionCompiledEvidenceDecisionSnapshot(db, {
+        bounty_id: run.bounty_id,
+        submission_id: runSubmissionId,
+      })
+    : null;
+  const runCompiledEvidenceDecisionSnapshot = persistedDecisionSnapshot
+    ?? buildCompiledEvidenceDecisionSnapshot({
+      action: 'arena_manager_route',
+      decisionPolicy: runCompiledEvidenceDecisionPolicy,
+      capturedAt: run.updated_at,
+    });
 
   let generatedAt = run.updated_at;
   let reportScoreExplain: Record<string, unknown> | null = null;
@@ -13791,6 +14263,8 @@ async function buildArenaPayloadFromRun(
         review_paste: contender.review_paste,
         manager_review_json: contender.manager_review,
         submission_compiled_evidence_review: runCompiledEvidenceReview,
+        submission_compiled_evidence_decision_policy: runCompiledEvidenceDecisionPolicy,
+        submission_compiled_evidence_decision_snapshot: runCompiledEvidenceDecisionSnapshot,
       };
     }),
     winner: {
@@ -13800,7 +14274,15 @@ async function buildArenaPayloadFromRun(
     tradeoffs,
     reason_codes: reasonCodes,
     submission_compiled_evidence_review: runCompiledEvidenceReview,
-    delegation_insights: buildArenaDelegationInsights(contenderViews, run.winner_contender_id, runCompiledEvidenceReview),
+    submission_compiled_evidence_decision_policy: runCompiledEvidenceDecisionPolicy,
+    submission_compiled_evidence_decision_snapshot: runCompiledEvidenceDecisionSnapshot,
+    delegation_insights: buildArenaDelegationInsights(
+      contenderViews,
+      run.winner_contender_id,
+      runCompiledEvidenceReview,
+      runCompiledEvidenceDecisionPolicy,
+      runCompiledEvidenceDecisionSnapshot,
+    ),
   };
 }
 
@@ -17406,8 +17888,9 @@ async function handleApproveBounty(
     return errorResponse('BOUNTY_NOT_ASSIGNED', 'Bounty has no assigned worker', 409, undefined, version);
   }
 
+  let requesterAuthEventId: string;
   try {
-    await insertRequesterAuthEvent(env.BOUNTIES_DB, {
+    requesterAuthEventId = await insertRequesterAuthEvent(env.BOUNTIES_DB, {
       action: 'approve_bounty',
       bounty_id: bounty.bounty_id,
       submission_id,
@@ -17443,6 +17926,52 @@ async function handleApproveBounty(
       );
     }
 
+    const now = new Date().toISOString();
+    const resolvedSubmissionId = bounty.approved_submission_id ?? submission_id;
+
+    let resolvedSubmissionCompiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null;
+    let resolvedSubmissionCompiledEvidencePolicy: SubmissionCompiledEvidenceDecisionPolicyV1 = resolveCompiledEvidenceDecisionPolicy(null);
+    try {
+      const resolvedSubmission = await getSubmissionById(env.BOUNTIES_DB, resolvedSubmissionId);
+      if (resolvedSubmission) {
+        resolvedSubmissionCompiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(resolvedSubmission, 'detail');
+        resolvedSubmissionCompiledEvidencePolicy = resolveCompiledEvidenceDecisionPolicy(resolvedSubmissionCompiledEvidenceReview);
+      }
+    } catch {
+      resolvedSubmissionCompiledEvidenceReview = null;
+      resolvedSubmissionCompiledEvidencePolicy = resolveCompiledEvidenceDecisionPolicy(null);
+    }
+
+    let persistedApprovedDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null;
+    try {
+      persistedApprovedDecisionSnapshot = await getLatestSubmissionCompiledEvidenceDecisionSnapshot(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        submission_id: resolvedSubmissionId,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+
+    if (persistedApprovedDecisionSnapshot) {
+      try {
+        await updateRequesterAuthEventControlPlaneCheck(env.BOUNTIES_DB, {
+          auth_event_id: requesterAuthEventId,
+          control_plane_check: buildControlPlaneCheckWithCompiledEvidenceDecisionSnapshot(
+            controlPlaneCheck,
+            persistedApprovedDecisionSnapshot,
+          ),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+      }
+    }
+
+    const resolvedSubmissionOverrideReceipt = deriveRequesterCompiledEvidenceOverrideReceiptFromDecisionSnapshot(
+      persistedApprovedDecisionSnapshot,
+    );
+
     let escrowResponse: EscrowReleaseResponse;
     try {
       escrowResponse = await escrowGetReleased(env, bounty.escrow_id);
@@ -17456,22 +17985,6 @@ async function handleApproveBounty(
 
       const message = err instanceof Error ? err.message : 'Unknown error';
       return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
-    }
-
-    const now = new Date().toISOString();
-    const resolvedSubmissionId = bounty.approved_submission_id ?? submission_id;
-
-    let resolvedSubmissionCompiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null;
-    let resolvedSubmissionCompiledEvidencePolicy: SubmissionCompiledEvidenceDecisionPolicyV1 | null = null;
-    try {
-      const resolvedSubmission = await getSubmissionById(env.BOUNTIES_DB, resolvedSubmissionId);
-      if (resolvedSubmission) {
-        resolvedSubmissionCompiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(resolvedSubmission, 'detail');
-        resolvedSubmissionCompiledEvidencePolicy = evaluateCompiledEvidenceDecisionPolicy(resolvedSubmissionCompiledEvidenceReview);
-      }
-    } catch {
-      resolvedSubmissionCompiledEvidenceReview = null;
-      resolvedSubmissionCompiledEvidencePolicy = null;
     }
 
     try {
@@ -17496,7 +18009,8 @@ async function handleApproveBounty(
       decided_at: bounty.approved_at ?? bounty.updated_at,
       compiled_evidence_review: resolvedSubmissionCompiledEvidenceReview,
       compiled_evidence_decision_policy: resolvedSubmissionCompiledEvidencePolicy,
-      compiled_evidence_override: null,
+      compiled_evidence_override: resolvedSubmissionOverrideReceipt,
+      compiled_evidence_decision_snapshot: persistedApprovedDecisionSnapshot,
     };
 
     const sourceId = `clawbounties:approve:${bounty.bounty_id}:${resolvedSubmissionId}:${
@@ -17559,7 +18073,7 @@ async function handleApproveBounty(
   }
 
   const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail');
-  const compiledEvidenceDecisionPolicy = evaluateCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
+  const compiledEvidenceDecisionPolicy = resolveCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
   const compiledEvidenceOverrideReceipt = buildRequesterCompiledEvidenceOverrideReceipt(
     compiledEvidenceDecisionPolicy.requester_contract.explicit_override_required,
     compiledEvidenceOverrideContract,
@@ -17568,6 +18082,14 @@ async function handleApproveBounty(
     compiledEvidenceDecisionPolicy,
     compiledEvidenceOverrideContract,
   );
+  const compiledEvidenceDecisionSnapshotCapturedAt = new Date().toISOString();
+  const compiledEvidenceDecisionSnapshot = buildCompiledEvidenceDecisionSnapshot({
+    action: options?.authOverride ? 'arena_desk_decision' : 'approve_bounty',
+    decisionPolicy: compiledEvidenceDecisionPolicy,
+    capturedAt: compiledEvidenceDecisionSnapshotCapturedAt,
+    overrideReceipt: compiledEvidenceOverrideReceipt,
+    overrideReceiptTrusted: true,
+  });
 
   if (!payoutPolicy.policy.payout_ready) {
     return errorResponse(
@@ -17581,6 +18103,7 @@ async function handleApproveBounty(
         compiled_evidence_review: compiledEvidenceReview,
         compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
         compiled_evidence_override: compiledEvidenceOverrideReceipt,
+        compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
       },
       version,
     );
@@ -17603,6 +18126,7 @@ async function handleApproveBounty(
         compiled_evidence_review: compiledEvidenceReview,
         compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
         compiled_evidence_override: compiledEvidenceOverrideReceipt,
+        compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
       },
       version,
     );
@@ -17620,6 +18144,7 @@ async function handleApproveBounty(
         compiled_evidence_review: compiledEvidenceReview,
         compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
         compiled_evidence_override: compiledEvidenceOverrideReceipt,
+        compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
         required_contract: {
           acknowledge_manual_review_required: true,
           override_note: 'non-empty string (max 600 chars)',
@@ -17662,6 +18187,7 @@ async function handleApproveBounty(
   const now = new Date().toISOString();
   let decidedAt = now;
   let approvalOverrideReceiptTrusted = true;
+  let persistedApprovedDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null;
 
   try {
     await updateBountyApproved(env.BOUNTIES_DB, {
@@ -17700,8 +18226,40 @@ async function handleApproveBounty(
 
       approvalOverrideReceiptTrusted = false;
       decidedAt = updated.approved_at ?? updated.updated_at;
+      persistedApprovedDecisionSnapshot = await getLatestSubmissionCompiledEvidenceDecisionSnapshot(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+      });
     } catch (lookupErr) {
       const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  const responseCompiledEvidenceDecisionSnapshot = approvalOverrideReceiptTrusted
+    ? buildCompiledEvidenceDecisionSnapshot({
+        action: options?.authOverride ? 'arena_desk_decision' : 'approve_bounty',
+        decisionPolicy: compiledEvidenceDecisionPolicy,
+        capturedAt: decidedAt,
+        overrideReceipt: compiledEvidenceOverrideReceipt,
+        overrideReceiptTrusted: true,
+      })
+    : persistedApprovedDecisionSnapshot;
+  const responseCompiledEvidenceOverride = approvalOverrideReceiptTrusted
+    ? compiledEvidenceOverrideReceipt
+    : deriveRequesterCompiledEvidenceOverrideReceiptFromDecisionSnapshot(responseCompiledEvidenceDecisionSnapshot);
+
+  if (responseCompiledEvidenceDecisionSnapshot) {
+    try {
+      await updateRequesterAuthEventControlPlaneCheck(env.BOUNTIES_DB, {
+        auth_event_id: requesterAuthEventId,
+        control_plane_check: buildControlPlaneCheckWithCompiledEvidenceDecisionSnapshot(
+          controlPlaneCheck,
+          responseCompiledEvidenceDecisionSnapshot,
+        ),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
       return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
     }
   }
@@ -17728,7 +18286,8 @@ async function handleApproveBounty(
     decided_at: decidedAt,
     compiled_evidence_review: compiledEvidenceReview,
     compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
-    compiled_evidence_override: approvalOverrideReceiptTrusted ? compiledEvidenceOverrideReceipt : null,
+    compiled_evidence_override: responseCompiledEvidenceOverride,
+    compiled_evidence_decision_snapshot: responseCompiledEvidenceDecisionSnapshot,
   };
 
   await emitClawrepLoopEvent(env, {
@@ -17865,8 +18424,9 @@ async function handleRejectBounty(
     return errorResponse('BOUNTY_NOT_ASSIGNED', 'Bounty has no assigned worker', 409, undefined, version);
   }
 
+  let requesterAuthEventId: string;
   try {
-    await insertRequesterAuthEvent(env.BOUNTIES_DB, {
+    requesterAuthEventId = await insertRequesterAuthEvent(env.BOUNTIES_DB, {
       action: 'reject_bounty',
       bounty_id: bounty.bounty_id,
       submission_id,
@@ -17902,21 +18462,6 @@ async function handleRejectBounty(
       );
     }
 
-    let escrowResponse: EscrowDisputeResponse;
-    try {
-      escrowResponse = await escrowGetDisputed(env, bounty.escrow_id);
-    } catch (err) {
-      const parsed = parseEscrowFailedError(err);
-      if (parsed) {
-        const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
-        const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
-        return errorResponse(code, message, parsed.status, undefined, version);
-      }
-
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
-    }
-
     const now = new Date().toISOString();
     const resolvedSubmissionId = bounty.rejected_submission_id ?? submission_id;
 
@@ -17938,6 +18483,54 @@ async function handleRejectBounty(
 
     if (resolvedSubmission.worker_did !== bounty.worker_did) {
       return errorResponse('INVALID_REQUEST', 'submission worker does not match bounty worker', 400, undefined, version);
+    }
+
+    const resolvedSubmissionCompiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(resolvedSubmission, 'detail');
+    const resolvedSubmissionCompiledEvidencePolicy = resolveCompiledEvidenceDecisionPolicy(resolvedSubmissionCompiledEvidenceReview);
+
+    let persistedRejectedDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null;
+    try {
+      persistedRejectedDecisionSnapshot = await getLatestSubmissionCompiledEvidenceDecisionSnapshot(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        submission_id: resolvedSubmissionId,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+
+    if (persistedRejectedDecisionSnapshot) {
+      try {
+        await updateRequesterAuthEventControlPlaneCheck(env.BOUNTIES_DB, {
+          auth_event_id: requesterAuthEventId,
+          control_plane_check: buildControlPlaneCheckWithCompiledEvidenceDecisionSnapshot(
+            controlPlaneCheck,
+            persistedRejectedDecisionSnapshot,
+          ),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+      }
+    }
+
+    const resolvedSubmissionOverrideReceipt = deriveRequesterCompiledEvidenceOverrideReceiptFromDecisionSnapshot(
+      persistedRejectedDecisionSnapshot,
+    );
+
+    let escrowResponse: EscrowDisputeResponse;
+    try {
+      escrowResponse = await escrowGetDisputed(env, bounty.escrow_id);
+    } catch (err) {
+      const parsed = parseEscrowFailedError(err);
+      if (parsed) {
+        const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
+        const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
+        return errorResponse(code, message, parsed.status, undefined, version);
+      }
+
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
     }
 
     let trialCase: TrialCaseSummary;
@@ -17992,7 +18585,10 @@ async function handleRejectBounty(
       escrow: escrowResponse,
       trial_case: trialCase,
       decided_at: bounty.rejected_at ?? bounty.updated_at,
-      compiled_evidence_review: deriveCompiledEvidenceDecisionSurfaceForRecord(resolvedSubmission, 'detail'),
+      compiled_evidence_review: resolvedSubmissionCompiledEvidenceReview,
+      compiled_evidence_decision_policy: resolvedSubmissionCompiledEvidencePolicy,
+      compiled_evidence_override: resolvedSubmissionOverrideReceipt,
+      compiled_evidence_decision_snapshot: persistedRejectedDecisionSnapshot,
     };
 
     const sourceId = `clawbounties:reject:${bounty.bounty_id}:${resolvedSubmissionId}:${
@@ -18050,6 +18646,9 @@ async function handleRejectBounty(
 
   // Rejection is allowed even if proofs are invalid; the requester can dispute any submission.
 
+  const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail');
+  const compiledEvidenceDecisionPolicy = resolveCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
+
   const now = new Date().toISOString();
 
   let escrowResponse: EscrowDisputeResponse;
@@ -18092,6 +18691,8 @@ async function handleRejectBounty(
   }
 
   let decidedAt = now;
+  let rejectionDecisionSnapshotTrusted = true;
+  let persistedRejectedDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null;
 
   try {
     await updateBountyRejected(env.BOUNTIES_DB, {
@@ -18131,8 +18732,39 @@ async function handleRejectBounty(
       }
 
       decidedAt = updated.rejected_at ?? updated.updated_at;
+      rejectionDecisionSnapshotTrusted = false;
+      persistedRejectedDecisionSnapshot = await getLatestSubmissionCompiledEvidenceDecisionSnapshot(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+      });
     } catch (lookupErr) {
       const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  const responseCompiledEvidenceDecisionSnapshot = rejectionDecisionSnapshotTrusted
+    ? buildCompiledEvidenceDecisionSnapshot({
+        action: options?.authOverride ? 'arena_desk_decision' : 'reject_bounty',
+        decisionPolicy: compiledEvidenceDecisionPolicy,
+        capturedAt: decidedAt,
+      })
+    : persistedRejectedDecisionSnapshot;
+  const responseCompiledEvidenceOverride = deriveRequesterCompiledEvidenceOverrideReceiptFromDecisionSnapshot(
+    responseCompiledEvidenceDecisionSnapshot,
+  );
+
+  if (responseCompiledEvidenceDecisionSnapshot) {
+    try {
+      await updateRequesterAuthEventControlPlaneCheck(env.BOUNTIES_DB, {
+        auth_event_id: requesterAuthEventId,
+        control_plane_check: buildControlPlaneCheckWithCompiledEvidenceDecisionSnapshot(
+          controlPlaneCheck,
+          responseCompiledEvidenceDecisionSnapshot,
+        ),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
       return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
     }
   }
@@ -18158,7 +18790,10 @@ async function handleRejectBounty(
     escrow: escrowResponse,
     trial_case: trialCase,
     decided_at: decidedAt,
-    compiled_evidence_review: deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail'),
+    compiled_evidence_review: compiledEvidenceReview,
+    compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+    compiled_evidence_override: responseCompiledEvidenceOverride,
+    compiled_evidence_decision_snapshot: responseCompiledEvidenceDecisionSnapshot,
   };
 
   await emitClawrepLoopEvent(env, {
@@ -24625,6 +25260,11 @@ async function handlePostArenaDeskDecisionLoop(
       compiledEvidenceDecisionPolicy,
     );
     const action = actionPlan.action;
+    const compiledEvidenceDecisionSnapshot = buildCompiledEvidenceDecisionSnapshot({
+      action: 'arena_desk_decision',
+      decisionPolicy: compiledEvidenceDecisionPolicy,
+      capturedAt: new Date().toISOString(),
+    });
 
     if (!action) {
       decisions.push({
@@ -24639,6 +25279,7 @@ async function handlePostArenaDeskDecisionLoop(
         payout_review_policy: payoutPolicyResult.policy.view,
         compiled_evidence_review: compiledEvidenceReview,
         compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+        compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
       });
       continue;
     }
@@ -24674,6 +25315,7 @@ async function handlePostArenaDeskDecisionLoop(
         payout_review_policy: payoutPolicyResult.policy.view,
         compiled_evidence_review: compiledEvidenceReview,
         compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+        compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
       });
       continue;
     }
@@ -24724,6 +25366,7 @@ async function handlePostArenaDeskDecisionLoop(
         payout_review_policy: payoutPolicyResult.policy.view,
         compiled_evidence_review: compiledEvidenceReview,
         compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+        compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
         response: responsePayload,
       });
     } else {
@@ -24741,6 +25384,7 @@ async function handlePostArenaDeskDecisionLoop(
         payout_review_policy: payoutPolicyResult.policy.view,
         compiled_evidence_review: compiledEvidenceReview,
         compiled_evidence_decision_policy: compiledEvidenceDecisionPolicy,
+        compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
         response: responsePayload,
       });
     }
@@ -26648,6 +27292,7 @@ async function handleArenaManagerRoute(
     compiled_evidence_available_samples: number;
     compiled_evidence_non_pass_samples: number;
     latest_compiled_evidence_review: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
+    latest_compiled_evidence_decision_policy: SubmissionCompiledEvidenceDecisionPolicyV1;
   };
 
   type OutcomeAggregate = {
@@ -26670,6 +27315,7 @@ async function handleArenaManagerRoute(
     }
 
     const runCompiledEvidenceReview = await resolveArenaRunCompiledEvidenceReview(env.BOUNTIES_DB, run);
+    const runCompiledEvidenceDecisionPolicy = resolveCompiledEvidenceDecisionPolicy(runCompiledEvidenceReview);
 
     const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, run.run_id);
     for (const contenderRow of contenderRows) {
@@ -26697,6 +27343,7 @@ async function handleArenaManagerRoute(
           compiled_evidence_available_samples: runCompiledEvidenceReview?.available ? 1 : 0,
           compiled_evidence_non_pass_samples: runCompiledEvidenceReview?.posture === 'authoritative_non_pass' ? 1 : 0,
           latest_compiled_evidence_review: runCompiledEvidenceReview,
+          latest_compiled_evidence_decision_policy: runCompiledEvidenceDecisionPolicy,
         });
       } else {
         existing.appearances += 1;
@@ -26717,6 +27364,7 @@ async function handleArenaManagerRoute(
           existing.last_seen_at = run.updated_at;
           existing.latest_hard_gate_pass = contender.hard_gate_pass;
           existing.latest_compiled_evidence_review = runCompiledEvidenceReview;
+          existing.latest_compiled_evidence_decision_policy = runCompiledEvidenceDecisionPolicy;
         }
 
         if (existing.sample_run_ids.length < 10) {
@@ -26797,6 +27445,13 @@ async function handleArenaManagerRoute(
       const topOverrideReasonCode = overrideReasonBreakdown[0]?.reason_code ?? null;
 
       const latestCompiledEvidenceReview = entry.latest_compiled_evidence_review;
+      const latestCompiledEvidenceDecisionPolicy = entry.latest_compiled_evidence_decision_policy;
+      const latestCompiledEvidenceDecisionSnapshot = buildCompiledEvidenceDecisionSnapshot({
+        action: 'arena_manager_route',
+        decisionPolicy: latestCompiledEvidenceDecisionPolicy,
+        capturedAt: entry.last_seen_at,
+      });
+      const latestCompiledEvidenceDecisionState = latestCompiledEvidenceDecisionPolicy.decision;
       const compiledEvidenceAvailableSamples = entry.compiled_evidence_available_samples;
       const compiledEvidenceNonPassSamples = entry.compiled_evidence_non_pass_samples;
       const compiledEvidenceAvailabilityRate = appearances > 0
@@ -26837,6 +27492,14 @@ async function handleArenaManagerRoute(
         }
       }
 
+      if (latestCompiledEvidenceDecisionState === 'fix_required') {
+        coachingRecommendations.push('Latest compiled evidence decision is fix_required; disable autopilot until authoritative controls pass.');
+      } else if (latestCompiledEvidenceDecisionState === 'manual_review_required') {
+        coachingRecommendations.push('Latest compiled evidence decision is manual_review_required; keep human approval checkpoints active.');
+      } else if (latestCompiledEvidenceDecisionState === 'unavailable') {
+        coachingRecommendations.push('Compiled evidence decision is unavailable; fail closed to manual review and refresh evidence ingestion.');
+      }
+
       if (topOverrideReasonCode && overrideRate > 0) {
         const hint = ARENA_OVERRIDE_REASON_REGISTRY[topOverrideReasonCode];
         coachingRecommendations.push(`Top override reason (${topOverrideReasonCode}): ${hint.contract_rewrite}`);
@@ -26875,6 +27538,8 @@ async function handleArenaManagerRoute(
           availability_rate: Number(compiledEvidenceAvailabilityRate.toFixed(4)),
           non_pass_rate: Number(compiledEvidenceNonPassRate.toFixed(4)),
           latest_review: latestCompiledEvidenceReview,
+          latest_decision_policy: latestCompiledEvidenceDecisionPolicy,
+          latest_decision_snapshot: latestCompiledEvidenceDecisionSnapshot,
         },
         last_seen_at: entry.last_seen_at,
         sample_run_ids: entry.sample_run_ids,
@@ -26951,6 +27616,18 @@ async function handleArenaManagerRoute(
   ];
 
   const recommendedCompiledEvidenceReview = recommended.compiled_evidence.latest_review;
+  const recommendedCompiledEvidenceDecisionPolicyRaw = isRecord(recommended.compiled_evidence.latest_decision_policy)
+    ? recommended.compiled_evidence.latest_decision_policy as SubmissionCompiledEvidenceDecisionPolicyV1
+    : null;
+  const recommendedCompiledEvidenceDecisionPolicy = recommendedCompiledEvidenceDecisionPolicyRaw
+    ?? resolveCompiledEvidenceDecisionPolicy(recommendedCompiledEvidenceReview);
+  const recommendedCompiledEvidenceDecisionSnapshot = parseSubmissionCompiledEvidenceDecisionSnapshot(
+    recommended.compiled_evidence.latest_decision_snapshot,
+  ) ?? buildCompiledEvidenceDecisionSnapshot({
+    action: 'arena_manager_route',
+    decisionPolicy: recommendedCompiledEvidenceDecisionPolicy,
+    capturedAt: recommended.last_seen_at,
+  });
 
   const backups = selectedPool
     .filter((entry) => entry.contender_id !== recommended.contender_id)
@@ -26993,6 +27670,21 @@ async function handleArenaManagerRoute(
     reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_UNAVAILABLE');
   }
 
+  switch (recommendedCompiledEvidenceDecisionSnapshot.decision_state) {
+    case 'approve_recommended':
+      reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_DECISION_APPROVE_RECOMMENDED');
+      break;
+    case 'manual_review_required':
+      reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_DECISION_MANUAL_REVIEW_REQUIRED');
+      break;
+    case 'fix_required':
+      reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_DECISION_FIX_REQUIRED');
+      break;
+    default:
+      reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_DECISION_UNAVAILABLE');
+      break;
+  }
+
   const topWinner = [...winnerCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
   const winnerStabilityRatio = topWinner && runs.length > 0 ? topWinner[1] / runs.length : 0;
 
@@ -27020,6 +27712,14 @@ async function handleArenaManagerRoute(
     if ((recommendedCompiledEvidenceReview.narrative_layer?.boundary_warning_codes.length ?? 0) > 0) {
       globalCoachRecommendations.push('Narrative boundary warnings present; keep authoritative/non-authoritative evidence layers distinct in review UI.');
     }
+  }
+
+  if (recommendedCompiledEvidenceDecisionSnapshot.decision_state === 'fix_required') {
+    globalCoachRecommendations.push('Compiled evidence policy is fix_required; manager autopilot should remain blocked pending verified fixes.');
+  } else if (recommendedCompiledEvidenceDecisionSnapshot.decision_state === 'manual_review_required') {
+    globalCoachRecommendations.push('Compiled evidence policy is manual_review_required; keep requester/operator human checkpoints enabled.');
+  } else if (recommendedCompiledEvidenceDecisionSnapshot.decision_state === 'unavailable') {
+    globalCoachRecommendations.push('Compiled evidence policy is unavailable; fail closed and avoid autonomy claims from narrative-only inputs.');
   }
 
   if (globalCoachRecommendations.length === 0) {
@@ -27056,7 +27756,7 @@ async function handleArenaManagerRoute(
         model: recommended.model,
         harness: recommended.harness,
         routing_score: recommended.routing_score,
-        reason_codes: reasonCodes,
+        reason_codes: dedupeStrings(reasonCodes),
         rationale: `Selected ${recommended.contender_id} with routing_score=${recommended.routing_score} from ${recommended.appearances} matched runs (win_rate=${recommended.win_rate}, hard_gate_pass_rate=${recommended.hard_gate_pass_rate}, override_rate=${recommended.override_rate}, top_override_reason=${recommended.top_override_reason_code ?? 'none'}, calibration_gap=${recommended.calibration_gap}).`,
         evidence: {
           appearances: recommended.appearances,
@@ -27144,6 +27844,23 @@ async function buildArenaManagerAutopilotPayload(
   const calibrationGap = d1Number(evidence.calibration_gap) ?? 0;
   const latestHardGatePass = evidence.latest_hard_gate_pass === true;
   const compiledEvidence = isRecord(evidence.compiled_evidence) ? evidence.compiled_evidence : null;
+  const compiledEvidenceLatestReview = compiledEvidence && isRecord(compiledEvidence.latest_review)
+    ? compiledEvidence.latest_review as unknown as SubmissionCompiledEvidenceDecisionSurfaceV1
+    : null;
+  const compiledEvidenceLatestDecisionPolicyRaw = compiledEvidence && isRecord(compiledEvidence.latest_decision_policy)
+    ? compiledEvidence.latest_decision_policy as unknown as SubmissionCompiledEvidenceDecisionPolicyV1
+    : null;
+  const compiledEvidenceLatestDecisionPolicy = compiledEvidenceLatestDecisionPolicyRaw
+    ?? resolveCompiledEvidenceDecisionPolicy(compiledEvidenceLatestReview);
+  const parsedCompiledEvidenceLatestDecisionSnapshot = parseSubmissionCompiledEvidenceDecisionSnapshot(
+    compiledEvidence?.latest_decision_snapshot,
+  );
+  const compiledEvidenceLatestDecisionSnapshot = buildCompiledEvidenceDecisionSnapshot({
+    action: 'arena_manager_autopilot',
+    decisionPolicy: compiledEvidenceLatestDecisionPolicy,
+    capturedAt: parsedCompiledEvidenceLatestDecisionSnapshot?.captured_at,
+  });
+  const compiledEvidenceDecisionState = compiledEvidenceLatestDecisionPolicy.decision;
 
   const guardrails = {
     min_runs: 2,
@@ -27241,6 +27958,23 @@ async function buildArenaManagerAutopilotPayload(
     });
   }
 
+  const compiledEvidenceDecisionViolationCode = compiledEvidenceDecisionState === 'fix_required'
+    ? 'ARENA_AUTOPILOT_COMPILED_EVIDENCE_FIX_REQUIRED'
+    : compiledEvidenceDecisionState === 'manual_review_required'
+      ? 'ARENA_AUTOPILOT_COMPILED_EVIDENCE_MANUAL_REVIEW_REQUIRED'
+      : compiledEvidenceDecisionState === 'unavailable'
+        ? 'ARENA_AUTOPILOT_COMPILED_EVIDENCE_UNAVAILABLE'
+        : null;
+
+  if (compiledEvidenceDecisionState !== 'approve_recommended') {
+    violations.push({
+      code: compiledEvidenceDecisionViolationCode ?? 'ARENA_AUTOPILOT_COMPILED_EVIDENCE_UNAVAILABLE',
+      message: 'Compiled evidence decision is not approve_recommended; autopilot must fail closed to manual review.',
+      value: compiledEvidenceDecisionState,
+      threshold: 'approve_recommended',
+    });
+  }
+
   const status = violations.length === 0 ? 'auto_route_enabled' : 'manual_review_required';
 
   const globalRecommendations = (() => {
@@ -27257,6 +27991,7 @@ async function buildArenaManagerAutopilotPayload(
     experiment_arm: routePayload.experiment_arm ?? null,
     default_contender_id: defaultContenderId,
     backup_contenders: backupContenders,
+    compiled_evidence_decision_state: compiledEvidenceDecisionState,
     status,
     computed_at: computedAt,
   });
@@ -27266,10 +28001,22 @@ async function buildArenaManagerAutopilotPayload(
     ? ['ARENA_AUTOPILOT_ENABLED', 'ARENA_AUTOPILOT_GUARDRAILS_PASSED', ...fleetReasonCodes]
     : ['ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED', ...fleetReasonCodes];
 
-  const compiledEvidenceLatestReview = compiledEvidence && isRecord(compiledEvidence.latest_review)
-    ? compiledEvidence.latest_review
-    : null;
-  const compiledEvidencePosture = d1String(compiledEvidenceLatestReview?.posture) ?? null;
+  switch (compiledEvidenceDecisionState) {
+    case 'approve_recommended':
+      reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_DECISION_APPROVE_RECOMMENDED');
+      break;
+    case 'manual_review_required':
+      reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_DECISION_MANUAL_REVIEW_REQUIRED');
+      break;
+    case 'fix_required':
+      reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_DECISION_FIX_REQUIRED');
+      break;
+    default:
+      reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_DECISION_UNAVAILABLE');
+      break;
+  }
+
+  const compiledEvidencePosture = compiledEvidenceLatestDecisionSnapshot.posture;
   if (compiledEvidencePosture === 'authoritative_non_pass') {
     reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_NON_PASS');
   } else if (compiledEvidencePosture === 'authoritative_unverified_or_invalid') {
@@ -27278,6 +28025,11 @@ async function buildArenaManagerAutopilotPayload(
     reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_PASS');
   } else {
     reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_UNAVAILABLE');
+  }
+
+  if (compiledEvidenceDecisionViolationCode) {
+    reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_BLOCKED');
+    reasonCodes.push(compiledEvidenceDecisionViolationCode);
   }
 
   if (circuitStatus !== null) {
@@ -27305,8 +28057,8 @@ async function buildArenaManagerAutopilotPayload(
     route: {
       recommended,
       backups: backupsRaw,
-      reason_codes: Array.isArray(routePayload.reason_codes)
-        ? routePayload.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+      reason_codes: Array.isArray(recommended.reason_codes)
+        ? recommended.reason_codes.filter((entry): entry is string => typeof entry === 'string')
         : [],
     },
     fleet_match: fleetMatch,
@@ -27317,7 +28069,15 @@ async function buildArenaManagerAutopilotPayload(
       guardrails,
       violations,
       reason_codes: dedupeStrings(reasonCodes),
-      compiled_evidence: compiledEvidence,
+      compiled_evidence: {
+        ...(compiledEvidence ?? {}),
+        latest_review: compiledEvidenceLatestReview,
+        latest_decision_policy: compiledEvidenceLatestDecisionPolicy,
+        latest_decision_snapshot: compiledEvidenceLatestDecisionSnapshot,
+        decision_state: compiledEvidenceDecisionState,
+        blocked: compiledEvidenceDecisionState !== 'approve_recommended',
+        blocking_reason_code: compiledEvidenceDecisionViolationCode,
+      },
       circuit_breaker: circuit
         ? {
             status: circuitStatus,
@@ -27424,10 +28184,20 @@ function buildArenaAutopilotPreview(
     : [];
 
   const compiledEvidenceReview = delegationInsights && isRecord(delegationInsights.compiled_evidence_review)
-    ? delegationInsights.compiled_evidence_review
+    ? delegationInsights.compiled_evidence_review as unknown as SubmissionCompiledEvidenceDecisionSurfaceV1
     : managerRouting && isRecord(managerRouting.compiled_evidence_review)
-      ? managerRouting.compiled_evidence_review
+      ? managerRouting.compiled_evidence_review as unknown as SubmissionCompiledEvidenceDecisionSurfaceV1
       : null;
+
+  const compiledEvidenceDecisionPolicy = resolveCompiledEvidenceDecisionPolicy(compiledEvidenceReview);
+  const parsedCompiledEvidenceDecisionSnapshot = parseSubmissionCompiledEvidenceDecisionSnapshot(
+    delegationInsights?.compiled_evidence_decision_snapshot,
+  ) ?? parseSubmissionCompiledEvidenceDecisionSnapshot(managerRouting?.compiled_evidence_decision_snapshot);
+  const compiledEvidenceDecisionSnapshot = buildCompiledEvidenceDecisionSnapshot({
+    action: 'arena_manager_autopilot',
+    decisionPolicy: compiledEvidenceDecisionPolicy,
+    capturedAt: parsedCompiledEvidenceDecisionSnapshot?.captured_at ?? run.updated_at,
+  });
 
   const totals = isRecord(calibration.totals) ? calibration.totals : null;
   const winnerStability = Array.isArray(calibration.winner_stability)
@@ -27451,10 +28221,23 @@ function buildArenaAutopilotPreview(
   if (reworkRate > guardrails.max_rework_rate) violations.push('ARENA_AUTOPILOT_HIGH_REWORK_RATE');
   if (stabilityRatio < guardrails.min_winner_stability_ratio) violations.push('ARENA_AUTOPILOT_LOW_WINNER_STABILITY');
 
+  const decisionState = compiledEvidenceDecisionPolicy.decision;
+  if (decisionState !== 'approve_recommended') {
+    violations.push('ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_BLOCKED');
+  }
+
   const status = violations.length === 0 ? 'auto_route_enabled' : 'manual_review_required';
 
-  const compiledEvidencePosture = d1String(compiledEvidenceReview?.posture) ?? 'unavailable';
-  const compiledEvidenceReasonCode = compiledEvidencePosture === 'authoritative_non_pass'
+  const compiledEvidenceDecisionReasonCode = decisionState === 'approve_recommended'
+    ? 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_DECISION_APPROVE_RECOMMENDED'
+    : decisionState === 'manual_review_required'
+      ? 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_DECISION_MANUAL_REVIEW_REQUIRED'
+      : decisionState === 'fix_required'
+        ? 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_DECISION_FIX_REQUIRED'
+        : 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_DECISION_UNAVAILABLE';
+
+  const compiledEvidencePosture = compiledEvidenceDecisionSnapshot.posture;
+  const compiledEvidencePostureReasonCode = compiledEvidencePosture === 'authoritative_non_pass'
     ? 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_NON_PASS'
     : compiledEvidencePosture === 'authoritative_unverified_or_invalid'
       ? 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_UNVERIFIED'
@@ -27478,9 +28261,12 @@ function buildArenaAutopilotPreview(
       ...(status === 'auto_route_enabled'
         ? ['ARENA_AUTOPILOT_PREVIEW_ENABLED']
         : ['ARENA_AUTOPILOT_PREVIEW_MANUAL_REVIEW']),
-      compiledEvidenceReasonCode,
+      compiledEvidenceDecisionReasonCode,
+      compiledEvidencePostureReasonCode,
+      ...(decisionState === 'approve_recommended' ? [] : ['ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_BLOCKED']),
     ]),
     compiled_evidence_review: compiledEvidenceReview,
+    compiled_evidence_decision_snapshot: compiledEvidenceDecisionSnapshot,
     violations,
   };
 }
@@ -27634,10 +28420,16 @@ async function handleListBountySubmissions(
   let latestArenaThreadForWinner: ArenaReviewThreadEntry | null = null;
   let latestArenaSummary: ArenaInlineReviewSummaryView | null = null;
   let latestArenaCompiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null;
+  let latestArenaCompiledEvidenceDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null;
   try {
     latestArenaRun = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, bounty.bounty_id);
     if (latestArenaRun) {
       latestArenaCompiledEvidenceReview = await resolveArenaRunCompiledEvidenceReview(env.BOUNTIES_DB, latestArenaRun);
+      latestArenaCompiledEvidenceDecisionSnapshot = buildCompiledEvidenceDecisionSnapshot({
+        action: 'arena_manager_route',
+        decisionPolicy: resolveCompiledEvidenceDecisionPolicy(latestArenaCompiledEvidenceReview),
+        capturedAt: latestArenaRun.updated_at,
+      });
 
       const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, latestArenaRun.run_id);
       if (latestArenaRun.winner_contender_id) {
@@ -27656,6 +28448,7 @@ async function handleListBountySubmissions(
         latestArenaWinnerContender,
         arenaExplorerBaseUrl,
         latestArenaCompiledEvidenceReview,
+        latestArenaCompiledEvidenceDecisionSnapshot,
       );
     }
   } catch (err) {
@@ -27667,6 +28460,10 @@ async function handleListBountySubmissions(
   for (const record of submissions) {
     try {
       const latest = await getLatestTestResultBySubmissionId(env.BOUNTIES_DB, record.submission_id);
+      const latestDecisionSnapshot = await getLatestSubmissionCompiledEvidenceDecisionSnapshot(env.BOUNTIES_DB, {
+        bounty_id: record.bounty_id,
+        submission_id: record.submission_id,
+      });
       const decisionCapture = buildArenaDecisionCaptureView(
         record,
         latestArenaRun,
@@ -27688,6 +28485,7 @@ async function handleListBountySubmissions(
         arenaReviewFlow,
         assuranceEvaluation.view,
         payoutPolicy.view,
+        latestDecisionSnapshot,
       ));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -27789,12 +28587,18 @@ async function handleGetSubmissionDetail(
   let latestArenaWinnerContender: ArenaContenderResult | null = null;
   let latestArenaThreadForWinner: ArenaReviewThreadEntry | null = null;
   let latestArenaCompiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null;
+  let latestArenaCompiledEvidenceDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null;
 
   try {
     latestArenaRun = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, submission.bounty_id);
     if (latestArenaRun) {
       latestArenaPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, latestArenaRun);
       latestArenaCompiledEvidenceReview = await resolveArenaRunCompiledEvidenceReview(env.BOUNTIES_DB, latestArenaRun);
+      latestArenaCompiledEvidenceDecisionSnapshot = buildCompiledEvidenceDecisionSnapshot({
+        action: 'arena_manager_route',
+        decisionPolicy: resolveCompiledEvidenceDecisionPolicy(latestArenaCompiledEvidenceReview),
+        capturedAt: latestArenaRun.updated_at,
+      });
 
       const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, latestArenaRun.run_id);
       if (latestArenaRun.winner_contender_id) {
@@ -27813,6 +28617,7 @@ async function handleGetSubmissionDetail(
         latestArenaWinnerContender,
         arenaExplorerBaseUrl,
         latestArenaCompiledEvidenceReview,
+        latestArenaCompiledEvidenceDecisionSnapshot,
       );
     }
   } catch (err) {
@@ -27842,12 +28647,25 @@ async function handleGetSubmissionDetail(
 
   const assuranceEvaluation = evaluateSubmissionAssuranceRequirements(bountyAssuranceRequirements, submission);
   const payoutPolicy = evaluateSubmissionPayoutPolicy(bounty, submission, assuranceEvaluation.view);
+
+  let latestDecisionSnapshot: SubmissionCompiledEvidenceDecisionSnapshotV1 | null = null;
+  try {
+    latestDecisionSnapshot = await getLatestSubmissionCompiledEvidenceDecisionSnapshot(env.BOUNTIES_DB, {
+      bounty_id: submission.bounty_id,
+      submission_id: submission.submission_id,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
   const view = toSubmissionDetailView(
     submission,
     latestTest,
     arenaReviewFlow,
     assuranceEvaluation.view,
     payoutPolicy.view,
+    latestDecisionSnapshot,
   );
   if (latestArenaPayload) {
     view.arena = scopeArenaPayloadCompiledEvidenceToSubmission(latestArenaPayload, latestArenaRun, submission);
