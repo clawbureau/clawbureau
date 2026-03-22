@@ -1,0 +1,51 @@
+{
+  "urm_version": "1",
+  "urm_id": "urm_f9cd3877-2c05-4847-ab3b-81d23e9805cf",
+  "run_id": "run_e20af419-c238-401a-a893-5e585a6f1b14",
+  "agent_did": "did:key:z6MkiEwLkyLdE6Tyab7vaQpEc2HTQNy48dpqikFskFgv58gy",
+  "issued_at": "2026-03-22T17:36:56.463Z",
+  "harness": {
+    "id": "pi",
+    "version": "1.0.0",
+    "runtime": "host",
+    "config_hash_b64u": "EKeb0ViOiqlpPvvBLO1Xc3p-rbjcPf4lIl2m9TM414o"
+  },
+  "inputs": [
+    {
+      "type": "command",
+      "hash_b64u": "CbE09-F1smA0PR8ejvSgpGUmqqThA_9eo_99_J16Mvw",
+      "metadata": {
+        "command": "bash -lc node scripts/ops/generate-e2e-demo-snapshots.mjs && node scripts/ops/generate-e2e-demo-registry.mjs && ./node_modules/.bin/tsc -p services/clawea-www/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p services/clawsig-explorer/tsconfig.json --noEmit && git diff --check"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "type": "exit_code",
+      "hash_b64u": "X-zrZv_IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V-k",
+      "metadata": {
+        "exitCode": 0
+      }
+    },
+    {
+      "type": "trust_pulse",
+      "hash_b64u": "2jSkGM07pRQ0pxu8WmBGgY6-Xc1AcNYNq9Dq7-y1rz4",
+      "content_type": "application/json",
+      "metadata": {
+        "schema": "https://schemas.clawbureau.org/claw.poh.trust_pulse.v1.json",
+        "artifact_hash_b64u": "2jSkGM07pRQ0pxu8WmBGgY6-Xc1AcNYNq9Dq7-y1rz4",
+        "evidence_class": "self_reported",
+        "tier_uplift": false
+      }
+    }
+  ],
+  "event_chain_root_hash_b64u": "VRliXQu7uTTYR5mPJwFWU39VEetL3IG0HEg-aOpCtWo",
+  "metadata": {
+    "trust_pulse": {
+      "schema": "https://schemas.clawbureau.org/claw.poh.trust_pulse.v1.json",
+      "artifact_hash_b64u": "2jSkGM07pRQ0pxu8WmBGgY6-Xc1AcNYNq9Dq7-y1rz4",
+      "evidence_class": "self_reported",
+      "tier_uplift": false
+    }
+  }
+}
