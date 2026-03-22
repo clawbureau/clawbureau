@@ -4,9 +4,12 @@ import {
   compileAndSignCompiledEvidenceReport,
   verifyCompiledEvidenceReport,
 } from '../src/verify-compiled-report';
+import { jcsCanonicalize } from '../src/jcs';
 
 const BASE58_ALPHABET =
   '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER =
+  'NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.';
 
 function base58Encode(bytes: Uint8Array): string {
   if (bytes.length === 0) return '';
@@ -82,6 +85,42 @@ function mutateBase64Url(input: string): string {
   if (input.length === 0) return 'A';
   const head = input[0] === 'A' ? 'B' : 'A';
   return `${head}${input.slice(1)}`;
+}
+
+async function sha256B64uFromCanonical(value: unknown): Promise<string> {
+  const canonical = jcsCanonicalize(value);
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(canonical),
+  );
+  return Buffer.from(new Uint8Array(digest)).toString('base64url');
+}
+
+async function importPkcs8PrivateKey(pkcs8B64u: string): Promise<CryptoKey> {
+  const bytes = Buffer.from(pkcs8B64u, 'base64url');
+  return crypto.subtle.importKey('pkcs8', bytes, { name: 'Ed25519' }, false, ['sign']);
+}
+
+async function resignEnvelopeWithPayload(
+  envelope: Record<string, unknown>,
+  signerPrivateKeyPkcs8B64u: string,
+): Promise<void> {
+  const payloadHashB64u = await sha256B64uFromCanonical(envelope.payload);
+  const signerKey = await importPkcs8PrivateKey(signerPrivateKeyPkcs8B64u);
+  const signature = await crypto.subtle.sign(
+    'Ed25519',
+    signerKey,
+    new TextEncoder().encode(payloadHashB64u),
+  );
+
+  envelope.payload_hash_b64u = payloadHashB64u;
+  envelope.signature_b64u = Buffer.from(new Uint8Array(signature)).toString('base64url');
+}
+
+function authoritativeReportView(payload: Record<string, unknown>): Record<string, unknown> {
+  const clone = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
+  delete clone.narrative;
+  return clone;
 }
 
 function buildPayload() {
@@ -261,6 +300,147 @@ describe('compiled evidence report compile/verify', () => {
     expect(compiled.result.status).toBe('INVALID');
     expect(compiled.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
     expect(compiled.error?.field).toBe('payload.overall_status');
+  });
+
+  it('fails closed on narrative authoritative/disclaimer/binding mismatches', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 18;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const compiledBase = await compileAndSignCompiledEvidenceReport({
+      payload: buildPayload(),
+      signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+      },
+    });
+
+    expect(compiledBase.result.status).toBe('VALID');
+
+    const canonicalPayload = JSON.parse(
+      JSON.stringify(compiledBase.envelope!.payload),
+    ) as Record<string, unknown>;
+
+    const narrativeBase = {
+      narrative_version: '1',
+      report_id: String(canonicalPayload.report_id),
+      generated_at: String(canonicalPayload.compiled_at),
+      authoritative: false,
+      disclaimer: COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER,
+      authoritative_matrix_hash_b64u: String(canonicalPayload.matrix_hash_b64u),
+      authoritative_report_hash_b64u: await sha256B64uFromCanonical(
+        authoritativeReportView(canonicalPayload),
+      ),
+      text: 'Deterministic non-authoritative narrative summary.',
+    };
+
+    const authoritativeMismatch = await compileAndSignCompiledEvidenceReport({
+      payload: {
+        ...canonicalPayload,
+        narrative: {
+          ...narrativeBase,
+          authoritative: true,
+        },
+      },
+      signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+      },
+    });
+
+    expect(authoritativeMismatch.result.status).toBe('INVALID');
+    expect(authoritativeMismatch.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
+    expect(authoritativeMismatch.error?.field).toBe('payload.narrative.authoritative');
+
+    const disclaimerMismatch = await compileAndSignCompiledEvidenceReport({
+      payload: {
+        ...canonicalPayload,
+        narrative: {
+          ...narrativeBase,
+          disclaimer: 'Narrative is authoritative now.',
+        },
+      },
+      signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+      },
+    });
+
+    expect(disclaimerMismatch.result.status).toBe('INVALID');
+    expect(disclaimerMismatch.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
+    expect(disclaimerMismatch.error?.field).toBe('payload.narrative.disclaimer');
+
+    const bindingMismatch = await compileAndSignCompiledEvidenceReport({
+      payload: {
+        ...canonicalPayload,
+        narrative: {
+          ...narrativeBase,
+          authoritative_report_hash_b64u: mutateBase64Url(
+            narrativeBase.authoritative_report_hash_b64u,
+          ),
+        },
+      },
+      signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+      },
+    });
+
+    expect(bindingMismatch.result.status).toBe('INVALID');
+    expect(bindingMismatch.error?.code).toBe('HASH_MISMATCH');
+    expect(bindingMismatch.error?.field).toBe(
+      'payload.narrative.authoritative_report_hash_b64u',
+    );
+  });
+
+  it('treats narrative text as non-authoritative and preserves authoritative outcomes', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 19;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const payload = buildPayload();
+    payload.overall_status = 'FAIL';
+    payload.control_results[0] = {
+      ...payload.control_results[0],
+      status: 'FAIL',
+      reason_codes: ['CONTROL_PREDICATE_FAILED'],
+    };
+
+    const compiled = await compileAndSignCompiledEvidenceReport({
+      payload,
+      signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+      },
+    });
+
+    expect(compiled.result.status).toBe('VALID');
+
+    const envelope = JSON.parse(JSON.stringify(compiled.envelope)) as Record<string, unknown>;
+    const envelopePayload = envelope.payload as Record<string, unknown>;
+
+    const narrative = {
+      narrative_version: '1',
+      report_id: String(envelopePayload.report_id),
+      generated_at: String(envelopePayload.compiled_at),
+      authoritative: false,
+      disclaimer: COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER,
+      authoritative_matrix_hash_b64u: String(envelopePayload.matrix_hash_b64u),
+      authoritative_report_hash_b64u: await sha256B64uFromCanonical(
+        authoritativeReportView(envelopePayload),
+      ),
+      text: 'Narrative claim: all controls passed. This claim is non-authoritative.',
+    };
+
+    envelopePayload.narrative = narrative;
+    await resignEnvelopeWithPayload(envelope, signer.privateKeyPkcs8B64u);
+
+    const verified = await verifyCompiledEvidenceReport(envelope);
+    expect(verified.result.status).toBe('VALID');
+    expect((envelopePayload.overall_status as string)).toBe('FAIL');
+    expect(
+      (envelopePayload.control_results as Array<Record<string, unknown>>)[0]?.status,
+    ).toBe('FAIL');
   });
 
   it('returns deterministic SIGNATURE_INVALID on signature mismatch', async () => {

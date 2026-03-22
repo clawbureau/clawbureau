@@ -127,6 +127,14 @@ function extractWaiversInput(raw: unknown): unknown[] | undefined {
   return raw.waivers;
 }
 
+function extractNarrativeRuntime(
+  raw: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (!isRecord(raw.narrative_runtime)) return undefined;
+  return raw.narrative_runtime;
+}
+
 function buildFactFromLooseObject(
   raw: Record<string, unknown>,
 ): AuthoritativeVerificationFact | undefined {
@@ -234,6 +242,7 @@ async function buildCompilerInput(
   const compiledReportRefs = extractCompiledReportRefs(raw);
   const compiledReportSigner = extractCompiledReportSigner(raw);
   const waivers = extractWaiversInput(raw);
+  const narrativeRuntime = extractNarrativeRuntime(raw);
 
   const compilerInput: Record<string, unknown> = {
     compiler_input_version: '1',
@@ -263,6 +272,10 @@ async function buildCompilerInput(
 
   if (compiledReportSigner) {
     compilerInput.compiled_report_signer = compiledReportSigner;
+  }
+
+  if (narrativeRuntime) {
+    compilerInput.narrative_runtime = narrativeRuntime;
   }
 
   return compilerInput;

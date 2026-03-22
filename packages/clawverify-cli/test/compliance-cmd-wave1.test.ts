@@ -8,6 +8,35 @@ import { jcsCanonicalize } from '@clawbureau/clawverify-core';
 import { runComplianceReport } from '../src/compliance-cmd.js';
 import { verifyCompiledReportFromFile } from '../src/verify.js';
 
+interface CompiledReportNarrativeOutput {
+  narrative_version: string;
+  report_id: string;
+  generated_at: string;
+  authoritative: boolean;
+  disclaimer: string;
+  authoritative_matrix_hash_b64u: string;
+  authoritative_report_hash_b64u: string;
+  text: string;
+  generator_provider?: string;
+  generator_model?: string;
+}
+
+interface CompiledReportOutput {
+  report_id: string;
+  compiler_version: string;
+  overall_status: string;
+  matrix_hash_b64u: string;
+  evidence_refs: Record<string, string>;
+  control_results: Array<{
+    control_id: string;
+    status: string;
+    reason_codes: string[];
+    evidence_hashes_b64u: string[];
+    waiver_applied: boolean;
+  }>;
+  narrative?: CompiledReportNarrativeOutput;
+}
+
 interface CompilerOutput {
   runtime: {
     state: string;
@@ -18,27 +47,14 @@ interface CompilerOutput {
     generated_at: string;
     controls: Array<{ control_id: string; status: string; reason_code?: string }>;
   };
-  compiled_report?: {
-    report_id: string;
-    compiler_version: string;
-    overall_status: string;
-    matrix_hash_b64u: string;
-    evidence_refs: Record<string, string>;
-    control_results: Array<{
-      control_id: string;
-      status: string;
-      reason_codes: string[];
-      evidence_hashes_b64u: string[];
-      waiver_applied: boolean;
-    }>;
-  };
+  compiled_report?: CompiledReportOutput;
   compiled_report_envelope?: {
     envelope_type: string;
     payload_hash_b64u: string;
     signature_b64u: string;
     signer_did: string;
     issued_at: string;
-    payload: Record<string, unknown>;
+    payload: CompiledReportOutput;
   };
   failure?: {
     reason_code: string;
@@ -47,6 +63,8 @@ interface CompilerOutput {
 }
 
 const VERIFIED_AT = '2026-01-01T00:00:00.000Z';
+const COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER =
+  'NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.';
 const BASE58_ALPHABET =
   '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
@@ -135,6 +153,39 @@ async function sha256B64uFromCanonical(value: unknown): Promise<string> {
 async function importPkcs8PrivateKey(pkcs8B64u: string): Promise<CryptoKey> {
   const bytes = Buffer.from(pkcs8B64u, 'base64url');
   return crypto.subtle.importKey('pkcs8', bytes, { name: 'Ed25519' }, false, ['sign']);
+}
+
+function authoritativeReportView(
+  report: CompiledReportOutput,
+): Omit<CompiledReportOutput, 'narrative'> {
+  const { narrative: _ignoredNarrative, ...authoritative } = report;
+  return authoritative;
+}
+
+async function authoritativeReportHashB64u(
+  report: CompiledReportOutput,
+): Promise<string> {
+  return sha256B64uFromCanonical(authoritativeReportView(report));
+}
+
+async function resignCompiledEnvelope(
+  envelope: {
+    payload: CompiledReportOutput;
+    payload_hash_b64u: string;
+    signature_b64u: string;
+  },
+  signerPrivateKeyPkcs8B64u: string,
+): Promise<void> {
+  const payloadHashB64u = await sha256B64uFromCanonical(envelope.payload);
+  const signerKey = await importPkcs8PrivateKey(signerPrivateKeyPkcs8B64u);
+  const signature = await crypto.subtle.sign(
+    'Ed25519',
+    signerKey,
+    new TextEncoder().encode(payloadHashB64u),
+  );
+
+  envelope.payload_hash_b64u = payloadHashB64u;
+  envelope.signature_b64u = Buffer.from(new Uint8Array(signature)).toString('base64url');
 }
 
 async function makeSignedWaiver(args: {
@@ -488,6 +539,293 @@ describe('runComplianceReport Wave-1 authoritative compiler', () => {
     expect(out1.compiled_report_envelope).toEqual(out2.compiled_report_envelope);
     expect(out1.compiled_report_envelope?.signer_did).toBe(signer.did);
     expect(out1.compiled_report_envelope?.issued_at).toBe(VERIFIED_AT);
+  });
+
+  it('emits optional non-authoritative narrative plane with stable authoritative bindings when enabled', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 9;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const fixture = {
+      envelope: {
+        payload: {
+          agent_did: signer.did,
+          event_chain: [{ event_id: 'evt-narrative-enabled-1' }],
+          receipts: [{ payload: { receipt_id: 'gw-narrative-enabled-1', model: 'model-approved' } }],
+          tool_receipts: [{ receipt_id: 'tool-narrative-enabled-1', tool_name: 'edit' }],
+          side_effect_receipts: [{ receipt_id: 'se-narrative-enabled-1', effect_class: 'network_egress' }],
+          human_approval_receipts: [{ receipt_id: 'ha-narrative-enabled-1', approval_type: 'explicit_approve' }],
+        },
+      },
+      policy: {
+        policy_hash_b64u: 'policy-hash',
+        allowed_models: ['model-approved'],
+      },
+      narrative_runtime: {
+        enabled: true,
+        generator_provider: 'clawcompiler-runtime',
+        generator_model: 'narrative-v1-deterministic',
+      },
+      verification_fact: {
+        status: 'VALID',
+        reason_code: 'OK',
+        reason: 'Proof bundle verified successfully',
+        verified_at: VERIFIED_AT,
+        verifier: 'clawverify-cli-test',
+        agent_did: signer.did,
+      },
+      compiled_report_signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+        issued_at: VERIFIED_AT,
+      },
+    };
+
+    const out = await runComplianceFixture(fixture, 'out-narrative-enabled.json');
+    const compiledReport = out.compiled_report;
+
+    expect(compiledReport).toBeDefined();
+    expect(compiledReport?.narrative).toBeDefined();
+    expect(compiledReport?.narrative?.authoritative).toBe(false);
+    expect(compiledReport?.narrative?.disclaimer).toBe(
+      COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER,
+    );
+    expect(compiledReport?.narrative?.report_id).toBe(compiledReport?.report_id);
+    expect(compiledReport?.narrative?.authoritative_matrix_hash_b64u).toBe(
+      compiledReport?.matrix_hash_b64u,
+    );
+
+    const authoritativeHash = await authoritativeReportHashB64u(
+      compiledReport as CompiledReportOutput,
+    );
+    expect(compiledReport?.narrative?.authoritative_report_hash_b64u).toBe(
+      authoritativeHash,
+    );
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clawverify-narrative-happy-'));
+    const envelopePath = path.join(tmpDir, 'compiled-envelope-narrative-enabled.json');
+    await fs.writeFile(
+      envelopePath,
+      JSON.stringify({ envelope: out.compiled_report_envelope }, null, 2),
+      'utf8',
+    );
+
+    const verified = await verifyCompiledReportFromFile({ inputPath: envelopePath });
+    expect(verified.status).toBe('PASS');
+    expect(verified.reason_code).toBe('OK');
+  });
+
+  it('respects policy/config gates that disable narrative generation', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 13;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const fixture = {
+      envelope: {
+        payload: {
+          agent_did: signer.did,
+          event_chain: [{ event_id: 'evt-narrative-disabled-1' }],
+          receipts: [{ payload: { receipt_id: 'gw-narrative-disabled-1', model: 'model-approved' } }],
+          tool_receipts: [{ receipt_id: 'tool-narrative-disabled-1', tool_name: 'edit' }],
+          side_effect_receipts: [{ receipt_id: 'se-narrative-disabled-1', effect_class: 'network_egress' }],
+          human_approval_receipts: [{ receipt_id: 'ha-narrative-disabled-1', approval_type: 'explicit_approve' }],
+        },
+      },
+      policy: {
+        policy_hash_b64u: 'policy-hash',
+        allowed_models: ['model-approved'],
+        disable_narrative_generation: true,
+      },
+      narrative_runtime: {
+        enabled: true,
+        generator_provider: 'clawcompiler-runtime',
+        generator_model: 'narrative-v1-deterministic',
+      },
+      verification_fact: {
+        status: 'VALID',
+        reason_code: 'OK',
+        reason: 'Proof bundle verified successfully',
+        verified_at: VERIFIED_AT,
+        verifier: 'clawverify-cli-test',
+        agent_did: signer.did,
+      },
+      compiled_report_signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+        issued_at: VERIFIED_AT,
+      },
+    };
+
+    const out = await runComplianceFixture(fixture, 'out-narrative-disabled.json');
+
+    expect(out.runtime.state).toBe('COMPILED_PASS');
+    expect(out.compiled_report?.narrative).toBeUndefined();
+  });
+
+  it('fails closed on narrative disclaimer/authoritative/binding mismatches', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 17;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const fixture = {
+      envelope: {
+        payload: {
+          agent_did: signer.did,
+          event_chain: [{ event_id: 'evt-narrative-mismatch-1' }],
+          receipts: [{ payload: { receipt_id: 'gw-narrative-mismatch-1', model: 'model-approved' } }],
+          tool_receipts: [{ receipt_id: 'tool-narrative-mismatch-1', tool_name: 'edit' }],
+          side_effect_receipts: [{ receipt_id: 'se-narrative-mismatch-1', effect_class: 'network_egress' }],
+          human_approval_receipts: [{ receipt_id: 'ha-narrative-mismatch-1', approval_type: 'explicit_approve' }],
+        },
+      },
+      policy: {
+        policy_hash_b64u: 'policy-hash',
+        allowed_models: ['model-approved'],
+      },
+      narrative_runtime: {
+        enabled: true,
+      },
+      verification_fact: {
+        status: 'VALID',
+        reason_code: 'OK',
+        reason: 'Proof bundle verified successfully',
+        verified_at: VERIFIED_AT,
+        verifier: 'clawverify-cli-test',
+        agent_did: signer.did,
+      },
+      compiled_report_signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+        issued_at: VERIFIED_AT,
+      },
+    };
+
+    const out = await runComplianceFixture(fixture, 'out-narrative-mismatch-base.json');
+    expect(out.compiled_report_envelope).toBeDefined();
+
+    const baseEnvelope = JSON.parse(
+      JSON.stringify(out.compiled_report_envelope),
+    ) as NonNullable<CompilerOutput['compiled_report_envelope']>;
+
+    const variants: Array<{
+      name: string;
+      mutate: (payload: CompiledReportOutput) => void;
+      expectedReasonCode: string;
+    }> = [
+      {
+        name: 'authoritative-flag',
+        mutate: (payload) => {
+          if (!payload.narrative) throw new Error('expected narrative');
+          payload.narrative.authoritative = true;
+        },
+        expectedReasonCode: 'SCHEMA_VALIDATION_FAILED',
+      },
+      {
+        name: 'disclaimer',
+        mutate: (payload) => {
+          if (!payload.narrative) throw new Error('expected narrative');
+          payload.narrative.disclaimer = 'Narrative is authoritative now.';
+        },
+        expectedReasonCode: 'SCHEMA_VALIDATION_FAILED',
+      },
+      {
+        name: 'binding-hash',
+        mutate: (payload) => {
+          if (!payload.narrative) throw new Error('expected narrative');
+          payload.narrative.authoritative_report_hash_b64u = mutateBase64Url(
+            payload.narrative.authoritative_report_hash_b64u,
+          );
+        },
+        expectedReasonCode: 'HASH_MISMATCH',
+      },
+    ];
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clawverify-narrative-mismatch-'));
+
+    for (const variant of variants) {
+      const envelope = JSON.parse(
+        JSON.stringify(baseEnvelope),
+      ) as NonNullable<CompilerOutput['compiled_report_envelope']>;
+      variant.mutate(envelope.payload);
+      await resignCompiledEnvelope(envelope, signer.privateKeyPkcs8B64u);
+
+      const envelopePath = path.join(tmpDir, `compiled-envelope-${variant.name}.json`);
+      await fs.writeFile(envelopePath, JSON.stringify({ envelope }, null, 2), 'utf8');
+
+      const verification = await verifyCompiledReportFromFile({ inputPath: envelopePath });
+      expect(verification.status).toBe('FAIL');
+      expect(verification.reason_code).toBe(variant.expectedReasonCode);
+    }
+  });
+
+  it('keeps authoritative outcomes unchanged even when narrative text conflicts', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 19;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const fixture = {
+      envelope: {
+        payload: {
+          agent_did: signer.did,
+          receipts: [{ payload: { receipt_id: 'gw-narrative-conflict-1', model: 'model-approved' } }],
+          side_effect_receipts: [{ receipt_id: 'se-narrative-conflict-1', effect_class: 'network_egress' }],
+        },
+      },
+      policy: {
+        policy_hash_b64u: 'policy-hash',
+        allowed_models: ['model-approved'],
+      },
+      narrative_runtime: {
+        enabled: true,
+      },
+      verification_fact: {
+        status: 'VALID',
+        reason_code: 'OK',
+        reason: 'Proof bundle verified successfully',
+        verified_at: VERIFIED_AT,
+        verifier: 'clawverify-cli-test',
+        agent_did: signer.did,
+      },
+      compiled_report_signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+        issued_at: VERIFIED_AT,
+      },
+    };
+
+    const out = await runComplianceFixture(fixture, 'out-narrative-conflict.json');
+    expect(out.runtime.state).toBe('COMPILED_FAIL');
+    expect(out.compiled_report?.overall_status).toBe('FAIL_CLOSED_INVALID_EVIDENCE');
+    expect(
+      out.compiled_report?.control_results.some(
+        (control) => control.status === 'FAIL_CLOSED_INVALID_EVIDENCE',
+      ),
+    ).toBe(true);
+
+    const envelope = JSON.parse(
+      JSON.stringify(out.compiled_report_envelope),
+    ) as NonNullable<CompilerOutput['compiled_report_envelope']>;
+
+    if (!envelope.payload.narrative) {
+      throw new Error('expected narrative payload for conflict test');
+    }
+
+    envelope.payload.narrative.text =
+      'Narrative claim: everything passed. This claim is non-authoritative.';
+    await resignCompiledEnvelope(envelope, signer.privateKeyPkcs8B64u);
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clawverify-narrative-conflict-'));
+    const envelopePath = path.join(tmpDir, 'compiled-envelope-narrative-conflict.json');
+    await fs.writeFile(envelopePath, JSON.stringify({ envelope }, null, 2), 'utf8');
+
+    const verification = await verifyCompiledReportFromFile({ inputPath: envelopePath });
+    expect(verification.status).toBe('PASS');
+    expect(envelope.payload.overall_status).toBe('FAIL_CLOSED_INVALID_EVIDENCE');
+    expect(
+      envelope.payload.control_results.some(
+        (control) => control.status === 'FAIL_CLOSED_INVALID_EVIDENCE',
+      ),
+    ).toBe(true);
   });
 
   it('rejects signer inputs whose private key does not match signer_did', async () => {

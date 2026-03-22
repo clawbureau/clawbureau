@@ -52,6 +52,7 @@ export {
   compileAuthoritativeComplianceWave2,
   buildCompiledEvidenceReport,
   verifyCompiledEvidenceReportEnvelope,
+  COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER,
 } from './compliance.js';
 export type {
   ComplianceFramework,
@@ -62,11 +63,13 @@ export type {
   ComplianceReport,
   CompiledEvidenceControlStatus,
   CompiledEvidenceOverallStatus,
+  CompiledEvidenceNarrative,
   CompiledEvidenceControlResult,
   CompiledEvidenceReportEvidenceRefs,
   CompiledEvidenceReport,
   CompiledEvidenceReportEnvelope,
   AuthoritativeCompiledReportSignerInput,
+  CompiledEvidenceNarrativeRuntimeInput,
   VerifyCompiledEvidenceReportEnvelopeResult,
   VerifyCompiledEvidenceReportEnvelopeError,
   VerifyCompiledEvidenceReportEnvelopeResponse,

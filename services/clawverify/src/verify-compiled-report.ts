@@ -21,6 +21,8 @@ const BASE64_URL_RE = /^[A-Za-z0-9_-]+$/;
 const COMPILED_REPORT_ID_RE = /^cer_[A-Za-z0-9._:-]+$/;
 const COMPILER_VERSION_WAVE2 = 'clawcompiler-runtime-v1-wave2';
 const COMPILER_VERSION_WAVE3 = 'clawcompiler-runtime-v1-wave3';
+const COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER =
+  'NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.';
 const WAIVER_APPLIED_REASON_CODE = 'WAIVER_APPLIED_SIGNED';
 const WAIVER_RESIDUAL_REASON_CODES = new Set([
   'RESIDUAL_COMPENSATING_CONTROL_RELIANCE',
@@ -78,6 +80,24 @@ async function computeMatrixHash(
     matrix_version: '1',
     control_results: normalizeControlResults(controlResults),
   });
+}
+
+type AuthoritativeCompiledReportView = Omit<
+  CompiledEvidenceReportPayload,
+  'narrative'
+>;
+
+function authoritativeCompiledReportView(
+  payload: CompiledEvidenceReportPayload,
+): AuthoritativeCompiledReportView {
+  const { narrative: _ignoredNarrative, ...authoritative } = payload;
+  return authoritative;
+}
+
+async function computeAuthoritativeReportHash(
+  payload: CompiledEvidenceReportPayload,
+): Promise<string> {
+  return sha256CanonicalB64u(authoritativeCompiledReportView(payload));
 }
 
 function summarizeOverallStatus(
@@ -524,6 +544,179 @@ function validatePayload(
     }
   }
 
+  if (rawPayload.narrative !== undefined) {
+    const narrative = rawPayload.narrative;
+
+    if (!isRecord(narrative)) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: 'payload.narrative must be a JSON object when present.',
+          field: 'payload.narrative',
+        },
+      };
+    }
+
+    if (narrative.narrative_version !== '1') {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: 'payload.narrative.narrative_version must equal "1".',
+          field: 'payload.narrative.narrative_version',
+        },
+      };
+    }
+
+    if (!isNonEmptyString(narrative.report_id)) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: 'payload.narrative.report_id must be a non-empty string.',
+          field: 'payload.narrative.report_id',
+        },
+      };
+    }
+
+    if (narrative.report_id !== rawPayload.report_id) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: 'payload.narrative.report_id must match payload.report_id.',
+          field: 'payload.narrative.report_id',
+        },
+      };
+    }
+
+    if (!isNonEmptyString(narrative.generated_at) || !STRICT_ISO_UTC_RE.test(narrative.generated_at)) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            'payload.narrative.generated_at must be a strict UTC ISO-8601 timestamp.',
+          field: 'payload.narrative.generated_at',
+        },
+      };
+    }
+
+    if (narrative.authoritative !== false) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: 'payload.narrative.authoritative must equal false.',
+          field: 'payload.narrative.authoritative',
+        },
+      };
+    }
+
+    if (narrative.disclaimer !== COMPILED_EVIDENCE_NARRATIVE_DISCLAIMER) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            'payload.narrative.disclaimer must match the fixed non-authoritative disclaimer contract.',
+          field: 'payload.narrative.disclaimer',
+        },
+      };
+    }
+
+    if (!isBase64UrlString(narrative.authoritative_matrix_hash_b64u, 8)) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            'payload.narrative.authoritative_matrix_hash_b64u must be base64url (min length 8).',
+          field: 'payload.narrative.authoritative_matrix_hash_b64u',
+        },
+      };
+    }
+
+    if (narrative.authoritative_matrix_hash_b64u !== rawPayload.matrix_hash_b64u) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            'payload.narrative.authoritative_matrix_hash_b64u must match payload.matrix_hash_b64u.',
+          field: 'payload.narrative.authoritative_matrix_hash_b64u',
+        },
+      };
+    }
+
+    if (!isBase64UrlString(narrative.authoritative_report_hash_b64u, 8)) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            'payload.narrative.authoritative_report_hash_b64u must be base64url (min length 8).',
+          field: 'payload.narrative.authoritative_report_hash_b64u',
+        },
+      };
+    }
+
+    if (!isNonEmptyString(narrative.text) || narrative.text.length > 20000) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: 'payload.narrative.text must be 1..20000 characters.',
+          field: 'payload.narrative.text',
+        },
+      };
+    }
+
+    if (
+      narrative.generator_provider !== undefined &&
+      !isNonEmptyString(narrative.generator_provider)
+    ) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            'payload.narrative.generator_provider, when present, must be a non-empty string.',
+          field: 'payload.narrative.generator_provider',
+        },
+      };
+    }
+
+    if (
+      narrative.generator_model !== undefined &&
+      !isNonEmptyString(narrative.generator_model)
+    ) {
+      return {
+        ok: false,
+        reason: 'Compiled evidence report payload failed schema validation.',
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            'payload.narrative.generator_model, when present, must be a non-empty string.',
+          field: 'payload.narrative.generator_model',
+        },
+      };
+    }
+  }
+
   const computedOverallStatus = summarizeOverallStatus(
     rawPayload.control_results as unknown as CompiledEvidenceControlResult[],
   );
@@ -696,6 +889,32 @@ export async function verifyCompiledEvidenceReport(
   }
 
   const payload = payloadValidation.value;
+
+  if (payload.narrative) {
+    const expectedAuthoritativeReportHash =
+      await computeAuthoritativeReportHash(payload);
+
+    if (
+      expectedAuthoritativeReportHash !==
+      payload.narrative.authoritative_report_hash_b64u
+    ) {
+      return invalidResponse(
+        now,
+        'Compiled evidence narrative binding hash mismatch.',
+        {
+          code: 'HASH_MISMATCH',
+          message:
+            'payload.narrative.authoritative_report_hash_b64u does not match canonical authoritative report hash.',
+          field: 'payload.narrative.authoritative_report_hash_b64u',
+        },
+        {
+          report_id: payload.report_id,
+          matrix_hash_b64u: payload.matrix_hash_b64u,
+          payload_hash_b64u: envelopeInput.payload_hash_b64u,
+        },
+      );
+    }
+  }
 
   const expectedMatrixHash = await computeMatrixHash(payload.control_results);
   if (expectedMatrixHash !== payload.matrix_hash_b64u) {
@@ -893,6 +1112,35 @@ export async function compileAndSignCompiledEvidenceReport(
     ...payloadValidation.value,
     matrix_hash_b64u: await computeMatrixHash(payloadValidation.value.control_results),
   };
+
+  if (normalizedPayload.narrative) {
+    if (
+      normalizedPayload.narrative.authoritative_matrix_hash_b64u !==
+      normalizedPayload.matrix_hash_b64u
+    ) {
+      return compileFailure(now, 'Compile request narrative matrix binding hash mismatch.', {
+        code: 'HASH_MISMATCH',
+        message:
+          'payload.narrative.authoritative_matrix_hash_b64u must match canonical payload.matrix_hash_b64u.',
+        field: 'payload.narrative.authoritative_matrix_hash_b64u',
+      });
+    }
+
+    const expectedAuthoritativeReportHash =
+      await computeAuthoritativeReportHash(normalizedPayload);
+
+    if (
+      expectedAuthoritativeReportHash !==
+      normalizedPayload.narrative.authoritative_report_hash_b64u
+    ) {
+      return compileFailure(now, 'Compile request narrative binding hash mismatch.', {
+        code: 'HASH_MISMATCH',
+        message:
+          'payload.narrative.authoritative_report_hash_b64u must match canonical authoritative report hash.',
+        field: 'payload.narrative.authoritative_report_hash_b64u',
+      });
+    }
+  }
 
   const payloadHash = await sha256CanonicalB64u(normalizedPayload);
 
