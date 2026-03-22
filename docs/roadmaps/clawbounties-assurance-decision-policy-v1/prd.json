@@ -15,7 +15,7 @@
         "Evaluator emits machine-readable reason codes and boundary warnings for downstream requester/arena/autopilot flows"
       ],
       "priority": 1,
-      "passes": false
+      "passes": true
     },
     {
       "id": "CBA-DP-002",
@@ -28,7 +28,7 @@
         "Approval responses preserve the compiled-evidence decision view and any override note without overstating non-authoritative evidence"
       ],
       "priority": 1,
-      "passes": false
+      "passes": true
     },
     {
       "id": "CBA-DP-003",
@@ -41,7 +41,7 @@
         "Decision-loop outputs expose deterministic compiled-evidence policy reason codes and policy snapshots"
       ],
       "priority": 2,
-      "passes": false
+      "passes": true
     },
     {
       "id": "CBA-DP-004",
@@ -71,8 +71,8 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-03-22T08:09:30Z",
-    "status": "active (0/5 shipped; seeded)",
+    "updatedAt": "2026-03-22T08:53:09Z",
+    "status": "active (3/5 shipped; Wave 1 complete)",
     "dependsOn": [
       "docs/roadmaps/clawcompiler-runtime-v1/",
       "docs/roadmaps/clawbounties-assurance-review-v1/"
