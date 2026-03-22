@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-03-21
+> **Last reviewed:** 2026-03-22
 > **Source of truth:** `docs/roadmaps/*/prd.json` + `docs/roadmaps/*/progress.txt`
 >
 > **Scope:**
@@ -14,12 +14,13 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## In progress / partially shipped
 
-- **Clawcompiler Runtime v1** (deterministic compiler runtime, signed compiled reports, first assurance pack, auditor-facing surfaces)
-  - Folder: `docs/roadmaps/clawcompiler-runtime-v1/`
-  - Status: Waves 1-3 shipped, 8/10 stories complete (PRs #516/#518/#520); Wave 4 is next
-  - Beads: `monorepo-cec2`, `monorepo-cec2.1`..`monorepo-cec2.10`
+- _No active roadmaps right now._
 
 ## Completed roadmaps
+
+- **Clawcompiler Runtime v1** (10/10 ✅ — deterministic runtime, signed compiled reports, AI execution assurance pack, waiver semantics, export/viewer integration, narrative membrane)
+  - Folder: `docs/roadmaps/clawcompiler-runtime-v1/`
+  - Status: complete (PRs #516/#518/#520/#522/#523)
 
 - **Clawsig Framework vNext** (24/24 ✅ — reliability, signed policy, attestation, marketplace enforcement, reviewer/dispute UX, DLP, cross-runtime parity, transparency, revocation)
   - Folder: `docs/roadmaps/clawsig-framework-vnext/`
@@ -62,4 +63,6 @@ Each roadmap folder should contain:
 
 Optional but recommended:
 - `oracle/<YYYY-MM-DD>/` (prompts, outputs, INDEX)
+- `specs/` (long-lived specs / protocols)
+s, INDEX)
 - `specs/` (long-lived specs / protocols)

@@ -1,7 +1,7 @@
 > **Type:** Roadmap
-> **Status:** ACTIVE
+> **Status:** COMPLETE
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-03-21
+> **Last reviewed:** 2026-03-22
 > **Source of truth:** `docs/roadmaps/clawcompiler-runtime-v1/prd.json` + `progress.txt`
 >
 > **Scope:**
@@ -43,8 +43,11 @@ Turn Clawcompiler into the service that can honestly say:
 - **Wave 3 shipped** via PR #520:
   - `CEC-RT-007` AI execution assurance control pack
   - `CEC-RT-008` waiver + compensating-control semantics
-- Current roadmap progress: **8/10 shipped stories**
-- Next up: **Wave 4** (`CEC-RT-009`..`CEC-RT-010`)
+- **Wave 4 shipped** via PRs #522/#523:
+  - `CEC-RT-009` export-pack / viewer integration
+  - `CEC-RT-010` non-authoritative narrative runtime
+- Current roadmap progress: **10/10 shipped stories**
+- Roadmap status: **complete**
 
 ## Tracks
 
@@ -107,3 +110,4 @@ verified evidence ingest -> control-pack runtime -> fail-closed compiler state m
 - The first AI execution assurance pack is useful for buyer / auditor review.
 - Waivers can only degrade outcomes conservatively and leave residual markers.
 - Export/viewer surfaces can explain compiled outcomes without weakening authoritative control results.
+.

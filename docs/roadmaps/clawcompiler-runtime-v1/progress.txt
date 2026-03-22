@@ -116,3 +116,42 @@ Started: 2026-03-21T17:45:00Z
   - Runtime v1 is now **8/10 shipped stories**.
   - Wave 4 (`CEC-RT-009`..`CEC-RT-010`) is the next dependency-cleared tranche and the first real parallel split.
 ---
+
+## 2026-03-22T01:15:00Z - Wave 4 product surfaces shipped + roadmap closed
+- What shipped
+  - Merged PR #522 — `feat(clawcompiler): add narrative runtime membrane`
+  - Merged PR #523 — `feat(clawcompiler): add compiled evidence viewer surfaces`
+  - Closed the feature lanes for:
+    - `CEC-RT-009` export-pack / viewer integration
+    - `CEC-RT-010` non-authoritative narrative runtime
+  - Added compiled-evidence export-pack/viewer/report integration in `packages/clawverify-cli/src/prove-cmd.ts`
+  - Added deterministic pack-local compiled artifact emission and reviewer-facing compiled evidence summary/report surfaces
+  - Added the optional narrative plane membrane with fixed disclaimer, authoritative hash bindings, runtime/policy gating, and fail-closed verification in core/service/schema paths
+- Reviewer + follow-up notes
+  - Lane A reviewer verdict: **PASS WITH FIXES**
+    - fixed a bug where malformed optional narrative membrane fields could collapse the authoritative compiled matrix surface in prove/export/viewer summaries
+  - Lane B reviewer verdict: **PASS**
+  - Packaging follow-up for Lane A fixed the worktree-local package resolution issue by wiring the lane to the worktree's local `clawverify-core` / `clawsig-sdk` builds before rerunning CLI validation.
+- Validation
+  - Lane A:
+    - `npm --prefix packages/clawverify-core run build`
+    - `npm --prefix packages/clawsig-sdk run build`
+    - `npm --prefix packages/clawverify-cli run typecheck`
+    - `npm --prefix packages/clawverify-cli run build`
+    - `npm --prefix packages/clawverify-cli test -- test/prove-cmd.test.ts`
+    - `git diff --check`
+  - Lane B:
+    - `npm --prefix packages/clawverify-core run typecheck`
+    - `npm --prefix packages/clawverify-core run build`
+    - `npm --prefix packages/clawsig-sdk run build`
+    - `npm --prefix packages/clawverify-cli run typecheck`
+    - `npm --prefix packages/clawverify-cli run build`
+    - `npm --prefix packages/clawverify-cli test -- test/compliance-cmd-wave1.test.ts`
+    - `npm --prefix services/clawverify run typecheck`
+    - `npm --prefix services/clawverify test -- test/compiled-report.test.ts`
+    - `npm --prefix services/clawverify test -- test/clawcompiler-schema-conformance.test.ts`
+    - `git diff --check`
+- Status
+  - Runtime v1 is now **10/10 shipped stories**.
+  - Clawcompiler Runtime v1 is complete.
+---
