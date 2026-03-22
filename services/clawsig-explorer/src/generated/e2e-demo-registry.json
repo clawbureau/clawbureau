@@ -1,0 +1,121 @@
+{
+  "generated_at": "2026-03-22T17:33:33.167Z",
+  "source_artifacts": {
+    "manifest": "artifacts/ops/e2e-demo/public/manifest.json",
+    "commit_proof_snapshot": "artifacts/ops/e2e-demo/public/commit-proof.snapshot.json",
+    "bundle_review_snapshot": "artifacts/ops/e2e-demo/public/bundle-review.snapshot.json",
+    "arena_decision_snapshot": "artifacts/ops/e2e-demo/public/arena-decision.snapshot.json"
+  },
+  "canonical_sources": {
+    "commit_proof": "proofs/feat/clawsig/human-readable-proofs/commit.sig.json",
+    "proof_bundle": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/proof-bundle.json",
+    "arena_summary": "artifacts/arena/arena_bty_arena_001/summary.json",
+    "autopilot_summary": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json",
+    "bundle_trace": "artifacts/ops/e2e-demo/traces/settlement-prod.trace.json"
+  },
+  "workflows": [
+    {
+      "id": "pr-proof",
+      "eyebrow": "Workflow 01",
+      "title": "GitHub PR proof workflow",
+      "summary": "The change itself, the commit proof, and the verification step stay in one review surface instead of being split across screenshots and side channels.",
+      "evidence": "Real artifact anchor: proofs/feat/clawsig/human-readable-proofs/commit.sig.json · DID did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW · commit:9455e07d21d20472610f9a7620c1f2183f16c79b.",
+      "references": {
+        "commit_proof_path": "proofs/feat/clawsig/human-readable-proofs/commit.sig.json",
+        "signer_did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+        "commit_message": "commit:9455e07d21d20472610f9a7620c1f2183f16c79b"
+      },
+      "metrics": [
+        {
+          "label": "Proof primitive",
+          "value": "ED25519",
+          "note": "commit-bound and offline-verifiable"
+        },
+        {
+          "label": "Artifact type",
+          "value": "message_signature",
+          "note": "checked into the repo beside the change"
+        },
+        {
+          "label": "Failure mode",
+          "value": "Fail closed",
+          "note": "wrong SHA or malformed envelope breaks trust immediately"
+        }
+      ],
+      "steps": [
+        "Agent commits code in a normal branch.",
+        "The commit SHA is signed into commit.sig.json.",
+        "The PR pipeline validates the signature before merge."
+      ]
+    },
+    {
+      "id": "bundle-review",
+      "eyebrow": "Workflow 02",
+      "title": "Proof bundle review workflow",
+      "summary": "Reviewers need a compact, repo-contained evidence view they can regenerate in CI. This bundle-review lane now comes from a traced marketplace E2E artifact instead of a local /tmp-only run.",
+      "evidence": "Real artifact anchor: artifacts/ops/e2e-demo/traces/settlement-prod.trace.json · proof bundle artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/proof-bundle.json · run run_43fec9dc-359e-42a4-a824-db94148cf171 · bundle bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0.",
+      "references": {
+        "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171",
+        "bundle_id": "bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0",
+        "proof_bundle_path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/proof-bundle.json",
+        "trace_path": "artifacts/ops/e2e-demo/traces/settlement-prod.trace.json"
+      },
+      "metrics": [
+        {
+          "label": "Smoke verdict",
+          "value": "PASS",
+          "note": "All marketplace settlement smoke steps passed"
+        },
+        {
+          "label": "Event chain",
+          "value": "7 events",
+          "note": "hash-linked timeline from the traced proof bundle"
+        },
+        {
+          "label": "Tool receipts",
+          "value": "5 http_fetch",
+          "note": "captured in a real marketplace settlement E2E artifact"
+        }
+      ],
+      "steps": [
+        "A repo-contained proof bundle is traced into a stable review snapshot.",
+        "The trace preserves run identity, event counts, tool activity, and smoke verdict.",
+        "Inspect and explorer views let reviewers move from summary into structure and drill-down context."
+      ]
+    },
+    {
+      "id": "arena-decision",
+      "eyebrow": "Workflow 03",
+      "title": "Arena decision workflow",
+      "summary": "Once a marketplace workflow fans out into multiple contenders, the UI has to show who won, why they won, and whether autopilot thresholds were actually met.",
+      "evidence": "Real artifact anchor: artifacts/arena/arena_bty_arena_001/summary.json + artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json.",
+      "references": {
+        "arena_id": "arena_bty_arena_001",
+        "arena_summary_path": "artifacts/arena/arena_bty_arena_001/summary.json",
+        "autopilot_summary_path": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json"
+      },
+      "metrics": [
+        {
+          "label": "Contenders compared",
+          "value": "3",
+          "note": "arena_bty_arena_001 compare set"
+        },
+        {
+          "label": "Winner",
+          "value": "contender_codex_pi",
+          "note": "Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (89.2750)."
+        },
+        {
+          "label": "Autopilot proof",
+          "value": "10 staging / 3 production",
+          "note": "valid pending_review thresholds met in AGP-US-060 evidence"
+        }
+      ],
+      "steps": [
+        "The arena compares contenders against one bounty decision surface.",
+        "Reason codes explain why the winner cleared policy and scoring gates.",
+        "Autopilot evidence proves live readiness instead of implying it."
+      ]
+    }
+  ]
+}

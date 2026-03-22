@@ -81,6 +81,7 @@ import { proofPointsPage } from "./pages/proof-points";
 import { resourceProtocolWhitepaperPage, resourceSecurityChecklistPage, resourceComplianceMappingPage } from "./pages/resources";
 import { securityPage, privacyPage, termsPage, docsPage, changelogPage, statusPage } from "./pages/trust-infra";
 import { caseStudiesIndexPage, caseStudyDogfoodPage } from "./pages/case-studies";
+import { e2eProofWorkflowsPage } from "./pages/e2e-proof-workflows";
 
 export interface Env {
   ARTICLES: R2Bucket;
@@ -1263,6 +1264,7 @@ export default {
     // Case studies
     if (path === "/case-studies") return await htmlWithExperiment(html(caseStudiesIndexPage()), path);
     if (path === "/case-studies/dogfood-claw-bureau") return await htmlWithExperiment(html(caseStudyDogfoodPage()), path);
+    if (path === "/case-studies/e2e-proof-workflows") return await htmlWithExperiment(html(e2eProofWorkflowsPage()), path);
 
     if (path === "/sources") {
       const manifest = await loadManifest(env);

@@ -1,0 +1,12 @@
+{
+  "snapshot_version": "1",
+  "workflow_id": "pr-proof",
+  "generated_at": "2026-03-22T17:33:32.815Z",
+  "source_path": "proofs/feat/clawsig/human-readable-proofs/commit.sig.json",
+  "source_mtime": "2026-03-22T17:32:43.328Z",
+  "did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+  "message": "commit:9455e07d21d20472610f9a7620c1f2183f16c79b",
+  "created_at": "2026-03-20T19:46:47.067Z",
+  "algorithm": "ed25519",
+  "signature_type": "message_signature"
+}

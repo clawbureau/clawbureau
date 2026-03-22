@@ -1,0 +1,15 @@
+{
+  "snapshot_version": "1",
+  "workflow_id": "arena-decision",
+  "generated_at": "2026-03-22T17:33:32.815Z",
+  "arena_summary_path": "artifacts/arena/arena_bty_arena_001/summary.json",
+  "arena_summary_mtime": "2026-03-22T17:32:42.886Z",
+  "autopilot_summary_path": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json",
+  "autopilot_summary_mtime": "2026-03-22T17:32:42.914Z",
+  "arena_id": "arena_bty_arena_001",
+  "contender_count": 3,
+  "winner_contender_id": "contender_codex_pi",
+  "winner_reason": "Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (89.2750).",
+  "staging_valid_pending_review": 10,
+  "production_valid_pending_review": 3
+}

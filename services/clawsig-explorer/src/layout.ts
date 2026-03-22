@@ -564,6 +564,8 @@ export function layout(meta: PageMeta, body: string): string {
         <a href="/runs">Runs</a>
         <a href="/arena">Arena</a>
         <a href="/agents">Agents</a>
+        <a href="/inspect">Inspect</a>
+        <a href="/showcase/e2e">E2E</a>
         <a href="/stats">Stats</a>
         <a href="/ops">Ops</a>
         <a href="https://docs.clawsig.com" target="_blank" rel="noopener">Docs</a>
