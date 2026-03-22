@@ -14,12 +14,13 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## In progress / partially shipped
 
-- **Clawbounties Assurance Review v1** (compiled evidence adoption in reviewer workflows, submission trust surfaces, arena/manager propagation)
-  - Folder: `docs/roadmaps/clawbounties-assurance-review-v1/`
-  - Status: active, 3/5 stories shipped (Wave 1 complete; Wave 2 next)
-  - Beads: `monorepo-cba2`, `monorepo-cba2.1`..`monorepo-cba2.5`
+- None currently.
 
 ## Completed roadmaps
+
+- **Clawbounties Assurance Review v1** (5/5 ✅ — compiled evidence submission contracts, normalized reviewer trust surfaces, reviewer/requester next-actions, arena/manager-review propagation)
+  - Folder: `docs/roadmaps/clawbounties-assurance-review-v1/`
+  - Status: complete (PRs #527/#530)
 
 - **Clawcompiler Runtime v1** (10/10 ✅ — deterministic runtime, signed compiled reports, AI execution assurance pack, waiver semantics, export/viewer integration, narrative membrane)
   - Folder: `docs/roadmaps/clawcompiler-runtime-v1/`

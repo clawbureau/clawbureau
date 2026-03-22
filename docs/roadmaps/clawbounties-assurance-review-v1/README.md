@@ -55,9 +55,10 @@ Turn Clawbounties submission review into a trust legibility surface that can hon
 ## Current status
 
 - Wave 1 shipped via PR #527.
-- `CBA-RV-001`, `CBA-RV-002`, and `CBA-RV-003` are complete.
-- Roadmap status is now **3/5 stories shipped**.
-- Next wave: `CBA-RV-004` requester/reviewer next-actions + approval surfaces and `CBA-RV-005` arena/manager-review propagation.
+- Wave 2 shipped via PR #530.
+- `CBA-RV-001` through `CBA-RV-005` are complete.
+- Roadmap status is now **5/5 stories shipped**.
+- Clawbounties Assurance Review v1 is complete and moves into the completed-roadmaps set.
 
 ## Success criteria
 
@@ -65,3 +66,4 @@ Turn Clawbounties submission review into a trust legibility surface that can hon
 - Reviewer surfaces distinguish authoritative matrix vs optional narrative.
 - Invalid/malformed compiled evidence is surfaced deterministically and cannot silently improve approval posture.
 - Reviewers can make better approval/reject/request-changes decisions without opening raw proof artifacts first.
+proof artifacts first.
