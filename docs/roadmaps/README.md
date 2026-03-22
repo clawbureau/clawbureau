@@ -16,7 +16,7 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 - **Clawbounties Assurance Review v1** (compiled evidence adoption in reviewer workflows, submission trust surfaces, arena/manager propagation)
   - Folder: `docs/roadmaps/clawbounties-assurance-review-v1/`
-  - Status: roadmap seeded, 0/5 stories shipped
+  - Status: active, 3/5 stories shipped (Wave 1 complete; Wave 2 next)
   - Beads: `monorepo-cba2`, `monorepo-cba2.1`..`monorepo-cba2.5`
 
 ## Completed roadmaps
