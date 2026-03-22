@@ -3,6 +3,7 @@
 - Treat compiled evidence as a separate authoritative layer from raw proof verification.
 - Narrative may help reviewers, but the marketplace must never let it override authoritative compiled control results.
 - Prefer submission detail/list improvements before broad arena/autopilot propagation.
+- Reviewer-facing compiled evidence views should compact list/detail payloads and treat reference-only attachments as unverified/unavailable rather than as provided-but-invalid authoritative reports.
 
 # Ralph Progress Log
 Started: 2026-03-22T01:25:00Z
@@ -16,4 +17,31 @@ Started: 2026-03-22T01:25:00Z
 - Notes
   - This roadmap should stay tightly tied to already-shipped compiled evidence contracts; do not invent marketplace-specific proof semantics.
   - The first tranche should improve reviewer decision speed and trust legibility before changing payout or closure policy.
+---
+
+## 2026-03-22T02:09:22Z - Wave 1 shipped (`CBA-RV-001` / `CBA-RV-002` / `CBA-RV-003`)
+- What was implemented
+  - Added deterministic submission-time compiled evidence attachment support in `services/_archived/clawbounties/src/index.ts` for:
+    - `compiled_evidence_report_envelope`
+    - `compiled_evidence_report_ref`
+  - Added fail-closed compiled evidence ingest behavior:
+    - verifier-backed envelope checks through clawverify
+    - proof-bundle hash binding checks
+    - authoritative-vs-narrative boundary handling that preserves authoritative posture when only optional narrative validation fails
+  - Persisted normalized compiled evidence reviewer summaries on submissions via migration `services/_archived/clawbounties/migrations/0031_submission_compiled_evidence_summary.sql`.
+  - Surfaced compiled evidence posture in submission detail/list APIs with compact reviewer-facing summaries.
+- Evidence
+  - Feature PR #527: `feat(clawbounties): add submission compiled evidence review summaries`
+  - Feature commit: `de5be68db38f0902b2f32ff2c121f6235fac4893`
+  - DID proof: `proofs/feat/clawbounties/CBA-RV-submission-assurance/commit.sig.json`
+  - Reviewer verdict: `PASS WITH FIXES` at `/tmp/pi-chain-runs/cba2-wave1-submission-assurance-20260322-012425/progress.md`
+- Validations
+  - `npm --prefix packages/clawverify-core run build`
+  - `cd services/_archived/clawbounties && npm run typecheck`
+  - targeted `npx tsx` runtime checks for reference-only posture, reviewer-signal filtering, and deterministic summary compaction
+  - `git diff --check`
+- Learnings for future iterations
+  - Reference-only compiled evidence attachments should be surfaced as unverified/unavailable authoritative posture, not as a provided-but-invalid compiled report.
+  - Reviewer-facing list/detail payloads need compacted non-pass/warning surfaces; raw persisted summaries are too noisy to expose directly.
+  - `INAPPLICABLE` compiled controls should still count in matrix totals but should not dominate reviewer-facing “important reason code” posture.
 ---

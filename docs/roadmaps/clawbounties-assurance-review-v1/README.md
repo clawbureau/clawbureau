@@ -52,6 +52,13 @@ Turn Clawbounties submission review into a trust legibility surface that can hon
 - `CBA-RV-004` requester/reviewer next-actions + approval surfaces
 - `CBA-RV-005` arena + manager-review compiled evidence propagation
 
+## Current status
+
+- Wave 1 shipped via PR #527.
+- `CBA-RV-001`, `CBA-RV-002`, and `CBA-RV-003` are complete.
+- Roadmap status is now **3/5 stories shipped**.
+- Next wave: `CBA-RV-004` requester/reviewer next-actions + approval surfaces and `CBA-RV-005` arena/manager-review propagation.
+
 ## Success criteria
 
 - Submission detail/list endpoints expose authoritative compiled evidence summaries when available.
