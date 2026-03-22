@@ -22,7 +22,8 @@ export type ComplianceFramework =
   | 'SOC2_Type2'
   | 'ISO27001'
   | 'EU_AI_Act'
-  | 'NIST_AI_RMF';
+  | 'NIST_AI_RMF'
+  | 'CLAW_AI_EXECUTION_ASSURANCE_V1';
 
 export type ControlStatus =
   | 'PASS'
@@ -38,7 +39,12 @@ export type EvidenceType =
   | 'wpc'
   | 'event_chain'
   | 'delegation_receipt'
-  | 'log_inclusion_proof';
+  | 'log_inclusion_proof'
+  | 'egress_policy_receipt'
+  | 'data_handling_receipt'
+  | 'coverage_attestation'
+  | 'binary_semantic_evidence_attestation'
+  | 'reviewer_signoff_receipt';
 
 export interface ControlResult {
   control_id: string;
@@ -194,6 +200,8 @@ export interface ComplianceBundleInput {
     [key: string]: unknown;
   }>;
   attestations?: unknown[];
+  coverage_attestations?: unknown[];
+  binary_semantic_evidence_attestations?: unknown[];
   metadata?: Record<string, unknown>;
 }
 
@@ -204,6 +212,25 @@ export interface CompliancePolicyInput {
   allowed_models?: string[];
   /** Minimum model identity tier required by the WPC. */
   minimum_model_identity_tier?: string;
+}
+
+export type WaiverKind = 'COMPENSATING_CONTROL' | 'HUMAN_EXCEPTION';
+
+export interface SignedControlWaiverInput {
+  waiver_version: '1';
+  waiver_id: string;
+  framework: ComplianceFramework;
+  control_id: string;
+  bundle_hash_b64u: string;
+  agent_did: string;
+  waiver_kind: WaiverKind;
+  issued_at: string;
+  expires_at: string;
+  payload_hash_b64u: string;
+  hash_algorithm: 'SHA-256';
+  signature_b64u: string;
+  algorithm: 'Ed25519';
+  signer_did: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +255,7 @@ export interface AuthoritativeCompilerInput {
   bundle: ComplianceBundleInput;
   policy?: CompliancePolicyInput;
   verification_fact: AuthoritativeVerificationFact;
+  waivers?: SignedControlWaiverInput[];
   compiled_report_refs?: Partial<CompiledEvidenceReportEvidenceRefs>;
   compiled_report_signer?: AuthoritativeCompiledReportSignerInput;
 }
@@ -240,7 +268,10 @@ export type AuthoritativeCompilerState =
 
 export interface AuthoritativeCompilerRuntime {
   runtime_version: '1';
-  engine: 'clawcompiler-runtime-v1-wave1' | 'clawcompiler-runtime-v1-wave2';
+  engine:
+    | 'clawcompiler-runtime-v1-wave1'
+    | 'clawcompiler-runtime-v1-wave2'
+    | 'clawcompiler-runtime-v1-wave3';
   deterministic: true;
   state: AuthoritativeCompilerState;
   framework?: ComplianceFramework;
@@ -275,7 +306,14 @@ const STRICT_ISO_UTC_RE =
 const BASE64_URL_RE = /^[A-Za-z0-9_-]+$/;
 const COMPILED_REPORT_ID_RE = /^cer_[A-Za-z0-9._:-]+$/;
 const COMPILER_VERSION_WAVE2 = 'clawcompiler-runtime-v1-wave2';
+const COMPILER_VERSION_WAVE3 = 'clawcompiler-runtime-v1-wave3';
 const COMPILER_MAPPING_VERSION = 'control-pack-v1';
+const AI_EXECUTION_ASSURANCE_PACK_ID = 'claw.ai_execution_assurance.v1';
+const WAIVER_APPLIED_REASON_CODE = 'WAIVER_APPLIED_SIGNED';
+const WAIVER_RESIDUAL_REASON_CODES = new Set([
+  'RESIDUAL_COMPENSATING_CONTROL_RELIANCE',
+  'RESIDUAL_HUMAN_EXCEPTION_APPLIED',
+]);
 
 interface ParseFailure {
   ok: false;
@@ -288,6 +326,7 @@ const FRAMEWORKS: ReadonlySet<ComplianceFramework> = new Set([
   'ISO27001',
   'EU_AI_Act',
   'NIST_AI_RMF',
+  'CLAW_AI_EXECUTION_ASSURANCE_V1',
 ]);
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -432,6 +471,18 @@ function parseBundleInput(
       'COMPILER_INPUT_MALFORMED_ATTESTATIONS',
       'bundle.attestations, when present, must be an array.',
     ),
+    ensureOptionalArrayField(
+      rawBundle,
+      'coverage_attestations',
+      'COMPILER_INPUT_MALFORMED_COVERAGE_ATTESTATIONS',
+      'bundle.coverage_attestations, when present, must be an array.',
+    ),
+    ensureOptionalArrayField(
+      rawBundle,
+      'binary_semantic_evidence_attestations',
+      'COMPILER_INPUT_MALFORMED_BINARY_SEMANTIC_EVIDENCE_ATTESTATIONS',
+      'bundle.binary_semantic_evidence_attestations, when present, must be an array.',
+    ),
   ];
 
   const collectionFailure = collectionChecks.find(
@@ -477,15 +528,15 @@ function parseBundleInput(
 function parsePolicyInput(
   rawPolicy: Record<string, unknown>,
 ): { ok: true; value: CompliancePolicyInput } | ParseFailure {
-  if (
-    rawPolicy.policy_hash_b64u !== undefined &&
-    typeof rawPolicy.policy_hash_b64u !== 'string'
-  ) {
-    return {
-      ok: false,
-      reason_code: 'COMPILER_INPUT_MALFORMED_POLICY_HASH',
-      reason: 'policy.policy_hash_b64u, when present, must be a string.',
-    };
+  if (rawPolicy.policy_hash_b64u !== undefined) {
+    if (!isBase64UrlString(rawPolicy.policy_hash_b64u, 8)) {
+      return {
+        ok: false,
+        reason_code: 'COMPILER_INPUT_MALFORMED_POLICY_HASH',
+        reason:
+          'policy.policy_hash_b64u, when present, must be base64url (min length 8).',
+      };
+    }
   }
 
   if (
@@ -596,6 +647,197 @@ function parseCompiledReportSignerInput(
       private_key_pkcs8_b64u: rawSigner.private_key_pkcs8_b64u,
       issued_at: rawSigner.issued_at,
     },
+  };
+}
+
+function parseSignedControlWaiverInput(
+  rawWaiver: Record<string, unknown>,
+): { ok: true; value: SignedControlWaiverInput } | ParseFailure {
+  if (rawWaiver.waiver_version !== '1') {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_VERSION',
+      reason: 'waivers[].waiver_version must equal "1".',
+    };
+  }
+
+  if (!isNonEmptyString(rawWaiver.waiver_id)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_ID',
+      reason: 'waivers[].waiver_id must be a non-empty string.',
+    };
+  }
+
+  if (!isFramework(rawWaiver.framework)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_FRAMEWORK',
+      reason: 'waivers[].framework must be a supported compliance framework identifier.',
+    };
+  }
+
+  if (!isNonEmptyString(rawWaiver.control_id)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_CONTROL_ID',
+      reason: 'waivers[].control_id must be a non-empty string.',
+    };
+  }
+
+  if (!isBase64UrlString(rawWaiver.bundle_hash_b64u, 8)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_BUNDLE_HASH',
+      reason: 'waivers[].bundle_hash_b64u must be base64url (min length 8).',
+    };
+  }
+
+  if (!isNonEmptyString(rawWaiver.agent_did)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_AGENT_DID',
+      reason: 'waivers[].agent_did must be a non-empty string.',
+    };
+  }
+
+  if (
+    rawWaiver.waiver_kind !== 'COMPENSATING_CONTROL' &&
+    rawWaiver.waiver_kind !== 'HUMAN_EXCEPTION'
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_KIND',
+      reason:
+        'waivers[].waiver_kind must be COMPENSATING_CONTROL or HUMAN_EXCEPTION.',
+    };
+  }
+
+  if (!isNonEmptyString(rawWaiver.issued_at) || !STRICT_ISO_UTC_RE.test(rawWaiver.issued_at)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_ISSUED_AT',
+      reason: 'waivers[].issued_at must be a strict UTC ISO-8601 timestamp.',
+    };
+  }
+
+  if (
+    !isNonEmptyString(rawWaiver.expires_at) ||
+    !STRICT_ISO_UTC_RE.test(rawWaiver.expires_at)
+  ) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_EXPIRES_AT',
+      reason: 'waivers[].expires_at must be a strict UTC ISO-8601 timestamp.',
+    };
+  }
+
+  if (!isBase64UrlString(rawWaiver.payload_hash_b64u, 8)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_PAYLOAD_HASH',
+      reason: 'waivers[].payload_hash_b64u must be base64url (min length 8).',
+    };
+  }
+
+  if (rawWaiver.hash_algorithm !== 'SHA-256') {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_HASH_ALGORITHM',
+      reason: 'waivers[].hash_algorithm must equal "SHA-256".',
+    };
+  }
+
+  if (rawWaiver.algorithm !== 'Ed25519') {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_ALGORITHM',
+      reason: 'waivers[].algorithm must equal "Ed25519".',
+    };
+  }
+
+  if (!isBase64UrlString(rawWaiver.signature_b64u, 8)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_SIGNATURE',
+      reason: 'waivers[].signature_b64u must be base64url (min length 8).',
+    };
+  }
+
+  if (!isNonEmptyString(rawWaiver.signer_did) || !rawWaiver.signer_did.startsWith('did:key:')) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER_SIGNER_DID',
+      reason: 'waivers[].signer_did must be a did:key DID.',
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      waiver_version: '1',
+      waiver_id: rawWaiver.waiver_id as string,
+      framework: rawWaiver.framework as ComplianceFramework,
+      control_id: rawWaiver.control_id as string,
+      bundle_hash_b64u: rawWaiver.bundle_hash_b64u as string,
+      agent_did: rawWaiver.agent_did as string,
+      waiver_kind: rawWaiver.waiver_kind as WaiverKind,
+      issued_at: rawWaiver.issued_at as string,
+      expires_at: rawWaiver.expires_at as string,
+      payload_hash_b64u: rawWaiver.payload_hash_b64u as string,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: rawWaiver.signature_b64u as string,
+      algorithm: 'Ed25519',
+      signer_did: rawWaiver.signer_did as string,
+    },
+  };
+}
+
+function parseSignedControlWaiversInput(
+  rawWaivers: unknown,
+): { ok: true; value: SignedControlWaiverInput[] } | ParseFailure {
+  if (!Array.isArray(rawWaivers)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVERS',
+      reason: 'waivers, when present, must be an array.',
+    };
+  }
+
+  const waivers: SignedControlWaiverInput[] = [];
+  const seenWaiverIds = new Set<string>();
+
+  for (const entry of rawWaivers) {
+    if (!isRecord(entry)) {
+      return {
+        ok: false,
+        reason_code: 'COMPILER_INPUT_MALFORMED_WAIVER',
+        reason: 'Each waivers[] entry must be a JSON object.',
+      };
+    }
+
+    const parsedWaiver = parseSignedControlWaiverInput(entry);
+    if (!parsedWaiver.ok) {
+      return parsedWaiver;
+    }
+
+    if (seenWaiverIds.has(parsedWaiver.value.waiver_id)) {
+      return {
+        ok: false,
+        reason_code: 'COMPILER_INPUT_DUPLICATE_WAIVER_ID',
+        reason: `Duplicate waiver_id detected: ${parsedWaiver.value.waiver_id}`,
+      };
+    }
+
+    seenWaiverIds.add(parsedWaiver.value.waiver_id);
+    waivers.push(parsedWaiver.value);
+  }
+
+  waivers.sort((a, b) => a.waiver_id.localeCompare(b.waiver_id));
+
+  return {
+    ok: true,
+    value: waivers,
   };
 }
 
@@ -967,6 +1209,333 @@ export function mapToEUAIAct(
   };
 }
 
+function getBundleMetadata(
+  bundle: ComplianceBundleInput,
+): Record<string, unknown> | undefined {
+  return isRecord(bundle.metadata) ? bundle.metadata : undefined;
+}
+
+function getPolicyBindingHash(bundle: ComplianceBundleInput): string | undefined {
+  const metadata = getBundleMetadata(bundle);
+  if (!metadata) return undefined;
+  if (!isRecord(metadata.policy_binding)) return undefined;
+
+  const hash = metadata.policy_binding.effective_policy_hash_b64u;
+  return isBase64UrlString(hash, 8) ? hash : undefined;
+}
+
+function getEgressPolicyReceiptPayload(
+  bundle: ComplianceBundleInput,
+): Record<string, unknown> | undefined {
+  const metadata = getBundleMetadata(bundle);
+  if (!metadata) return undefined;
+
+  const sentinels = metadata.sentinels;
+  if (!isRecord(sentinels)) return undefined;
+
+  const receiptEnvelope = sentinels.egress_policy_receipt;
+  if (!isRecord(receiptEnvelope)) return undefined;
+
+  const payload = receiptEnvelope.payload;
+  if (!isRecord(payload)) return undefined;
+
+  return payload;
+}
+
+function getDataHandlingReceipts(bundle: ComplianceBundleInput): Record<string, unknown>[] {
+  const metadata = getBundleMetadata(bundle);
+  if (!metadata) return [];
+
+  const dataHandling = metadata.data_handling;
+  if (!isRecord(dataHandling)) return [];
+
+  const receipts = dataHandling.receipts;
+  if (!Array.isArray(receipts)) return [];
+
+  return receipts.filter(isRecord);
+}
+
+function getReviewerSignoffReceipts(
+  bundle: ComplianceBundleInput,
+): Record<string, unknown>[] {
+  const metadata = getBundleMetadata(bundle);
+  if (!metadata) return [];
+
+  const reviewerReceipts = metadata.reviewer_signoff_receipts;
+  if (!Array.isArray(reviewerReceipts)) return [];
+
+  return reviewerReceipts.filter(isRecord);
+}
+
+function getAxaRemediation(controlId: string): string {
+  switch (controlId) {
+    case 'AXA.POLICY.1':
+      return 'Provide policy hash evidence via policy.policy_hash_b64u or metadata.policy_binding.effective_policy_hash_b64u.';
+    case 'AXA.APPROVAL.1':
+      return 'Emit explicit_approve human approval receipts for governed high-impact actions.';
+    case 'AXA.EGRESS.1':
+      return 'Include signed metadata.sentinels.egress_policy_receipt with proofed_mode=true and direct_provider_access_blocked=true.';
+    case 'AXA.DLP.1':
+      return 'Include signed metadata.data_handling.receipts with enforcement.mode="enforced" for all observed decisions.';
+    case 'AXA.ATTESTATION.1':
+      return 'Include verified coverage_attestations and/or binary_semantic_evidence_attestations in the proof bundle.';
+    case 'AXA.REVIEW.1':
+      return 'Include signed metadata.reviewer_signoff_receipts bound to the run/event chain.';
+    default:
+      return 'Provide signed and verifier-backed execution assurance evidence for this control.';
+  }
+}
+
+export function mapToAIExecutionAssurancePackV1(
+  bundle: ComplianceBundleInput,
+  policy?: CompliancePolicyInput,
+  opts?: { bundleHash?: string; generatedAt?: string },
+): ComplianceReport {
+  const controls: ControlResult[] = [];
+
+  const boundPolicyHash = getPolicyBindingHash(bundle);
+  const inputPolicyHash = policy?.policy_hash_b64u;
+
+  let policyStatus: ControlStatus = 'FAIL';
+  let policyEvidenceRef = boundPolicyHash ?? inputPolicyHash;
+  let policyReasonCode = 'AXA_POLICY_FAIL_MISSING_POLICY_BINDING_EVIDENCE';
+  let policyNarrative =
+    'No verified bundle policy binding hash is present in metadata.policy_binding.effective_policy_hash_b64u.';
+
+  if (boundPolicyHash && inputPolicyHash && boundPolicyHash !== inputPolicyHash) {
+    policyReasonCode = 'AXA_POLICY_FAIL_POLICY_HASH_MISMATCH';
+    policyNarrative =
+      'Compiler input policy.policy_hash_b64u does not match the verified bundle policy binding hash.';
+  } else if (boundPolicyHash) {
+    policyStatus = 'PASS';
+    policyReasonCode = inputPolicyHash
+      ? 'AXA_POLICY_PASS_BOUND_POLICY_HASH_MATCHED'
+      : 'AXA_POLICY_PASS_BOUND_POLICY_HASH_PRESENT';
+    policyNarrative = inputPolicyHash
+      ? 'Verified bundle policy binding hash matches compiler input policy.policy_hash_b64u.'
+      : 'Verified bundle policy binding hash is present in proof-bundle metadata.';
+  } else if (inputPolicyHash) {
+    policyReasonCode = 'AXA_POLICY_FAIL_UNBOUND_POLICY_HASH_INPUT';
+    policyNarrative =
+      'Compiler input policy.policy_hash_b64u was supplied, but no verified bundle policy binding hash is present.';
+  }
+
+  controls.push({
+    control_id: 'AXA.POLICY.1',
+    control_name: 'Execution policy hash binding',
+    status: policyStatus,
+    evidence_type: policyEvidenceRef ? 'wpc' : undefined,
+    evidence_ref: policyEvidenceRef,
+    reason_code: policyReasonCode,
+    narrative: policyNarrative,
+  });
+
+  const explicitApprovals = (bundle.human_approval_receipts ?? []).filter(
+    (receipt) => receipt.approval_type === 'explicit_approve',
+  );
+
+  controls.push({
+    control_id: 'AXA.APPROVAL.1',
+    control_name: 'Explicit approval evidence',
+    status: explicitApprovals.length > 0 ? 'PASS' : 'FAIL',
+    evidence_type: explicitApprovals.length > 0 ? 'human_approval_receipt' : undefined,
+    evidence_ref: explicitApprovals[0]?.receipt_id,
+    reason_code:
+      explicitApprovals.length > 0
+        ? 'AXA_APPROVAL_PASS_EXPLICIT_APPROVAL_PRESENT'
+        : 'AXA_APPROVAL_FAIL_MISSING_EXPLICIT_APPROVAL',
+    narrative:
+      explicitApprovals.length > 0
+        ? `${explicitApprovals.length} explicit approval receipt(s) are present.`
+        : 'No explicit approval receipt is present.',
+  });
+
+  const egressPayload = getEgressPolicyReceiptPayload(bundle);
+  const networkEgressSideEffects = (bundle.side_effect_receipts ?? []).filter(
+    (receipt) => receipt.effect_class === 'network_egress',
+  );
+  const egressProofedMode = egressPayload?.proofed_mode === true;
+  const egressDirectBlocked = egressPayload?.direct_provider_access_blocked === true;
+  const egressEvidenceRef = isNonEmptyString(egressPayload?.receipt_id)
+    ? egressPayload.receipt_id
+    : undefined;
+
+  let egressReason = 'AXA_EGRESS_FAIL_MISSING_SIGNED_EGRESS_POLICY_RECEIPT';
+  let egressNarrative =
+    'No signed egress policy receipt is present in metadata.sentinels.egress_policy_receipt.';
+  let egressStatus: ControlStatus = 'FAIL';
+
+  if (egressPayload && egressProofedMode && egressDirectBlocked) {
+    egressStatus = 'PASS';
+    egressReason = 'AXA_EGRESS_PASS_SIGNED_POLICY_RECEIPT_PRESENT';
+    egressNarrative =
+      'Signed egress policy receipt shows proofed_mode=true and direct_provider_access_blocked=true.';
+  } else if (egressPayload) {
+    egressReason = 'AXA_EGRESS_FAIL_POLICY_RECEIPT_FLAGS_UNSAFE';
+    egressNarrative =
+      'Signed egress policy receipt is present but proofed_mode/direct_provider_access_blocked flags are not both true.';
+  } else if (networkEgressSideEffects.length > 0) {
+    egressReason =
+      'AXA_EGRESS_FAIL_NETWORK_ACTIVITY_WITHOUT_SIGNED_EGRESS_POLICY_RECEIPT';
+    egressNarrative =
+      'Network egress side-effect evidence exists but no signed egress policy receipt was provided.';
+  }
+
+  controls.push({
+    control_id: 'AXA.EGRESS.1',
+    control_name: 'Proxy and egress hygiene evidence',
+    status: egressStatus,
+    evidence_type: egressPayload ? 'egress_policy_receipt' : undefined,
+    evidence_ref: egressEvidenceRef,
+    reason_code: egressReason,
+    narrative: egressNarrative,
+  });
+
+  const dataHandlingReceipts = getDataHandlingReceipts(bundle);
+  const dataHandlingEvidenceRef = dataHandlingReceipts.find((receipt) => {
+    const payload = receipt.payload;
+    return isRecord(payload) && isNonEmptyString(payload.receipt_id);
+  });
+
+  const enforcementModes = dataHandlingReceipts.map((receipt) => {
+    const payload = receipt.payload;
+    if (!isRecord(payload) || !isRecord(payload.enforcement)) {
+      return undefined;
+    }
+    return asString(payload.enforcement.mode);
+  });
+
+  const allReceiptsEnforced =
+    dataHandlingReceipts.length > 0 &&
+    enforcementModes.length === dataHandlingReceipts.length &&
+    enforcementModes.every((mode) => mode === 'enforced');
+
+  const dataHandlingEvidenceRefId = (() => {
+    if (!dataHandlingEvidenceRef) return undefined;
+    const payload = dataHandlingEvidenceRef.payload;
+    if (!isRecord(payload)) return undefined;
+    return asString(payload.receipt_id);
+  })();
+
+  controls.push({
+    control_id: 'AXA.DLP.1',
+    control_name: 'DLP/privacy handling evidence',
+    status: allReceiptsEnforced ? 'PASS' : 'FAIL',
+    evidence_type: dataHandlingReceipts.length > 0 ? 'data_handling_receipt' : undefined,
+    evidence_ref: dataHandlingEvidenceRefId,
+    reason_code:
+      allReceiptsEnforced
+        ? 'AXA_DLP_PASS_ENFORCED_DATA_HANDLING_RECEIPTS_PRESENT'
+        : dataHandlingReceipts.length > 0
+          ? 'AXA_DLP_FAIL_NON_ENFORCED_DATA_HANDLING_RECEIPT_MODE'
+          : 'AXA_DLP_FAIL_MISSING_DATA_HANDLING_RECEIPTS',
+    narrative: allReceiptsEnforced
+      ? `Signed data handling receipts are present with enforced mode (${dataHandlingReceipts.length} receipt(s)).`
+      : dataHandlingReceipts.length > 0
+        ? 'Signed data handling receipts exist, but at least one receipt is not in enforced mode.'
+        : 'No signed data handling receipt evidence is present.',
+  });
+
+  const coverageAttestationCount = bundle.coverage_attestations?.length ?? 0;
+  const binarySemanticAttestationCount =
+    bundle.binary_semantic_evidence_attestations?.length ?? 0;
+
+  const firstCoverageAttestation = bundle.coverage_attestations?.[0];
+  let firstCoverageAttestationId: string | undefined;
+  if (isRecord(firstCoverageAttestation) && isRecord(firstCoverageAttestation.payload)) {
+    firstCoverageAttestationId = asString(firstCoverageAttestation.payload.attestation_id);
+  }
+
+  const firstBinarySemanticEvidence =
+    bundle.binary_semantic_evidence_attestations?.[0];
+  let firstBinarySemanticEvidenceHash: string | undefined;
+  if (
+    isRecord(firstBinarySemanticEvidence) &&
+    isRecord(firstBinarySemanticEvidence.payload)
+  ) {
+    firstBinarySemanticEvidenceHash = asString(
+      firstBinarySemanticEvidence.payload.binary_hash_b64u,
+    );
+  }
+
+  const hasAttestationEvidence =
+    coverageAttestationCount > 0 || binarySemanticAttestationCount > 0;
+
+  controls.push({
+    control_id: 'AXA.ATTESTATION.1',
+    control_name: 'Attestation posture evidence',
+    status: hasAttestationEvidence ? 'PASS' : 'FAIL',
+    evidence_type:
+      coverageAttestationCount > 0
+        ? 'coverage_attestation'
+        : binarySemanticAttestationCount > 0
+          ? 'binary_semantic_evidence_attestation'
+          : undefined,
+    evidence_ref: firstCoverageAttestationId ?? firstBinarySemanticEvidenceHash,
+    reason_code: hasAttestationEvidence
+      ? 'AXA_ATTESTATION_PASS_RUNTIME_ATTESTATION_PRESENT'
+      : 'AXA_ATTESTATION_FAIL_MISSING_RUNTIME_ATTESTATION_EVIDENCE',
+    narrative: hasAttestationEvidence
+      ? `Runtime attestation evidence present (coverage=${coverageAttestationCount}, binary_semantic=${binarySemanticAttestationCount}).`
+      : 'No runtime attestation evidence is present (coverage/binary semantic attestations missing).',
+  });
+
+  const reviewerSignoffReceipts = getReviewerSignoffReceipts(bundle);
+  const reviewerDecisionEvidence = reviewerSignoffReceipts.find((receipt) => {
+    const payload = receipt.payload;
+    if (!isRecord(payload)) return false;
+    const decision = asString(payload.decision);
+    return decision === 'approve' || decision === 'reject' || decision === 'needs_changes';
+  });
+
+  const reviewerEvidenceRefId = (() => {
+    if (!reviewerDecisionEvidence) return undefined;
+    const payload = reviewerDecisionEvidence.payload;
+    if (!isRecord(payload)) return undefined;
+    return asString(payload.receipt_id);
+  })();
+
+  controls.push({
+    control_id: 'AXA.REVIEW.1',
+    control_name: 'Reviewer signoff evidence',
+    status: reviewerDecisionEvidence ? 'PASS' : 'FAIL',
+    evidence_type: reviewerDecisionEvidence ? 'reviewer_signoff_receipt' : undefined,
+    evidence_ref: reviewerEvidenceRefId,
+    reason_code: reviewerDecisionEvidence
+      ? 'AXA_REVIEW_PASS_SIGNOFF_RECEIPT_PRESENT'
+      : reviewerSignoffReceipts.length > 0
+        ? 'AXA_REVIEW_FAIL_SIGNOFF_DECISION_UNRECOGNIZED'
+        : 'AXA_REVIEW_FAIL_MISSING_SIGNOFF_RECEIPTS',
+    narrative: reviewerDecisionEvidence
+      ? `Reviewer signoff evidence is present (${reviewerSignoffReceipts.length} receipt(s)).`
+      : reviewerSignoffReceipts.length > 0
+        ? 'Reviewer signoff receipts are present but decision fields are malformed or unsupported.'
+        : 'No reviewer signoff receipt evidence is present.',
+  });
+
+  const gaps: ComplianceGap[] = [];
+  for (const control of controls) {
+    if (control.status === 'FAIL' || control.status === 'INSUFFICIENT_EVIDENCE') {
+      gaps.push({
+        control_id: control.control_id,
+        description: control.narrative ?? `Control ${control.control_id} failed.`,
+        recommendation: getAxaRemediation(control.control_id),
+      });
+    }
+  }
+
+  return {
+    report_version: '1',
+    framework: 'CLAW_AI_EXECUTION_ASSURANCE_V1',
+    generated_at: reportGeneratedAt(opts?.generatedAt),
+    proof_bundle_hash_b64u: opts?.bundleHash ?? hashBundle(bundle),
+    agent_did: bundle.agent_did,
+    policy_hash_b64u: policyEvidenceRef,
+    controls,
+    gaps,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Framework dispatcher
 // ---------------------------------------------------------------------------
@@ -984,6 +1553,8 @@ export function generateComplianceReport(
       return mapToISO27001(bundle, policy, opts);
     case 'EU_AI_Act':
       return mapToEUAIAct(bundle, policy, opts);
+    case 'CLAW_AI_EXECUTION_ASSURANCE_V1':
+      return mapToAIExecutionAssurancePackV1(bundle, policy, opts);
     case 'NIST_AI_RMF':
       return {
         report_version: '1',
@@ -1157,6 +1728,23 @@ function parseCompilerInput(rawInput: unknown): ParseCompilerResult {
     };
   }
 
+  if (rawInput.waivers !== undefined && !Array.isArray(rawInput.waivers)) {
+    return {
+      ok: false,
+      reason_code: 'COMPILER_INPUT_MALFORMED_WAIVERS',
+      reason: 'waivers, when present, must be an array.',
+    };
+  }
+
+  const parsedWaivers =
+    rawInput.waivers !== undefined
+      ? parseSignedControlWaiversInput(rawInput.waivers)
+      : undefined;
+
+  if (parsedWaivers && !parsedWaivers.ok) {
+    return parsedWaivers;
+  }
+
   if (
     rawInput.compiled_report_refs !== undefined &&
     !isRecord(rawInput.compiled_report_refs)
@@ -1215,6 +1803,7 @@ function parseCompilerInput(rawInput: unknown): ParseCompilerResult {
         proof_tier: asString(vf.proof_tier),
         agent_did: vfAgentDid,
       },
+      waivers: parsedWaivers?.ok ? parsedWaivers.value : undefined,
       compiled_report_refs: parsedCompiledReportRefs?.ok
         ? parsedCompiledReportRefs.value
         : undefined,
@@ -1397,6 +1986,19 @@ function summarizeCompiledOverallStatus(
   return 'PASS';
 }
 
+function countWaiverResidualReasonCodes(reasonCodes: string[]): number {
+  return reasonCodes.filter((reasonCode) =>
+    WAIVER_RESIDUAL_REASON_CODES.has(reasonCode),
+  ).length;
+}
+
+function hasWaiverReasonMarkers(reasonCodes: string[]): boolean {
+  return (
+    reasonCodes.includes(WAIVER_APPLIED_REASON_CODE) ||
+    countWaiverResidualReasonCodes(reasonCodes) > 0
+  );
+}
+
 function normalizeCompiledMatrixControlResults(
   controlResults: CompiledEvidenceControlResult[],
 ): CompiledEvidenceControlResult[] {
@@ -1422,9 +2024,21 @@ async function computeCompiledMatrixHashB64u(
   return sha256B64uFromCanonical(matrixView);
 }
 
+function resolveCompilerVersion(input: AuthoritativeCompilerInput): string {
+  if (
+    input.framework === 'CLAW_AI_EXECUTION_ASSURANCE_V1' ||
+    (input.waivers?.length ?? 0) > 0
+  ) {
+    return COMPILER_VERSION_WAVE3;
+  }
+
+  return COMPILER_VERSION_WAVE2;
+}
+
 async function resolveCompiledEvidenceRefs(
   input: AuthoritativeCompilerInput,
   complianceReport: ComplianceReport,
+  compilerVersion: string,
 ): Promise<CompiledEvidenceReportEvidenceRefs> {
   const provided = input.compiled_report_refs;
 
@@ -1433,7 +2047,11 @@ async function resolveCompiledEvidenceRefs(
     (await sha256B64uFromCanonical({
       ontology_version: '1',
       framework: input.framework,
-      compiler_version: COMPILER_VERSION_WAVE2,
+      compiler_version: compilerVersion,
+      assurance_pack_id:
+        input.framework === 'CLAW_AI_EXECUTION_ASSURANCE_V1'
+          ? AI_EXECUTION_ASSURANCE_PACK_ID
+          : null,
     }));
 
   const mappingRulesHash =
@@ -1497,6 +2115,225 @@ async function compileDeterministicControlResults(
   return controls.sort((a, b) => a.control_id.localeCompare(b.control_id));
 }
 
+function waiverResidualReasonCodes(waiverKind: WaiverKind): string[] {
+  if (waiverKind === 'COMPENSATING_CONTROL') {
+    return [
+      WAIVER_APPLIED_REASON_CODE,
+      'RESIDUAL_COMPENSATING_CONTROL_RELIANCE',
+    ];
+  }
+
+  return [WAIVER_APPLIED_REASON_CODE, 'RESIDUAL_HUMAN_EXCEPTION_APPLIED'];
+}
+
+async function computeSignedWaiverPayloadHash(
+  waiver: SignedControlWaiverInput,
+): Promise<string> {
+  return sha256B64uFromCanonical({
+    waiver_version: waiver.waiver_version,
+    waiver_id: waiver.waiver_id,
+    framework: waiver.framework,
+    control_id: waiver.control_id,
+    bundle_hash_b64u: waiver.bundle_hash_b64u,
+    agent_did: waiver.agent_did,
+    waiver_kind: waiver.waiver_kind,
+    issued_at: waiver.issued_at,
+    expires_at: waiver.expires_at,
+  });
+}
+
+async function applySignedControlWaivers(
+  input: AuthoritativeCompilerInput,
+  controlResults: CompiledEvidenceControlResult[],
+  compiledAt: string,
+): Promise<
+  | { ok: true; value: CompiledEvidenceControlResult[] }
+  | { ok: false; reason_code: string; reason: string }
+> {
+  const waivers = input.waivers ?? [];
+  if (waivers.length === 0) {
+    return { ok: true, value: controlResults };
+  }
+
+  const evaluatedAtMs = Date.parse(compiledAt);
+  if (!Number.isFinite(evaluatedAtMs)) {
+    return {
+      ok: false,
+      reason_code: 'WAIVER_EVALUATION_TIMESTAMP_INVALID',
+      reason: 'Compiled-at timestamp is not a valid ISO instant for waiver evaluation.',
+    };
+  }
+
+  const controlsById = new Map<string, CompiledEvidenceControlResult>();
+  for (const control of controlResults) {
+    controlsById.set(control.control_id, {
+      ...control,
+      reason_codes: [...control.reason_codes],
+      evidence_hashes_b64u: [...control.evidence_hashes_b64u],
+    });
+  }
+
+  const seenControlTargets = new Set<string>();
+
+  for (const waiver of waivers) {
+    if (waiver.framework !== input.framework) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_FRAMEWORK_MISMATCH',
+        reason: `Waiver ${waiver.waiver_id} framework does not match compiler framework.`,
+      };
+    }
+
+    if (waiver.bundle_hash_b64u !== input.bundle_hash_b64u) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_BUNDLE_HASH_MISMATCH',
+        reason: `Waiver ${waiver.waiver_id} bundle hash does not match compiler input bundle hash.`,
+      };
+    }
+
+    if (waiver.agent_did !== input.bundle.agent_did) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_AGENT_DID_MISMATCH',
+        reason: `Waiver ${waiver.waiver_id} agent DID does not match bundle.agent_did.`,
+      };
+    }
+
+    const issuedAtMs = Date.parse(waiver.issued_at);
+    const expiresAtMs = Date.parse(waiver.expires_at);
+
+    if (!Number.isFinite(issuedAtMs) || !Number.isFinite(expiresAtMs)) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_TIMESTAMP_INVALID',
+        reason: `Waiver ${waiver.waiver_id} includes invalid issued_at/expires_at timestamps.`,
+      };
+    }
+
+    if (expiresAtMs <= issuedAtMs) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_EXPIRY_INVALID',
+        reason: `Waiver ${waiver.waiver_id} expires_at must be later than issued_at.`,
+      };
+    }
+
+    if (evaluatedAtMs < issuedAtMs) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_NOT_YET_ACTIVE',
+        reason: `Waiver ${waiver.waiver_id} is not active at compile evaluation time.`,
+      };
+    }
+
+    if (evaluatedAtMs > expiresAtMs) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_EXPIRED',
+        reason: `Waiver ${waiver.waiver_id} is expired at compile evaluation time.`,
+      };
+    }
+
+    const expectedWaiverPayloadHash = await computeSignedWaiverPayloadHash(waiver);
+    if (expectedWaiverPayloadHash !== waiver.payload_hash_b64u) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_PAYLOAD_HASH_MISMATCH',
+        reason: `Waiver ${waiver.waiver_id} payload hash does not match canonical waiver fields.`,
+      };
+    }
+
+    const waiverSignerPublicKey = extractPublicKeyFromDidKey(waiver.signer_did);
+    if (!waiverSignerPublicKey) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_SIGNER_DID_INVALID',
+        reason: `Waiver ${waiver.waiver_id} signer_did is not a valid Ed25519 did:key DID.`,
+      };
+    }
+
+    let waiverSignatureBytes: Uint8Array;
+    try {
+      waiverSignatureBytes = base64UrlDecode(waiver.signature_b64u);
+    } catch {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_SIGNATURE_MALFORMED',
+        reason: `Waiver ${waiver.waiver_id} signature_b64u is not valid base64url.`,
+      };
+    }
+
+    const waiverSignatureValid = await verifySignature(
+      'Ed25519',
+      waiverSignerPublicKey,
+      waiverSignatureBytes,
+      new TextEncoder().encode(waiver.payload_hash_b64u),
+    );
+
+    if (!waiverSignatureValid) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_SIGNATURE_INVALID',
+        reason: `Waiver ${waiver.waiver_id} signature does not verify payload_hash_b64u.`,
+      };
+    }
+
+    if (seenControlTargets.has(waiver.control_id)) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_CONTROL_SCOPE_DUPLICATE',
+        reason: `Multiple waivers target control ${waiver.control_id}; deterministic one-waiver-per-control semantics enforced.`,
+      };
+    }
+
+    const targetControl = controlsById.get(waiver.control_id);
+    if (!targetControl) {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_CONTROL_SCOPE_INVALID',
+        reason: `Waiver ${waiver.waiver_id} targets unknown control_id ${waiver.control_id}.`,
+      };
+    }
+
+    if (targetControl.status !== 'FAIL') {
+      return {
+        ok: false,
+        reason_code: 'WAIVER_TARGET_NOT_FAIL',
+        reason: `Waiver ${waiver.waiver_id} can only apply to FAIL controls; ${waiver.control_id} is ${targetControl.status}.`,
+      };
+    }
+
+    seenControlTargets.add(waiver.control_id);
+
+    const mergedReasonCodes = [
+      ...targetControl.reason_codes,
+      ...waiverResidualReasonCodes(waiver.waiver_kind),
+    ]
+      .map((reasonCode) => normalizeReasonCode(reasonCode, 'WAIVER_REASON_INVALID'))
+      .filter((reasonCode, idx, arr) => arr.indexOf(reasonCode) === idx)
+      .sort();
+
+    const mergedEvidenceHashes = [
+      ...targetControl.evidence_hashes_b64u,
+      waiver.payload_hash_b64u,
+    ].filter((hash, idx, arr) => arr.indexOf(hash) === idx);
+    mergedEvidenceHashes.sort();
+
+    targetControl.status = 'PARTIAL';
+    targetControl.waiver_applied = true;
+    targetControl.reason_codes = mergedReasonCodes;
+    targetControl.evidence_hashes_b64u = mergedEvidenceHashes;
+  }
+
+  return {
+    ok: true,
+    value: [...controlsById.values()].sort((a, b) =>
+      a.control_id.localeCompare(b.control_id),
+    ),
+  };
+}
+
 function deterministicCompiledReportId(input: AuthoritativeCompilerInput): string {
   const frameworkPart = input.framework.replace(/[^A-Za-z0-9._:-]/g, '_');
   const bundlePart = input.bundle_hash_b64u.slice(0, 24);
@@ -1507,9 +2344,27 @@ export async function buildCompiledEvidenceReport(
   input: AuthoritativeCompilerInput,
   complianceReport: ComplianceReport,
 ): Promise<CompiledEvidenceReport> {
-  const controlResults = await compileDeterministicControlResults(complianceReport);
+  const compilerVersion = resolveCompilerVersion(input);
+  const compiledAt = resolveGeneratedAt(complianceReport.generated_at);
+
+  const baseControlResults = await compileDeterministicControlResults(complianceReport);
+  const waiverApplied = await applySignedControlWaivers(
+    input,
+    baseControlResults,
+    compiledAt,
+  );
+
+  if (!waiverApplied.ok) {
+    throw new Error(`${waiverApplied.reason_code}: ${waiverApplied.reason}`);
+  }
+
+  const controlResults = waiverApplied.value;
   const matrixHash = await computeCompiledMatrixHashB64u(controlResults);
-  const evidenceRefs = await resolveCompiledEvidenceRefs(input, complianceReport);
+  const evidenceRefs = await resolveCompiledEvidenceRefs(
+    input,
+    complianceReport,
+    compilerVersion,
+  );
 
   const reportId = deterministicCompiledReportId(input);
   if (!COMPILED_REPORT_ID_RE.test(reportId)) {
@@ -1519,8 +2374,8 @@ export async function buildCompiledEvidenceReport(
   return {
     report_version: '1',
     report_id: reportId,
-    compiled_at: resolveGeneratedAt(complianceReport.generated_at),
-    compiler_version: COMPILER_VERSION_WAVE2,
+    compiled_at: compiledAt,
+    compiler_version: compilerVersion,
     evidence_refs: evidenceRefs,
     overall_status: summarizeCompiledOverallStatus(controlResults),
     matrix_hash_b64u: matrixHash,
@@ -1670,17 +2525,22 @@ export async function compileAuthoritativeComplianceWave2(
         ? err.message
         : 'Failed to deterministically compile authoritative evidence report.';
 
+    const maybePrefixedReasonCode =
+      err instanceof Error ? err.message.match(/^([A-Z0-9_]{3,}):\s+/)?.[1] : undefined;
+
+    const reasonCode = maybePrefixedReasonCode ?? 'COMPILER_COMPILED_REPORT_FAILED';
+
     return {
       runtime: {
         ...wave1.runtime,
         engine: 'clawcompiler-runtime-v1-wave2',
         state: 'COMPILED_FAIL',
         global_status: 'FAIL',
-        global_reason_code: 'COMPILER_COMPILED_REPORT_FAILED',
+        global_reason_code: reasonCode,
       },
       report: wave1.report,
       failure: {
-        reason_code: 'COMPILER_COMPILED_REPORT_FAILED',
+        reason_code: reasonCode,
         reason,
       },
     };
@@ -1688,7 +2548,10 @@ export async function compileAuthoritativeComplianceWave2(
 
   const runtime: AuthoritativeCompilerRuntime = {
     ...wave1.runtime,
-    engine: 'clawcompiler-runtime-v1-wave2',
+    engine:
+      compiledReport.compiler_version === COMPILER_VERSION_WAVE3
+        ? 'clawcompiler-runtime-v1-wave3'
+        : 'clawcompiler-runtime-v1-wave2',
   };
 
   if (!input.compiled_report_signer) {
@@ -1779,14 +2642,21 @@ function validateCompiledReportPayloadShape(
     };
   }
 
-  if (rawPayload.compiler_version !== COMPILER_VERSION_WAVE2) {
+  if (
+    rawPayload.compiler_version !== COMPILER_VERSION_WAVE2 &&
+    rawPayload.compiler_version !== COMPILER_VERSION_WAVE3
+  ) {
     return {
       ok: false,
       code: 'SCHEMA_VALIDATION_FAILED',
-      message: `payload.compiler_version must equal "${COMPILER_VERSION_WAVE2}".`,
+      message:
+        `payload.compiler_version must equal "${COMPILER_VERSION_WAVE2}" or "${COMPILER_VERSION_WAVE3}".`,
       field: 'payload.compiler_version',
     };
   }
+
+  const isWave3CompiledPayload =
+    rawPayload.compiler_version === COMPILER_VERSION_WAVE3;
 
   if (!isRecord(rawPayload.evidence_refs)) {
     return {
@@ -1828,13 +2698,24 @@ function validateCompiledReportPayloadShape(
   if (
     rawPayload.overall_status !== 'PASS' &&
     rawPayload.overall_status !== 'FAIL' &&
-    rawPayload.overall_status !== 'FAIL_CLOSED_INVALID_EVIDENCE'
+    rawPayload.overall_status !== 'FAIL_CLOSED_INVALID_EVIDENCE' &&
+    rawPayload.overall_status !== 'PARTIAL'
   ) {
     return {
       ok: false,
       code: 'SCHEMA_VALIDATION_FAILED',
       message:
-        'payload.overall_status must be PASS, FAIL, or FAIL_CLOSED_INVALID_EVIDENCE for wave2 compiled reports.',
+        'payload.overall_status must be PASS, FAIL, PARTIAL, or FAIL_CLOSED_INVALID_EVIDENCE.',
+      field: 'payload.overall_status',
+    };
+  }
+
+  if (!isWave3CompiledPayload && rawPayload.overall_status === 'PARTIAL') {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        'payload.overall_status=PARTIAL is only allowed for wave3 compiled reports.',
       field: 'payload.overall_status',
     };
   }
@@ -1882,6 +2763,7 @@ function validateCompiledReportPayloadShape(
     if (
       control.status !== 'PASS' &&
       control.status !== 'FAIL' &&
+      control.status !== 'PARTIAL' &&
       control.status !== 'INAPPLICABLE' &&
       control.status !== 'FAIL_CLOSED_INVALID_EVIDENCE'
     ) {
@@ -1889,7 +2771,16 @@ function validateCompiledReportPayloadShape(
         ok: false,
         code: 'SCHEMA_VALIDATION_FAILED',
         message:
-          `${prefix}.status must be PASS, FAIL, INAPPLICABLE, or FAIL_CLOSED_INVALID_EVIDENCE for wave2 compiled reports.`,
+          `${prefix}.status must be PASS, FAIL, PARTIAL, INAPPLICABLE, or FAIL_CLOSED_INVALID_EVIDENCE.`,
+        field: `${prefix}.status`,
+      };
+    }
+
+    if (!isWave3CompiledPayload && control.status === 'PARTIAL') {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.status=PARTIAL is only allowed for wave3 compiled reports.`,
         field: `${prefix}.status`,
       };
     }
@@ -1948,7 +2839,7 @@ function validateCompiledReportPayloadShape(
       };
     }
 
-    if (control.waiver_applied !== false) {
+    if (!isWave3CompiledPayload && control.waiver_applied !== false) {
       return {
         ok: false,
         code: 'SCHEMA_VALIDATION_FAILED',
@@ -1956,6 +2847,87 @@ function validateCompiledReportPayloadShape(
         field: `${prefix}.waiver_applied`,
       };
     }
+
+    if (isWave3CompiledPayload && control.waiver_applied && control.status !== 'PARTIAL') {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.waiver_applied=true requires status=PARTIAL.`,
+        field: `${prefix}.status`,
+      };
+    }
+
+    if (isWave3CompiledPayload && control.status === 'PARTIAL' && control.waiver_applied !== true) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: `${prefix}.status=PARTIAL requires waiver_applied=true.`,
+        field: `${prefix}.waiver_applied`,
+      };
+    }
+
+    const residualReasonCount = countWaiverResidualReasonCodes(control.reason_codes);
+    const hasWaiverAppliedReason = control.reason_codes.includes(
+      WAIVER_APPLIED_REASON_CODE,
+    );
+    const hasBaseReasonCode = control.reason_codes.some(
+      (reasonCode) =>
+        reasonCode !== WAIVER_APPLIED_REASON_CODE &&
+        !WAIVER_RESIDUAL_REASON_CODES.has(reasonCode),
+    );
+
+    if (control.waiver_applied) {
+      if (!hasWaiverAppliedReason) {
+        return {
+          ok: false,
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            `${prefix}.waiver_applied=true requires reason_codes to include ${WAIVER_APPLIED_REASON_CODE}.`,
+          field: `${prefix}.reason_codes`,
+        };
+      }
+
+      if (residualReasonCount !== 1) {
+        return {
+          ok: false,
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            `${prefix}.waiver_applied=true requires exactly one deterministic residual reason code.`,
+          field: `${prefix}.reason_codes`,
+        };
+      }
+
+      if (!hasBaseReasonCode) {
+        return {
+          ok: false,
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            `${prefix}.waiver_applied=true requires the underlying control failure reason code to remain present.`,
+          field: `${prefix}.reason_codes`,
+        };
+      }
+    } else if (hasWaiverReasonMarkers(control.reason_codes)) {
+      return {
+        ok: false,
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message:
+          `${prefix}.reason_codes may not contain waiver markers when waiver_applied=false.`,
+        field: `${prefix}.reason_codes`,
+      };
+    }
+  }
+
+  const computedOverallStatus = summarizeCompiledOverallStatus(
+    rawPayload.control_results as unknown as CompiledEvidenceControlResult[],
+  );
+  if (computedOverallStatus !== rawPayload.overall_status) {
+    return {
+      ok: false,
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message:
+        `payload.overall_status must equal ${computedOverallStatus} for the provided control_results.`,
+      field: 'payload.overall_status',
+    };
   }
 
   return {

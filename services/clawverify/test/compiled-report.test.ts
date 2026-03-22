@@ -178,6 +178,91 @@ describe('compiled evidence report compile/verify', () => {
     expect(compiled.error?.field).toBe('payload.control_results[0].waiver_applied');
   });
 
+  it('accepts wave3 PARTIAL + waiver semantics and verifies signed envelopes', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 86;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const payload = buildPayload();
+    payload.compiler_version = 'clawcompiler-runtime-v1-wave3';
+    payload.overall_status = 'PARTIAL';
+    payload.control_results[0] = {
+      ...payload.control_results[0],
+      status: 'PARTIAL',
+      reason_codes: [
+        'CONTROL_PREDICATE_FAILED',
+        'WAIVER_APPLIED_SIGNED',
+        'RESIDUAL_HUMAN_EXCEPTION_APPLIED',
+      ],
+      waiver_applied: true,
+    };
+
+    const compiled = await compileAndSignCompiledEvidenceReport({
+      payload,
+      signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+      },
+    });
+
+    expect(compiled.result.status).toBe('VALID');
+    expect(compiled.envelope?.payload.compiler_version).toBe('clawcompiler-runtime-v1-wave3');
+    expect(compiled.envelope?.payload.overall_status).toBe('PARTIAL');
+    expect(compiled.envelope?.payload.control_results[0]?.waiver_applied).toBe(true);
+
+    const verified = await verifyCompiledEvidenceReport(compiled.envelope);
+    expect(verified.result.status).toBe('VALID');
+  });
+
+  it('rejects wave3 PARTIAL controls that omit waiver markers or waiver_applied=true', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 91;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const payload = buildPayload();
+    payload.compiler_version = 'clawcompiler-runtime-v1-wave3';
+    payload.overall_status = 'PARTIAL';
+    payload.control_results[0] = {
+      ...payload.control_results[0],
+      status: 'PARTIAL',
+      reason_codes: ['CONTROL_PREDICATE_FAILED'],
+      waiver_applied: false,
+    };
+
+    const compiled = await compileAndSignCompiledEvidenceReport({
+      payload,
+      signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+      },
+    });
+
+    expect(compiled.result.status).toBe('INVALID');
+    expect(compiled.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
+    expect(compiled.error?.field).toBe('payload.control_results[0].waiver_applied');
+  });
+
+  it('rejects overall_status values that do not match the control matrix', async () => {
+    const seed = new Uint8Array(32);
+    for (let i = 0; i < seed.length; i++) seed[i] = i + 96;
+    const signer = await makeDidSignerFromSeed(seed);
+
+    const payload = buildPayload();
+    payload.overall_status = 'FAIL';
+
+    const compiled = await compileAndSignCompiledEvidenceReport({
+      payload,
+      signer: {
+        signer_did: signer.did,
+        private_key_pkcs8_b64u: signer.privateKeyPkcs8B64u,
+      },
+    });
+
+    expect(compiled.result.status).toBe('INVALID');
+    expect(compiled.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
+    expect(compiled.error?.field).toBe('payload.overall_status');
+  });
+
   it('returns deterministic SIGNATURE_INVALID on signature mismatch', async () => {
     const seed = new Uint8Array(32);
     for (let i = 0; i < seed.length; i++) seed[i] = i + 21;

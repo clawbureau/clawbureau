@@ -83,7 +83,7 @@ verified evidence ingest -> control-pack runtime -> fail-closed compiler state m
 - `CEC-RT-006` compiled-report verification in CLI/service
 
 ### Wave 3 — First real assurance pack
-- `CEC-RT-007` AI execution assurance control pack
+- `CEC-RT-007` AI execution assurance control pack (`CLAW_AI_EXECUTION_ASSURANCE_V1` / `claw.ai_execution_assurance.v1`)
 - `CEC-RT-008` waiver + compensating-control semantics
 
 ### Wave 4 — Product surface

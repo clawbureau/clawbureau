@@ -26,6 +26,10 @@ const FRAMEWORK_ALIASES: Record<string, ComplianceFramework> = {
   'eu_ai_act': 'EU_AI_Act',
   'nist-ai-rmf': 'NIST_AI_RMF',
   'nist_ai_rmf': 'NIST_AI_RMF',
+  'ai-execution-v1': 'CLAW_AI_EXECUTION_ASSURANCE_V1',
+  'ai_execution_assurance_v1': 'CLAW_AI_EXECUTION_ASSURANCE_V1',
+  'claw-ai-execution-v1': 'CLAW_AI_EXECUTION_ASSURANCE_V1',
+  'claw_ai_execution_assurance_v1': 'CLAW_AI_EXECUTION_ASSURANCE_V1',
 };
 
 const DETERMINISTIC_EPOCH_ISO = '1970-01-01T00:00:00.000Z';
@@ -115,6 +119,12 @@ function extractCompiledReportSigner(
   if (!isRecord(raw)) return undefined;
   if (!isRecord(raw.compiled_report_signer)) return undefined;
   return raw.compiled_report_signer;
+}
+
+function extractWaiversInput(raw: unknown): unknown[] | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (!Array.isArray(raw.waivers)) return undefined;
+  return raw.waivers;
 }
 
 function buildFactFromLooseObject(
@@ -223,6 +233,7 @@ async function buildCompilerInput(
   const policy = extractPolicyInput(raw);
   const compiledReportRefs = extractCompiledReportRefs(raw);
   const compiledReportSigner = extractCompiledReportSigner(raw);
+  const waivers = extractWaiversInput(raw);
 
   const compilerInput: Record<string, unknown> = {
     compiler_input_version: '1',
@@ -240,6 +251,10 @@ async function buildCompilerInput(
 
   if (verificationFact) {
     compilerInput.verification_fact = verificationFact;
+  }
+
+  if (waivers) {
+    compilerInput.waivers = waivers;
   }
 
   if (compiledReportRefs) {
