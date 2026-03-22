@@ -634,6 +634,85 @@ function makeAttestedBundle(): Record<string, unknown> {
   return bundle;
 }
 
+function makeCompiledReportEnvelope(): Record<string, unknown> {
+  return {
+    envelope_version: '1',
+    envelope_type: 'compiled_evidence_report',
+    payload_hash_b64u: 'compiled_payload_hash_12345678',
+    hash_algorithm: 'SHA-256',
+    signature_b64u: 'compiled_signature_hash_12345678',
+    algorithm: 'Ed25519',
+    signer_did: 'did:key:zCompilerSigner',
+    issued_at: '2026-03-20T19:16:58.121Z',
+    payload: {
+      report_version: '1',
+      report_id: 'cer_CLAW_AI_EXECUTION_ASSURANCE_V1_bundle_test_report',
+      compiled_at: '2026-03-20T19:16:58.121Z',
+      compiler_version: 'clawcompiler-runtime-v1-wave3',
+      evidence_refs: {
+        proof_bundle_hash_b64u: 'proof_bundle_hash_compiled_12345678',
+        ontology_hash_b64u: 'ontology_hash_compiled_12345678',
+        mapping_rules_hash_b64u: 'mapping_rules_hash_compiled_12345678',
+        verify_result_hash_b64u: 'verify_result_hash_compiled_12345678',
+      },
+      overall_status: 'PARTIAL',
+      matrix_hash_b64u: 'matrix_hash_compiled_12345678',
+      control_results: [
+        {
+          control_id: 'AXA.POLICY.1',
+          status: 'PASS',
+          reason_codes: ['AXA_POLICY_PASS_BOUND_POLICY_HASH_MATCHED'],
+          evidence_hashes_b64u: ['policy_evidence_hash_12345678'],
+          waiver_applied: false,
+        },
+        {
+          control_id: 'AXA.REVIEW.1',
+          status: 'PARTIAL',
+          reason_codes: [
+            'AXA_REVIEW_FAIL_MISSING_SIGNOFF_RECEIPTS',
+            'WAIVER_APPLIED_SIGNED',
+            'RESIDUAL_HUMAN_EXCEPTION_APPLIED',
+          ],
+          evidence_hashes_b64u: ['review_evidence_hash_12345678', 'review_waiver_hash_12345678'],
+          waiver_applied: true,
+        },
+        {
+          control_id: 'AXA.EGRESS.1',
+          status: 'FAIL_CLOSED_INVALID_EVIDENCE',
+          reason_codes: ['AXA_EGRESS_FAIL_MISSING_SIGNED_EGRESS_POLICY_RECEIPT'],
+          evidence_hashes_b64u: ['egress_evidence_hash_12345678'],
+          waiver_applied: false,
+        },
+      ],
+      narrative: {
+        narrative_version: '1',
+        report_id: 'cer_CLAW_AI_EXECUTION_ASSURANCE_V1_bundle_test_report',
+        generated_at: '2026-03-20T19:16:58.121Z',
+        authoritative: false,
+        disclaimer:
+          'NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.',
+        text: 'Summary narrative for reviewer context only.',
+        generator_provider: 'test-provider',
+        generator_model: 'test-model',
+      },
+    },
+  };
+}
+
+function makeBundleWithCompiledReportEnvelope(): Record<string, unknown> {
+  const bundle = makeBundle();
+  const payload = bundle.payload as {
+    metadata?: Record<string, unknown>;
+  };
+
+  if (!payload.metadata) {
+    payload.metadata = {};
+  }
+
+  payload.metadata.compiled_report_envelope = makeCompiledReportEnvelope();
+  return bundle;
+}
+
 describe('buildProofReport', () => {
   it('summarizes gateway, sentinel, and network evidence for reviewer-facing output', () => {
     const report = buildProofReport({
@@ -761,6 +840,96 @@ describe('buildProofReport', () => {
     expect(report.privacy_posture.runner_attestation.reason_code).toBe(
       'ATTESTED_TIER_NOT_GRANTED_NO_RUNNER_ATTESTATION',
     );
+  });
+
+  it('surfaces compiled evidence envelope outcomes without collapsing narrative boundaries', () => {
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle: makeBundleWithCompiledReportEnvelope(),
+      runSummary: {
+        status: 'PASS',
+        tier: 'attested',
+        trust_tier: 'attested',
+      },
+    });
+
+    expect(report.compiled_evidence.envelope_present).toBe(true);
+    expect(report.compiled_evidence.authoritative_report_present).toBe(true);
+    expect(report.compiled_evidence.metadata_path).toBe('metadata.compiled_report_envelope');
+    expect(report.compiled_evidence.report_id).toBe(
+      'cer_CLAW_AI_EXECUTION_ASSURANCE_V1_bundle_test_report',
+    );
+    expect(report.compiled_evidence.compiler_version).toBe('clawcompiler-runtime-v1-wave3');
+    expect(report.compiled_evidence.overall_status).toBe('PARTIAL');
+    expect(report.compiled_evidence.control_outcome_counts).toEqual({
+      total: 3,
+      pass: 1,
+      fail: 0,
+      partial: 1,
+      inapplicable: 0,
+      fail_closed_invalid_evidence: 1,
+    });
+    expect(report.compiled_evidence.non_pass_controls).toEqual([
+      'AXA.REVIEW.1 (PARTIAL)',
+      'AXA.EGRESS.1 (FAIL_CLOSED_INVALID_EVIDENCE)',
+    ]);
+    expect(report.compiled_evidence.narrative).toMatchObject({
+      present: true,
+      authoritative_flag: false,
+    });
+    expect(report.compiled_evidence.narrative.disclaimer).toContain('NON_NORMATIVE');
+
+    const text = renderProofReportText(report);
+    expect(text).toContain('Compiled evidence (authoritative matrix):');
+    expect(text).toContain('Overall status              : PARTIAL');
+    expect(text).toContain('Narrative plane             : present (authoritative=false)');
+
+    const html = renderProofReportHtml(report);
+    expect(html).toContain('Compiled evidence (authoritative matrix)');
+    expect(html).toContain('Compiled matrix: AUTHORITATIVE');
+  });
+
+  it('flags malformed narrative membrane details without downgrading the authoritative compiled matrix', () => {
+    const bundle = makeBundleWithCompiledReportEnvelope();
+    const payload = bundle.payload as {
+      metadata?: {
+        compiled_report_envelope?: {
+          payload?: {
+            narrative?: Record<string, unknown>;
+          };
+        };
+      };
+    };
+
+    const narrative = payload.metadata?.compiled_report_envelope?.payload?.narrative;
+    if (narrative) {
+      narrative.authoritative = true;
+      narrative.report_id = 'cer_other_report';
+    }
+
+    const report = buildProofReport({
+      inputPath: '/tmp/proof_bundle.json',
+      bundle,
+      runSummary: {
+        status: 'PASS',
+        tier: 'attested',
+        trust_tier: 'attested',
+      },
+    });
+
+    expect(report.compiled_evidence.envelope_present).toBe(true);
+    expect(report.compiled_evidence.authoritative_report_present).toBe(true);
+    expect(report.compiled_evidence.narrative.present).toBe(true);
+    expect(report.compiled_evidence.invalid_reasons).toContain(
+      'Compiled report narrative must keep authoritative=false to preserve the narrative membrane.',
+    );
+    expect(report.compiled_evidence.invalid_reasons).toContain(
+      'Compiled report narrative.report_id must match the authoritative compiled report_id.',
+    );
+
+    const text = renderProofReportText(report);
+    expect(text).toContain('Authoritative report        : yes');
+    expect(text).toContain('Invalid/unsafe markers:');
   });
 
   it('surfaces attested posture only when attested tier is claimed and runner evidence is structurally bound', () => {
@@ -1428,6 +1597,180 @@ describe('runProveReport export pack', () => {
 
       expect(runnerMeasurement).toContain('"manifest_hash_b64u"');
       expect(runnerAttestationReceipt).toContain('"envelope_type": "runner_attestation_receipt"');
+    } finally {
+      stdoutSpy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exports compiled evidence artifacts with pack-local viewer/report linkage', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'clawsig-prove-export-pack-compiled-'));
+    const bundlePath = join(tempDir, 'proof_bundle.json');
+    const exportPackPathA = join(tempDir, 'compiled-pack-a');
+    const exportPackPathB = join(tempDir, 'compiled-pack-b');
+
+    await writeFile(
+      bundlePath,
+      JSON.stringify(makeBundleWithCompiledReportEnvelope(), null, 2) + '\n',
+      'utf-8',
+    );
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await runProveReport({
+        inputPath: bundlePath,
+        exportPackPath: exportPackPathA,
+        decrypt: false,
+        json: false,
+      });
+
+      await runProveReport({
+        inputPath: bundlePath,
+        exportPackPath: exportPackPathB,
+        decrypt: false,
+        json: false,
+      });
+
+      const manifestRaw = await readFile(join(exportPackPathA, 'manifest.json'), 'utf-8');
+      const manifest = JSON.parse(manifestRaw) as {
+        entries: Array<{ path: string }>;
+      };
+      expect(manifest.entries.map((entry) => entry.path)).toEqual(
+        expect.arrayContaining([
+          'compiled-evidence/compiled-report-envelope.json',
+          'compiled-evidence/compiled-report.json',
+          'compiled-evidence/compiled-report-narrative.json',
+          'reports/compiled-evidence-summary.md',
+        ]),
+      );
+
+      const compiledEnvelope = await readFile(
+        join(exportPackPathA, 'compiled-evidence/compiled-report-envelope.json'),
+        'utf-8',
+      );
+      const compiledReport = await readFile(
+        join(exportPackPathA, 'compiled-evidence/compiled-report.json'),
+        'utf-8',
+      );
+      const compiledNarrative = await readFile(
+        join(exportPackPathA, 'compiled-evidence/compiled-report-narrative.json'),
+        'utf-8',
+      );
+      const compiledSummary = await readFile(
+        join(exportPackPathA, 'reports/compiled-evidence-summary.md'),
+        'utf-8',
+      );
+      const proofReportJson = await readFile(
+        join(exportPackPathA, 'reports/proof-report.json'),
+        'utf-8',
+      );
+      const viewerHtml = await readFile(join(exportPackPathA, 'viewer/index.html'), 'utf-8');
+
+      expect(compiledEnvelope).toContain('"envelope_type": "compiled_evidence_report"');
+      expect(compiledReport).toContain('"overall_status": "PARTIAL"');
+      expect(compiledNarrative).toContain('"authoritative": false');
+      expect(compiledSummary).toContain('## Authoritative compiled matrix');
+      expect(compiledSummary).toContain(
+        'clawverify verify compiled-report --input compiled-evidence/compiled-report-envelope.json',
+      );
+      expect(compiledSummary).toContain('Narrative is non-authoritative explanatory text only');
+
+      expect(proofReportJson).toContain('"compiled_evidence"');
+      expect(proofReportJson).toContain('"envelope": "compiled-evidence/compiled-report-envelope.json"');
+      expect(proofReportJson).toContain('"summary": "reports/compiled-evidence-summary.md"');
+      expect(proofReportJson).not.toContain(tempDir);
+
+      expect(viewerHtml).toContain('Compiled evidence (authoritative matrix)');
+      expect(viewerHtml).toContain('../compiled-evidence/compiled-report-envelope.json');
+      expect(viewerHtml).toContain('../reports/compiled-evidence-summary.md');
+      expect(viewerHtml).toContain('Compiled matrix: AUTHORITATIVE');
+      expect(viewerHtml).not.toContain(tempDir);
+
+      const deterministicFiles = [
+        'compiled-evidence/compiled-report-envelope.json',
+        'compiled-evidence/compiled-report.json',
+        'compiled-evidence/compiled-report-narrative.json',
+        'reports/compiled-evidence-summary.md',
+        'reports/proof-report.json',
+        'viewer/index.html',
+      ];
+      for (const relativePath of deterministicFiles) {
+        const first = await readFile(join(exportPackPathA, relativePath), 'utf-8');
+        const second = await readFile(join(exportPackPathB, relativePath), 'utf-8');
+        expect(first).toBe(second);
+      }
+    } finally {
+      stdoutSpy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the compiled matrix authoritative in export surfaces when only the narrative membrane is malformed', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'clawsig-prove-export-pack-compiled-narrative-'));
+    const bundlePath = join(tempDir, 'proof_bundle.json');
+    const exportPackPath = join(tempDir, 'compiled-pack');
+    const bundle = makeBundleWithCompiledReportEnvelope();
+    const payload = bundle.payload as {
+      metadata?: {
+        compiled_report_envelope?: {
+          payload?: {
+            narrative?: Record<string, unknown>;
+          };
+        };
+      };
+    };
+
+    const narrative = payload.metadata?.compiled_report_envelope?.payload?.narrative;
+    if (narrative) {
+      narrative.authoritative = true;
+    }
+
+    await writeFile(bundlePath, JSON.stringify(bundle, null, 2) + '\n', 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await runProveReport({
+        inputPath: bundlePath,
+        exportPackPath,
+        decrypt: false,
+        json: false,
+      });
+
+      const manifestRaw = await readFile(join(exportPackPath, 'manifest.json'), 'utf-8');
+      const manifest = JSON.parse(manifestRaw) as {
+        entries: Array<{ path: string }>;
+      };
+      expect(manifest.entries.map((entry) => entry.path)).toEqual(
+        expect.arrayContaining([
+          'compiled-evidence/compiled-report-envelope.json',
+          'compiled-evidence/compiled-report.json',
+          'reports/compiled-evidence-summary.md',
+        ]),
+      );
+      expect(manifest.entries.map((entry) => entry.path)).not.toContain(
+        'compiled-evidence/compiled-report-narrative.json',
+      );
+
+      const proofReportJson = await readFile(
+        join(exportPackPath, 'reports/proof-report.json'),
+        'utf-8',
+      );
+      const compiledSummary = await readFile(
+        join(exportPackPath, 'reports/compiled-evidence-summary.md'),
+        'utf-8',
+      );
+      const viewerHtml = await readFile(join(exportPackPath, 'viewer/index.html'), 'utf-8');
+
+      expect(proofReportJson).toContain('"authoritative_report_present": true');
+      expect(proofReportJson).toContain(
+        'Compiled report narrative must keep authoritative=false to preserve the narrative membrane.',
+      );
+      expect(compiledSummary).toContain('### Invalid/unsafe markers');
+      expect(compiledSummary).toContain(
+        'Compiled report narrative must keep authoritative=false to preserve the narrative membrane.',
+      );
+      expect(viewerHtml).toContain('Compiled matrix: AUTHORITATIVE');
+      expect(viewerHtml).not.toContain('../compiled-evidence/compiled-report-narrative.json');
     } finally {
       stdoutSpy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });

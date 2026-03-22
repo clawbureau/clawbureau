@@ -186,6 +186,67 @@ export interface ProofPrivacyPosture {
   not_proven_claims: string[];
 }
 
+export type ProofCompiledEvidenceControlStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'PARTIAL'
+  | 'INAPPLICABLE'
+  | 'FAIL_CLOSED_INVALID_EVIDENCE';
+
+export type ProofCompiledEvidenceOverallStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'PARTIAL'
+  | 'FAIL_CLOSED_INVALID_EVIDENCE';
+
+export interface ProofCompiledEvidenceOutcomeCounts {
+  total: number;
+  pass: number;
+  fail: number;
+  partial: number;
+  inapplicable: number;
+  fail_closed_invalid_evidence: number;
+}
+
+export interface ProofCompiledEvidenceRefSummary {
+  proof_bundle_hash_b64u: string | null;
+  ontology_hash_b64u: string | null;
+  mapping_rules_hash_b64u: string | null;
+  verify_result_hash_b64u: string | null;
+}
+
+export interface ProofCompiledEvidenceNarrativeSummary {
+  present: boolean;
+  authoritative_flag: boolean | null;
+  disclaimer: string | null;
+}
+
+export interface ProofCompiledEvidenceArtifactPaths {
+  envelope: string;
+  report?: string;
+  summary?: string;
+  narrative?: string;
+}
+
+export interface ProofCompiledEvidenceSummary {
+  envelope_present: boolean;
+  authoritative_report_present: boolean;
+  metadata_path: string | null;
+  report_id: string | null;
+  compiler_version: string | null;
+  overall_status: ProofCompiledEvidenceOverallStatus | null;
+  matrix_hash_b64u: string | null;
+  payload_hash_b64u: string | null;
+  signer_did: string | null;
+  issued_at: string | null;
+  control_outcome_counts: ProofCompiledEvidenceOutcomeCounts;
+  non_pass_controls: string[];
+  evidence_refs: ProofCompiledEvidenceRefSummary;
+  narrative: ProofCompiledEvidenceNarrativeSummary;
+  invalid_reasons: string[];
+  artifact_paths?: ProofCompiledEvidenceArtifactPaths;
+}
+
 export interface ProofReport {
   input_path: string;
   run_summary_path: string | null;
@@ -228,6 +289,7 @@ export interface ProofReport {
   };
   reviewer_signoff: ProofReviewerSignoffState;
   privacy_posture: ProofPrivacyPosture;
+  compiled_evidence: ProofCompiledEvidenceSummary;
   review_buckets: ProofReviewBucket[];
   warnings: string[];
   next_steps: string[];
@@ -435,6 +497,368 @@ function isIsoTimestamp(value: string | null): boolean {
 
 function computeJsonSha256B64u(value: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('base64url');
+}
+
+const COMPILED_REPORT_ENVELOPE_METADATA_PATHS: ReadonlyArray<readonly string[]> = [
+  ['compiled_report_envelope'],
+  ['compiled_evidence_report_envelope'],
+  ['compliance', 'compiled_report_envelope'],
+  ['compliance', 'compiled_evidence_report_envelope'],
+  ['clawcompiler', 'compiled_report_envelope'],
+  ['clawcompiler', 'compiled_evidence_report_envelope'],
+];
+
+const COMPILED_REPORT_NARRATIVE_DISCLAIMER =
+  'NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.';
+
+const COMPILED_EVIDENCE_CONTROL_STATUS_VALUES = new Set<ProofCompiledEvidenceControlStatus>([
+  'PASS',
+  'FAIL',
+  'PARTIAL',
+  'INAPPLICABLE',
+  'FAIL_CLOSED_INVALID_EVIDENCE',
+]);
+
+const COMPILED_EVIDENCE_OVERALL_STATUS_VALUES = new Set<ProofCompiledEvidenceOverallStatus>([
+  'PASS',
+  'FAIL',
+  'PARTIAL',
+  'FAIL_CLOSED_INVALID_EVIDENCE',
+]);
+
+interface CompiledEvidenceEnvelopeCandidate {
+  metadata_path: string;
+  envelope: Record<string, unknown>;
+}
+
+interface CompiledEvidenceExtraction {
+  summary: ProofCompiledEvidenceSummary;
+  envelope: Record<string, unknown> | null;
+  report_payload: Record<string, unknown> | null;
+  narrative_payload: Record<string, unknown> | null;
+}
+
+function buildDefaultCompiledEvidenceSummary(): ProofCompiledEvidenceSummary {
+  return {
+    envelope_present: false,
+    authoritative_report_present: false,
+    metadata_path: null,
+    report_id: null,
+    compiler_version: null,
+    overall_status: null,
+    matrix_hash_b64u: null,
+    payload_hash_b64u: null,
+    signer_did: null,
+    issued_at: null,
+    control_outcome_counts: {
+      total: 0,
+      pass: 0,
+      fail: 0,
+      partial: 0,
+      inapplicable: 0,
+      fail_closed_invalid_evidence: 0,
+    },
+    non_pass_controls: [],
+    evidence_refs: {
+      proof_bundle_hash_b64u: null,
+      ontology_hash_b64u: null,
+      mapping_rules_hash_b64u: null,
+      verify_result_hash_b64u: null,
+    },
+    narrative: {
+      present: false,
+      authoritative_flag: null,
+      disclaimer: null,
+    },
+    invalid_reasons: [],
+  };
+}
+
+function isCompiledEvidenceControlStatus(
+  value: string | null,
+): value is ProofCompiledEvidenceControlStatus {
+  return value !== null && COMPILED_EVIDENCE_CONTROL_STATUS_VALUES.has(value as ProofCompiledEvidenceControlStatus);
+}
+
+function isCompiledEvidenceOverallStatus(
+  value: string | null,
+): value is ProofCompiledEvidenceOverallStatus {
+  return value !== null && COMPILED_EVIDENCE_OVERALL_STATUS_VALUES.has(value as ProofCompiledEvidenceOverallStatus);
+}
+
+function readMetadataRecordAtPath(
+  metadata: Record<string, unknown> | null,
+  pathParts: readonly string[],
+): Record<string, unknown> | null {
+  if (!metadata) {
+    return null;
+  }
+
+  let cursor: unknown = metadata;
+  for (const part of pathParts) {
+    if (!isRecord(cursor) || !isRecord(cursor[part])) {
+      return null;
+    }
+    cursor = cursor[part];
+  }
+
+  return isRecord(cursor) ? cursor : null;
+}
+
+function discoverCompiledReportEnvelopeCandidates(
+  payload: Record<string, unknown>,
+): CompiledEvidenceEnvelopeCandidate[] {
+  const metadata = isRecord(payload.metadata) ? payload.metadata : null;
+  if (!metadata) {
+    return [];
+  }
+
+  const candidates: CompiledEvidenceEnvelopeCandidate[] = [];
+  for (const pathParts of COMPILED_REPORT_ENVELOPE_METADATA_PATHS) {
+    const envelope = readMetadataRecordAtPath(metadata, pathParts);
+    if (!envelope) {
+      continue;
+    }
+    candidates.push({
+      metadata_path: `metadata.${pathParts.join('.')}`,
+      envelope,
+    });
+  }
+
+  return candidates;
+}
+
+function extractCompiledEvidence(payload: Record<string, unknown>): CompiledEvidenceExtraction {
+  const summary = buildDefaultCompiledEvidenceSummary();
+  const candidates = discoverCompiledReportEnvelopeCandidates(payload);
+  const authoritativeInvalidReasons: string[] = [];
+  const narrativeInvalidReasons: string[] = [];
+
+  if (candidates.length === 0) {
+    return {
+      summary,
+      envelope: null,
+      report_payload: null,
+      narrative_payload: null,
+    };
+  }
+
+  const primary = candidates[0]!;
+  summary.envelope_present = true;
+  summary.metadata_path = primary.metadata_path;
+
+  if (candidates.length > 1) {
+    authoritativeInvalidReasons.push(
+      `Multiple compiled report envelope metadata paths were found: ${candidates.map((candidate) => candidate.metadata_path).join(', ')}.`,
+    );
+  }
+
+  const envelope = primary.envelope;
+  summary.signer_did = asString(envelope.signer_did);
+  summary.issued_at = asString(envelope.issued_at);
+  summary.payload_hash_b64u = asString(envelope.payload_hash_b64u);
+
+  if (asString(envelope.envelope_version) !== '1') {
+    authoritativeInvalidReasons.push('Compiled report envelope_version must equal "1".');
+  }
+  if (asString(envelope.envelope_type) !== 'compiled_evidence_report') {
+    authoritativeInvalidReasons.push('Compiled report envelope_type must equal "compiled_evidence_report".');
+  }
+  if (asString(envelope.hash_algorithm) !== 'SHA-256') {
+    authoritativeInvalidReasons.push('Compiled report hash_algorithm must equal "SHA-256".');
+  }
+  if (asString(envelope.algorithm) !== 'Ed25519') {
+    authoritativeInvalidReasons.push('Compiled report algorithm must equal "Ed25519".');
+  }
+  if (!isBase64UrlLike(summary.payload_hash_b64u)) {
+    authoritativeInvalidReasons.push('Compiled report payload_hash_b64u must be base64url (min length 8).');
+  }
+  if (!isBase64UrlLike(asString(envelope.signature_b64u))) {
+    authoritativeInvalidReasons.push('Compiled report signature_b64u must be base64url (min length 8).');
+  }
+
+  const reportPayload = isRecord(envelope.payload) ? envelope.payload : null;
+  if (!reportPayload) {
+    authoritativeInvalidReasons.push('Compiled report envelope payload is missing or not an object.');
+    summary.invalid_reasons = dedupeStrings(authoritativeInvalidReasons);
+    summary.authoritative_report_present = false;
+    return {
+      summary,
+      envelope,
+      report_payload: null,
+      narrative_payload: null,
+    };
+  }
+
+  summary.report_id = asString(reportPayload.report_id);
+  summary.compiler_version = asString(reportPayload.compiler_version);
+  summary.matrix_hash_b64u = asString(reportPayload.matrix_hash_b64u);
+
+  if (asString(reportPayload.report_version) !== '1') {
+    authoritativeInvalidReasons.push('Compiled report payload.report_version must equal "1".');
+  }
+  if (summary.report_id === null) {
+    authoritativeInvalidReasons.push('Compiled report payload.report_id is missing.');
+  }
+  if (summary.compiler_version === null) {
+    authoritativeInvalidReasons.push('Compiled report payload.compiler_version is missing.');
+  }
+  if (!isBase64UrlLike(summary.matrix_hash_b64u)) {
+    authoritativeInvalidReasons.push('Compiled report payload.matrix_hash_b64u must be base64url (min length 8).');
+  }
+
+  const overallStatus = asString(reportPayload.overall_status);
+  if (isCompiledEvidenceOverallStatus(overallStatus)) {
+    summary.overall_status = overallStatus;
+  } else {
+    authoritativeInvalidReasons.push('Compiled report payload.overall_status is missing or unsupported.');
+  }
+
+  const evidenceRefs = isRecord(reportPayload.evidence_refs) ? reportPayload.evidence_refs : null;
+  if (!evidenceRefs) {
+    authoritativeInvalidReasons.push('Compiled report payload.evidence_refs is missing or malformed.');
+  } else {
+    summary.evidence_refs = {
+      proof_bundle_hash_b64u: asString(evidenceRefs.proof_bundle_hash_b64u),
+      ontology_hash_b64u: asString(evidenceRefs.ontology_hash_b64u),
+      mapping_rules_hash_b64u: asString(evidenceRefs.mapping_rules_hash_b64u),
+      verify_result_hash_b64u: asString(evidenceRefs.verify_result_hash_b64u),
+    };
+
+    const missingEvidenceRef =
+      summary.evidence_refs.proof_bundle_hash_b64u === null ||
+      summary.evidence_refs.ontology_hash_b64u === null ||
+      summary.evidence_refs.mapping_rules_hash_b64u === null ||
+      summary.evidence_refs.verify_result_hash_b64u === null;
+
+    if (missingEvidenceRef) {
+      authoritativeInvalidReasons.push('Compiled report payload.evidence_refs is missing required hash fields.');
+    }
+  }
+
+  const controlResultsRaw = reportPayload.control_results;
+  if (!Array.isArray(controlResultsRaw) || controlResultsRaw.length === 0) {
+    authoritativeInvalidReasons.push('Compiled report payload.control_results must be a non-empty array.');
+  } else {
+    for (const control of controlResultsRaw) {
+      if (!isRecord(control)) {
+        authoritativeInvalidReasons.push('Compiled report payload.control_results contains a non-object entry.');
+        continue;
+      }
+
+      const controlId = asString(control.control_id);
+      const status = asString(control.status);
+      if (!controlId || !isCompiledEvidenceControlStatus(status)) {
+        authoritativeInvalidReasons.push('Compiled report payload.control_results contains an invalid control_id/status pair.');
+        continue;
+      }
+
+      summary.control_outcome_counts.total += 1;
+      switch (status) {
+        case 'PASS':
+          summary.control_outcome_counts.pass += 1;
+          break;
+        case 'FAIL':
+          summary.control_outcome_counts.fail += 1;
+          break;
+        case 'PARTIAL':
+          summary.control_outcome_counts.partial += 1;
+          break;
+        case 'INAPPLICABLE':
+          summary.control_outcome_counts.inapplicable += 1;
+          break;
+        case 'FAIL_CLOSED_INVALID_EVIDENCE':
+          summary.control_outcome_counts.fail_closed_invalid_evidence += 1;
+          break;
+      }
+
+      if (status !== 'PASS') {
+        summary.non_pass_controls.push(`${controlId} (${status})`);
+      }
+    }
+  }
+
+  let narrativePayload: Record<string, unknown> | null = null;
+  let narrativeValid = false;
+  if (reportPayload.narrative !== undefined) {
+    if (!isRecord(reportPayload.narrative)) {
+      narrativeInvalidReasons.push('Compiled report payload.narrative must be an object when present.');
+    } else {
+      narrativePayload = reportPayload.narrative;
+      summary.narrative = {
+        present: true,
+        authoritative_flag: asBoolean(reportPayload.narrative.authoritative),
+        disclaimer: asString(reportPayload.narrative.disclaimer),
+      };
+
+      if (
+        !hasOnlyAllowedKeys(reportPayload.narrative, [
+          'narrative_version',
+          'report_id',
+          'generated_at',
+          'authoritative',
+          'disclaimer',
+          'text',
+          'generator_provider',
+          'generator_model',
+        ])
+      ) {
+        narrativeInvalidReasons.push(
+          'Compiled report narrative contains unexpected fields outside the non-authoritative membrane schema.',
+        );
+      }
+      if (asString(reportPayload.narrative.narrative_version) !== '1') {
+        narrativeInvalidReasons.push('Compiled report narrative.narrative_version must equal "1".');
+      }
+
+      const narrativeReportId = asString(reportPayload.narrative.report_id);
+      if (narrativeReportId === null) {
+        narrativeInvalidReasons.push('Compiled report narrative.report_id is missing.');
+      } else if (summary.report_id !== null && narrativeReportId !== summary.report_id) {
+        narrativeInvalidReasons.push(
+          'Compiled report narrative.report_id must match the authoritative compiled report_id.',
+        );
+      }
+
+      if (!isIsoTimestamp(asString(reportPayload.narrative.generated_at))) {
+        narrativeInvalidReasons.push(
+          'Compiled report narrative.generated_at must be a strict UTC ISO-8601 timestamp.',
+        );
+      }
+      if (asString(reportPayload.narrative.text) === null) {
+        narrativeInvalidReasons.push('Compiled report narrative.text must be a non-empty string.');
+      }
+      if (summary.narrative.authoritative_flag !== false) {
+        narrativeInvalidReasons.push(
+          'Compiled report narrative must keep authoritative=false to preserve the narrative membrane.',
+        );
+      }
+      if (summary.narrative.disclaimer !== COMPILED_REPORT_NARRATIVE_DISCLAIMER) {
+        narrativeInvalidReasons.push(
+          'Compiled report narrative disclaimer is missing or does not match the required non-authoritative membrane text.',
+        );
+      }
+
+      narrativeValid = dedupeStrings(narrativeInvalidReasons).length === 0;
+    }
+  }
+
+  summary.non_pass_controls = dedupeStrings(summary.non_pass_controls);
+  summary.invalid_reasons = dedupeStrings([
+    ...authoritativeInvalidReasons,
+    ...narrativeInvalidReasons,
+  ]);
+  summary.authoritative_report_present = dedupeStrings(authoritativeInvalidReasons).length === 0;
+
+  return {
+    summary,
+    envelope,
+    report_payload: summary.authoritative_report_present ? reportPayload : null,
+    narrative_payload:
+      summary.authoritative_report_present && narrativeValid && narrativePayload
+        ? narrativePayload
+        : null,
+  };
 }
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -969,8 +1393,12 @@ const EXPORT_PACK_REPORT_JSON_PATH = 'reports/proof-report.json';
 const EXPORT_PACK_REPORT_TEXT_PATH = 'reports/proof-report.txt';
 const EXPORT_PACK_REPORT_HTML_PATH = 'reports/proof-report.html';
 const EXPORT_PACK_CLAIMS_BOUNDARY_PATH = 'reports/claims-boundary.md';
+const EXPORT_PACK_COMPILED_REPORT_SUMMARY_PATH = 'reports/compiled-evidence-summary.md';
 const EXPORT_PACK_RUN_COMPARISON_JSON_PATH = 'reports/run-comparison.json';
 const EXPORT_PACK_RUN_COMPARISON_MARKDOWN_PATH = 'reports/run-comparison.md';
+const EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH = 'compiled-evidence/compiled-report-envelope.json';
+const EXPORT_PACK_COMPILED_REPORT_JSON_PATH = 'compiled-evidence/compiled-report.json';
+const EXPORT_PACK_COMPILED_REPORT_NARRATIVE_PATH = 'compiled-evidence/compiled-report-narrative.json';
 const EXPORT_PACK_README_PATH = 'README.md';
 const EXPORT_PACK_VIEWER_PATH = 'viewer/index.html';
 
@@ -1001,6 +1429,7 @@ function buildExportPackReport(report: ProofReport): ProofReport {
     verify_command: verifyCommand,
     privacy_posture: packReport.privacy_posture,
     reviewer_signoff: packReport.reviewer_signoff,
+    compiled_evidence: packReport.compiled_evidence,
   });
 
   return packReport;
@@ -1019,6 +1448,14 @@ function renderPrivacyClaimsBoundaryMarkdown(report: ProofReport): string {
   lines.push(`Structured reviewer signoff receipts: ${report.reviewer_signoff.structured_receipt_count}`);
   lines.push(`Revoked reviewer signoff receipts: ${report.reviewer_signoff.revoked_receipt_count}`);
   lines.push(`Reviewer dispute state: ${report.reviewer_signoff.dispute_present ? 'present' : 'none'}`);
+  lines.push(`Compiled report envelope present: ${report.compiled_evidence.envelope_present ? 'yes' : 'no'}`);
+  if (report.compiled_evidence.envelope_present) {
+    lines.push(`Compiled report authoritative: ${report.compiled_evidence.authoritative_report_present ? 'yes' : 'no'}`);
+    lines.push(`Compiled report id: ${report.compiled_evidence.report_id ?? 'unknown'}`);
+    lines.push(`Compiled matrix status: ${report.compiled_evidence.overall_status ?? 'unknown'}`);
+    lines.push(`Compiled matrix hash: ${report.compiled_evidence.matrix_hash_b64u ?? 'unknown'}`);
+    lines.push(`Compiled report envelope signer DID: ${report.compiled_evidence.signer_did ?? 'unknown'}`);
+  }
   lines.push('');
   lines.push('## What This Pack Proves');
   if (report.privacy_posture.proven_claims.length === 0) {
@@ -1042,8 +1479,98 @@ function renderPrivacyClaimsBoundaryMarkdown(report: ProofReport): string {
   return lines.join('\n');
 }
 
+function renderCompiledEvidenceSummaryMarkdown(report: ProofReport): string {
+  const compiled = report.compiled_evidence;
+  const lines: string[] = [];
+  lines.push('# Compiled Evidence Summary');
+  lines.push('');
+  lines.push('This summary surfaces authoritative compiled evidence artifacts (when present) without overriding proof-bundle verification semantics.');
+  lines.push('');
+  lines.push(`Generated at: ${report.generated_at}`);
+  lines.push(`Bundle ID: ${report.public_layer.bundle_id ?? 'unknown'}`);
+  lines.push(`Envelope source: ${compiled.metadata_path ?? 'not present in bundle metadata'}`);
+  lines.push('');
+
+  if (!compiled.envelope_present) {
+    lines.push('No compiled evidence report envelope was found in the proof bundle metadata.');
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  lines.push('## Authoritative compiled matrix');
+  lines.push(`Report ID: ${compiled.report_id ?? 'unknown'}`);
+  lines.push(`Compiler version: ${compiled.compiler_version ?? 'unknown'}`);
+  lines.push(`Overall status: ${compiled.overall_status ?? 'unknown'}`);
+  lines.push(`Matrix hash: ${compiled.matrix_hash_b64u ?? 'unknown'}`);
+  lines.push(`Envelope payload hash: ${compiled.payload_hash_b64u ?? 'unknown'}`);
+  lines.push(`Signer DID: ${compiled.signer_did ?? 'unknown'}`);
+  lines.push(`Issued at: ${compiled.issued_at ?? 'unknown'}`);
+  lines.push(`Structurally valid authoritative report: ${compiled.authoritative_report_present ? 'yes' : 'no'}`);
+  lines.push('');
+
+  lines.push('### Control outcome counts');
+  lines.push(`- Total controls: ${compiled.control_outcome_counts.total}`);
+  lines.push(`- PASS: ${compiled.control_outcome_counts.pass}`);
+  lines.push(`- FAIL: ${compiled.control_outcome_counts.fail}`);
+  lines.push(`- PARTIAL: ${compiled.control_outcome_counts.partial}`);
+  lines.push(`- INAPPLICABLE: ${compiled.control_outcome_counts.inapplicable}`);
+  lines.push(`- FAIL_CLOSED_INVALID_EVIDENCE: ${compiled.control_outcome_counts.fail_closed_invalid_evidence}`);
+  lines.push('');
+
+  lines.push('### Evidence refs');
+  lines.push(`- proof_bundle_hash_b64u: ${compiled.evidence_refs.proof_bundle_hash_b64u ?? 'unknown'}`);
+  lines.push(`- ontology_hash_b64u: ${compiled.evidence_refs.ontology_hash_b64u ?? 'unknown'}`);
+  lines.push(`- mapping_rules_hash_b64u: ${compiled.evidence_refs.mapping_rules_hash_b64u ?? 'unknown'}`);
+  lines.push(`- verify_result_hash_b64u: ${compiled.evidence_refs.verify_result_hash_b64u ?? 'unknown'}`);
+  lines.push('');
+
+  lines.push('### Non-pass controls');
+  if (compiled.non_pass_controls.length === 0) {
+    lines.push('- none');
+  } else {
+    for (const control of compiled.non_pass_controls) {
+      lines.push(`- ${control}`);
+    }
+  }
+  lines.push('');
+
+  lines.push('### Narrative membrane');
+  if (!compiled.narrative.present) {
+    lines.push('- No narrative plane was embedded in the compiled report payload.');
+  } else {
+    lines.push(`- Narrative present: yes (authoritative=${compiled.narrative.authoritative_flag === null ? 'unknown' : compiled.narrative.authoritative_flag ? 'true' : 'false'})`);
+    lines.push(`- Disclaimer: ${compiled.narrative.disclaimer ?? 'missing'}`);
+    lines.push('- Narrative is non-authoritative explanatory text only; control outcomes remain authoritative in compiled control_results.');
+  }
+  lines.push('');
+
+  lines.push('### Artifact linkage');
+  lines.push(`- Envelope artifact: ${compiled.artifact_paths?.envelope ?? EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH}`);
+  if (compiled.artifact_paths?.report) {
+    lines.push(`- Report payload artifact: ${compiled.artifact_paths.report}`);
+  }
+  if (compiled.artifact_paths?.narrative) {
+    lines.push(`- Narrative artifact: ${compiled.artifact_paths.narrative}`);
+  }
+  lines.push(`- Canonical envelope verifier command: \`clawverify verify compiled-report --input ${compiled.artifact_paths?.envelope ?? EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH}\`.`);
+  lines.push('');
+
+  if (compiled.invalid_reasons.length > 0) {
+    lines.push('### Invalid/unsafe markers');
+    for (const reason of compiled.invalid_reasons) {
+      lines.push(`- ${reason}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
 function renderPrivacyExportPackReadme(report: ProofReport, hasComparison: boolean): string {
   const lines: string[] = [];
+  const hasCompiledEnvelope = report.compiled_evidence.envelope_present;
+  const compiledArtifacts = report.compiled_evidence.artifact_paths;
+
   lines.push('# Clawsig Privacy/Compliance Export Pack');
   lines.push('');
   lines.push('This pack is a reviewer-facing snapshot of proof artifacts and privacy evidence.');
@@ -1054,6 +1581,16 @@ function renderPrivacyExportPackReadme(report: ProofReport, hasComparison: boole
   lines.push('- `privacy-evidence/*.json`: privacy policy receipts/evidence extracted from bundle metadata when present.');
   lines.push('- Runner measurement / runner attestation evidence is copied into `privacy-evidence/` when present so reviewers can inspect the exact posture inputs.');
   lines.push('- Reviewer signoff/dispute receipt evidence is copied into `privacy-evidence/` when present.');
+  if (hasCompiledEnvelope) {
+    lines.push(`- \`${compiledArtifacts?.envelope ?? EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH}\`: authoritative compiled report envelope copied from bundle metadata.`);
+    if (compiledArtifacts?.report) {
+      lines.push(`- \`${compiledArtifacts.report}\`: extracted authoritative compiled control-matrix payload.`);
+    }
+    if (compiledArtifacts?.narrative) {
+      lines.push(`- \`${compiledArtifacts.narrative}\`: non-authoritative narrative plane from the compiled payload (if present, never authoritative).`);
+    }
+    lines.push(`- \`${compiledArtifacts?.summary ?? EXPORT_PACK_COMPILED_REPORT_SUMMARY_PATH}\`: reviewer summary linking compiled outcomes back to envelope/evidence refs.`);
+  }
   lines.push('- `reports/proof-report.json`: machine-readable prove report (includes privacy + runner-attestation posture).');
   lines.push('- `reports/proof-report.txt`: human-readable prove report.');
   lines.push('- `reports/proof-report.html`: pre-rendered proof report HTML using the same prove/export posture language.');
@@ -1066,10 +1603,14 @@ function renderPrivacyExportPackReadme(report: ProofReport, hasComparison: boole
   lines.push('- `manifest.json`: deterministic file manifest with SHA-256 digests.');
   lines.push('');
   lines.push('## How To Interpret');
-  lines.push(`1. Verify canonical cryptographic validity with \`${report.verify_command}\`.`);
-  lines.push('2. Open `viewer/index.html` for reviewer-facing navigation, then drill into raw files as needed.');
-  lines.push('3. Review claim limits in `reports/claims-boundary.md` before making privacy/compliance statements.');
-  lines.push('4. Use `manifest.json` to detect tampering when sharing this pack externally.');
+  lines.push(`- Verify canonical proof-bundle cryptographic validity with \`${report.verify_command}\`.`);
+  if (hasCompiledEnvelope) {
+    lines.push(`- Verify compiled-report envelope validity with \`clawverify verify compiled-report --input ${compiledArtifacts?.envelope ?? EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH}\`.`);
+    lines.push('- Treat compiled control outcomes as authoritative; treat any narrative plane as non-authoritative explanatory text only.');
+  }
+  lines.push('- Open `viewer/index.html` for reviewer-facing navigation, then drill into raw files as needed.');
+  lines.push('- Review claim limits in `reports/claims-boundary.md` before making privacy/compliance statements.');
+  lines.push('- Use `manifest.json` to detect tampering when sharing this pack externally.');
   lines.push('');
   return lines.join('\n');
 }
@@ -1128,6 +1669,84 @@ function renderExportPackViewerHtml(args: {
   );
   const reviewerDecisionSummary = `approve=${report.reviewer_signoff.decision_counts.approve}, reject=${report.reviewer_signoff.decision_counts.reject}, needs_changes=${report.reviewer_signoff.decision_counts.needs_changes}`;
   const reviewerTargetSummary = `run=${report.reviewer_signoff.target_counts.run}, export_pack=${report.reviewer_signoff.target_counts.export_pack}`;
+  const compiled = report.compiled_evidence;
+  const compiledSummaryPath = compiled.artifact_paths?.summary ?? (compiled.envelope_present ? EXPORT_PACK_COMPILED_REPORT_SUMMARY_PATH : null);
+  const compiledEnvelopePath = compiled.artifact_paths?.envelope ?? (compiled.envelope_present ? EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH : null);
+  const compiledReportPath = compiled.artifact_paths?.report ?? null;
+  const compiledNarrativePath = compiled.artifact_paths?.narrative ?? null;
+  const compiledSummaryHref = compiledSummaryPath ? toViewerHref(compiledSummaryPath) : null;
+  const compiledEnvelopeHref = compiledEnvelopePath ? toViewerHref(compiledEnvelopePath) : null;
+  const compiledReportHref = compiledReportPath ? toViewerHref(compiledReportPath) : null;
+  const compiledNarrativeHref = compiledNarrativePath ? toViewerHref(compiledNarrativePath) : null;
+  const compiledStatus = !compiled.envelope_present
+    ? 'MISSING'
+    : compiled.authoritative_report_present
+      ? 'AUTHORITATIVE'
+      : 'INVALID';
+  const compiledNarrativeItems = !compiled.narrative.present
+    ? ['No narrative plane embedded in compiled payload.']
+    : [
+      `Narrative present with authoritative=${compiled.narrative.authoritative_flag === null ? 'unknown' : compiled.narrative.authoritative_flag ? 'true' : 'false'}.`,
+      `Disclaimer: ${compiled.narrative.disclaimer ?? 'missing'}`,
+      'Narrative remains non-authoritative explanatory text only.',
+    ];
+  const compiledControlOutcomeItems = [
+    `PASS: ${compiled.control_outcome_counts.pass}`,
+    `FAIL: ${compiled.control_outcome_counts.fail}`,
+    `PARTIAL: ${compiled.control_outcome_counts.partial}`,
+    `INAPPLICABLE: ${compiled.control_outcome_counts.inapplicable}`,
+    `FAIL_CLOSED_INVALID_EVIDENCE: ${compiled.control_outcome_counts.fail_closed_invalid_evidence}`,
+  ];
+  const compiledEvidenceRefItems = [
+    `proof_bundle_hash_b64u: ${compiled.evidence_refs.proof_bundle_hash_b64u ?? 'unknown'}`,
+    `ontology_hash_b64u: ${compiled.evidence_refs.ontology_hash_b64u ?? 'unknown'}`,
+    `mapping_rules_hash_b64u: ${compiled.evidence_refs.mapping_rules_hash_b64u ?? 'unknown'}`,
+    `verify_result_hash_b64u: ${compiled.evidence_refs.verify_result_hash_b64u ?? 'unknown'}`,
+  ];
+  const compiledPrimaryLinks = compiled.envelope_present
+    ? `
+          ${compiledSummaryPath && compiledSummaryHref ? `<li><a href="${escapeHtml(compiledSummaryHref)}">${escapeHtml(compiledSummaryPath)}</a></li>` : ''}
+          ${compiledEnvelopePath && compiledEnvelopeHref ? `<li><a href="${escapeHtml(compiledEnvelopeHref)}">${escapeHtml(compiledEnvelopePath)}</a></li>` : ''}
+          ${compiledReportPath && compiledReportHref ? `<li><a href="${escapeHtml(compiledReportHref)}">${escapeHtml(compiledReportPath)}</a></li>` : ''}
+          ${compiledNarrativePath && compiledNarrativeHref ? `<li><a href="${escapeHtml(compiledNarrativeHref)}">${escapeHtml(compiledNarrativePath)}</a></li>` : ''}`
+    : '';
+  const compiledSection = compiled.envelope_present
+    ? `
+      <article class="card">
+        <h2>Compiled evidence (authoritative matrix)</h2>
+        <div class="rows">
+          <div class="row"><span class="label">Compiled status</span><strong>${escapeHtml(compiledStatus)}</strong></div>
+          <div class="row"><span class="label">Report ID</span><strong>${escapeHtml(compiled.report_id ?? 'unknown')}</strong></div>
+          <div class="row"><span class="label">Compiler version</span><strong>${escapeHtml(compiled.compiler_version ?? 'unknown')}</strong></div>
+          <div class="row"><span class="label">Overall status</span><strong>${escapeHtml(compiled.overall_status ?? 'unknown')}</strong></div>
+          <div class="row"><span class="label">Matrix hash</span><strong>${escapeHtml(compiled.matrix_hash_b64u ?? 'unknown')}</strong></div>
+          <div class="row"><span class="label">Signer DID</span><strong>${escapeHtml(compiled.signer_did ?? 'unknown')}</strong></div>
+          <div class="row"><span class="label">Issued at</span><strong>${escapeHtml(compiled.issued_at ?? 'unknown')}</strong></div>
+          <div class="row"><span class="label">Total controls</span><strong>${compiled.control_outcome_counts.total}</strong></div>
+        </div>
+        <div class="section">
+          <h3>Control outcomes</h3>
+          <ul>${renderList(compiledControlOutcomeItems)}</ul>
+        </div>
+        <div class="section">
+          <h3>Evidence refs</h3>
+          <ul>${renderList(compiledEvidenceRefItems)}</ul>
+        </div>
+        <div class="section">
+          <h3>Non-pass controls</h3>
+          <ul>${renderList(compiled.non_pass_controls)}</ul>
+        </div>
+        <div class="section">
+          <h3>Narrative membrane</h3>
+          <ul>${renderList(compiledNarrativeItems)}</ul>
+        </div>
+        ${compiled.invalid_reasons.length > 0 ? `<div class="section"><h3>Invalid/unsafe markers</h3><ul>${renderList(compiled.invalid_reasons)}</ul></div>` : ''}
+      </article>`
+    : `
+      <article class="card">
+        <h2>Compiled evidence (authoritative matrix)</h2>
+        <p class="subtitle">No compiled report envelope was found in bundle metadata for this pack.</p>
+      </article>`;
   const hasComparison = args.comparison !== undefined;
   const comparisonHighlights = args.comparison?.reviewer_highlights ?? [];
   const comparisonPrimaryLinks = hasComparison
@@ -1225,6 +1844,7 @@ function renderExportPackViewerHtml(args: {
       <p class="subtitle">Portable reviewer surface for hosted or local inspection. This viewer reuses the same prove/export privacy posture and runner attestation posture outputs in this pack.</p>
       <p class="subtitle">Canonical verification command: <code>${escapeHtml(report.verify_command)}</code></p>
       <span class="pill ${escapeHtml(report.privacy_posture.overall_verdict)}">Privacy verdict: ${escapeHtml(report.privacy_posture.overall_verdict.toUpperCase())}</span>
+      <span class="pill ${compiledStatus === 'AUTHORITATIVE' ? 'good' : compiledStatus === 'INVALID' ? 'action' : 'caution'}">Compiled matrix: ${escapeHtml(compiledStatus)}</span>
     </section>
 
     <section class="grid">
@@ -1255,6 +1875,7 @@ function renderExportPackViewerHtml(args: {
           <li><a href="../${EXPORT_PACK_REPORT_TEXT_PATH}">${EXPORT_PACK_REPORT_TEXT_PATH}</a></li>
           <li><a href="../${EXPORT_PACK_REPORT_JSON_PATH}">${EXPORT_PACK_REPORT_JSON_PATH}</a></li>
           <li><a href="../${EXPORT_PACK_CLAIMS_BOUNDARY_PATH}">${EXPORT_PACK_CLAIMS_BOUNDARY_PATH}</a></li>
+          ${compiledPrimaryLinks}
           ${comparisonPrimaryLinks}
           <li><a href="../manifest.json">manifest.json</a></li>
         </ul>
@@ -1269,6 +1890,7 @@ function renderExportPackViewerHtml(args: {
         </div>
       </article>
 
+      ${compiledSection}
       ${comparisonSection}
     </section>
 
@@ -1343,6 +1965,51 @@ function collectPrivacyEvidenceFiles(bundle: Record<string, unknown>): Array<{
   return files;
 }
 
+function collectCompiledEvidenceFiles(bundle: Record<string, unknown>): {
+  summary: ProofCompiledEvidenceSummary;
+  files: Array<{ relative_path: string; payload: unknown }>;
+  artifact_paths?: ProofCompiledEvidenceArtifactPaths;
+} {
+  const payload = isRecord(bundle.payload) ? bundle.payload : {};
+  const extraction = extractCompiledEvidence(payload);
+  const files: Array<{ relative_path: string; payload: unknown }> = [];
+  let artifactPaths: ProofCompiledEvidenceArtifactPaths | undefined;
+
+  if (extraction.summary.envelope_present && extraction.envelope) {
+    files.push({
+      relative_path: EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH,
+      payload: extraction.envelope,
+    });
+
+    artifactPaths = {
+      envelope: EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH,
+      summary: EXPORT_PACK_COMPILED_REPORT_SUMMARY_PATH,
+    };
+
+    if (extraction.summary.authoritative_report_present && extraction.report_payload) {
+      files.push({
+        relative_path: EXPORT_PACK_COMPILED_REPORT_JSON_PATH,
+        payload: extraction.report_payload,
+      });
+      artifactPaths.report = EXPORT_PACK_COMPILED_REPORT_JSON_PATH;
+    }
+
+    if (extraction.summary.authoritative_report_present && extraction.narrative_payload) {
+      files.push({
+        relative_path: EXPORT_PACK_COMPILED_REPORT_NARRATIVE_PATH,
+        payload: extraction.narrative_payload,
+      });
+      artifactPaths.narrative = EXPORT_PACK_COMPILED_REPORT_NARRATIVE_PATH;
+    }
+  }
+
+  return {
+    summary: extraction.summary,
+    files,
+    artifact_paths: artifactPaths,
+  };
+}
+
 async function writeExportPackFile(
   packRoot: string,
   relativePath: string,
@@ -1378,15 +2045,9 @@ async function writePrivacyComplianceExportPack(args: {
   }
 
   const packReport = buildExportPackReport(args.report);
-
   const entries: PrivacyExportPackManifestEntry[] = [];
-  const bundleBytes = Buffer.from(JSON.stringify(args.bundle, null, 2) + '\n', 'utf-8');
-  const reportJsonBytes = Buffer.from(JSON.stringify(packReport, null, 2) + '\n', 'utf-8');
-  const reportTextBytes = Buffer.from(renderProofReportText(packReport), 'utf-8');
-  const reportHtmlBytes = Buffer.from(renderProofReportHtml(packReport), 'utf-8');
-  const claimsBoundaryBytes = Buffer.from(renderPrivacyClaimsBoundaryMarkdown(packReport), 'utf-8');
-  const readmeBytes = Buffer.from(renderPrivacyExportPackReadme(packReport, args.comparison !== undefined), 'utf-8');
 
+  const bundleBytes = Buffer.from(JSON.stringify(args.bundle, null, 2) + '\n', 'utf-8');
   await writeExportPackFile(
     packRoot,
     EXPORT_PACK_BUNDLE_PATH,
@@ -1406,6 +2067,55 @@ async function writePrivacyComplianceExportPack(args: {
       entries,
     );
   }
+
+  const compiledEvidenceFiles = collectCompiledEvidenceFiles(args.bundle);
+  packReport.compiled_evidence = {
+    ...compiledEvidenceFiles.summary,
+    artifact_paths: compiledEvidenceFiles.artifact_paths,
+  };
+  if (!compiledEvidenceFiles.artifact_paths) {
+    delete packReport.compiled_evidence.artifact_paths;
+  }
+
+  for (const file of compiledEvidenceFiles.files) {
+    const bytes = Buffer.from(JSON.stringify(file.payload, null, 2) + '\n', 'utf-8');
+    await writeExportPackFile(
+      packRoot,
+      file.relative_path,
+      bytes,
+      'application/json',
+      entries,
+    );
+  }
+
+  if (packReport.compiled_evidence.artifact_paths?.summary) {
+    const compiledSummaryBytes = Buffer.from(
+      renderCompiledEvidenceSummaryMarkdown(packReport),
+      'utf-8',
+    );
+    await writeExportPackFile(
+      packRoot,
+      packReport.compiled_evidence.artifact_paths.summary,
+      compiledSummaryBytes,
+      'text/markdown; charset=utf-8',
+      entries,
+    );
+  }
+
+  packReport.next_steps = deriveNextSteps({
+    gateway: packReport.gateway,
+    warnings: packReport.warnings,
+    verify_command: packReport.verify_command,
+    privacy_posture: packReport.privacy_posture,
+    reviewer_signoff: packReport.reviewer_signoff,
+    compiled_evidence: packReport.compiled_evidence,
+  });
+
+  const reportJsonBytes = Buffer.from(JSON.stringify(packReport, null, 2) + '\n', 'utf-8');
+  const reportTextBytes = Buffer.from(renderProofReportText(packReport), 'utf-8');
+  const reportHtmlBytes = Buffer.from(renderProofReportHtml(packReport), 'utf-8');
+  const claimsBoundaryBytes = Buffer.from(renderPrivacyClaimsBoundaryMarkdown(packReport), 'utf-8');
+  const readmeBytes = Buffer.from(renderPrivacyExportPackReadme(packReport, args.comparison !== undefined), 'utf-8');
 
   await writeExportPackFile(
     packRoot,
@@ -2525,11 +3235,78 @@ function normalizeReviewerSignoffState(value: unknown): ProofReviewerSignoffStat
   };
 }
 
+function normalizeCompiledEvidenceSummary(value: unknown): ProofCompiledEvidenceSummary {
+  const fallback = buildDefaultCompiledEvidenceSummary();
+  if (!isRecord(value)) {
+    return fallback;
+  }
+
+  const controlCounts = isRecord(value.control_outcome_counts)
+    ? value.control_outcome_counts
+    : null;
+  const evidenceRefs = isRecord(value.evidence_refs) ? value.evidence_refs : null;
+  const narrative = isRecord(value.narrative) ? value.narrative : null;
+  const artifactPaths = isRecord(value.artifact_paths) ? value.artifact_paths : null;
+  const overallStatus = asString(value.overall_status);
+
+  const normalized: ProofCompiledEvidenceSummary = {
+    envelope_present: asBoolean(value.envelope_present) ?? false,
+    authoritative_report_present: asBoolean(value.authoritative_report_present) ?? false,
+    metadata_path: asString(value.metadata_path),
+    report_id: asString(value.report_id),
+    compiler_version: asString(value.compiler_version),
+    overall_status: isCompiledEvidenceOverallStatus(overallStatus) ? overallStatus : null,
+    matrix_hash_b64u: asString(value.matrix_hash_b64u),
+    payload_hash_b64u: asString(value.payload_hash_b64u),
+    signer_did: asString(value.signer_did),
+    issued_at: asString(value.issued_at),
+    control_outcome_counts: {
+      total: asNonNegativeInteger(controlCounts?.total) ?? 0,
+      pass: asNonNegativeInteger(controlCounts?.pass) ?? 0,
+      fail: asNonNegativeInteger(controlCounts?.fail) ?? 0,
+      partial: asNonNegativeInteger(controlCounts?.partial) ?? 0,
+      inapplicable: asNonNegativeInteger(controlCounts?.inapplicable) ?? 0,
+      fail_closed_invalid_evidence:
+        asNonNegativeInteger(controlCounts?.fail_closed_invalid_evidence) ?? 0,
+    },
+    non_pass_controls: dedupeStrings(asStringArray(value.non_pass_controls)),
+    evidence_refs: {
+      proof_bundle_hash_b64u: asString(evidenceRefs?.proof_bundle_hash_b64u),
+      ontology_hash_b64u: asString(evidenceRefs?.ontology_hash_b64u),
+      mapping_rules_hash_b64u: asString(evidenceRefs?.mapping_rules_hash_b64u),
+      verify_result_hash_b64u: asString(evidenceRefs?.verify_result_hash_b64u),
+    },
+    narrative: {
+      present: asBoolean(narrative?.present) ?? false,
+      authoritative_flag: asBoolean(narrative?.authoritative_flag),
+      disclaimer: asString(narrative?.disclaimer),
+    },
+    invalid_reasons: dedupeStrings(asStringArray(value.invalid_reasons)),
+    artifact_paths: undefined,
+  };
+
+  const envelopePath = asString(artifactPaths?.envelope);
+  const reportPath = asString(artifactPaths?.report);
+  const summaryPath = asString(artifactPaths?.summary);
+  const narrativePath = asString(artifactPaths?.narrative);
+  if (envelopePath) {
+    normalized.artifact_paths = {
+      envelope: envelopePath,
+      report: reportPath ?? undefined,
+      summary: summaryPath ?? undefined,
+      narrative: narrativePath ?? undefined,
+    };
+  }
+
+  return normalized;
+}
+
 function normalizeProofReportForComparison(report: ProofReport): ProofReport {
   const reportRecord = report as unknown as Record<string, unknown>;
   return {
     ...report,
     reviewer_signoff: normalizeReviewerSignoffState(reportRecord.reviewer_signoff),
+    compiled_evidence: normalizeCompiledEvidenceSummary(reportRecord.compiled_evidence),
   };
 }
 
@@ -3314,11 +4091,30 @@ function deriveWarnings(report: ProofReportBase): string[] {
     warnings.push(`Privacy signal: ${signal}`);
   }
 
+  if (report.compiled_evidence.envelope_present && !report.compiled_evidence.authoritative_report_present) {
+    warnings.push(
+      'Compiled evidence envelope is present but failed strict structural checks in the prove summary; treat compiled outcomes as untrusted until canonical compiled-report verification succeeds.',
+    );
+    for (const reason of report.compiled_evidence.invalid_reasons.slice(0, 3)) {
+      warnings.push(`Compiled evidence signal: ${reason}`);
+    }
+  }
+
+  if (
+    report.compiled_evidence.authoritative_report_present &&
+    report.compiled_evidence.overall_status &&
+    report.compiled_evidence.overall_status !== 'PASS'
+  ) {
+    warnings.push(
+      `Compiled evidence overall status is ${report.compiled_evidence.overall_status}; review non-pass controls before presenting compliance outcomes as clean.`,
+    );
+  }
+
   return warnings;
 }
 
 function deriveNextSteps(
-  report: Pick<ProofReport, 'gateway' | 'warnings' | 'verify_command' | 'privacy_posture' | 'reviewer_signoff'>,
+  report: Pick<ProofReport, 'gateway' | 'warnings' | 'verify_command' | 'privacy_posture' | 'reviewer_signoff' | 'compiled_evidence'>,
 ): string[] {
   const steps: string[] = [];
   if (report.gateway.signed_count > 0) {
@@ -3357,6 +4153,30 @@ function deriveNextSteps(
   } else if (report.reviewer_signoff.receipt_count > 0) {
     steps.push('Reviewer signoff receipt objects are present, but some failed local integrity or binding validation; inspect them before external reliance.');
   }
+
+  if (report.compiled_evidence.envelope_present) {
+    const compiledEnvelopePath =
+      report.compiled_evidence.artifact_paths?.envelope ??
+      EXPORT_PACK_COMPILED_REPORT_ENVELOPE_PATH;
+    if (report.compiled_evidence.authoritative_report_present) {
+      steps.push(
+        `Compiled evidence envelope is present; run canonical compiled-report verification: clawverify verify compiled-report --input ${compiledEnvelopePath}`,
+      );
+      if (
+        report.compiled_evidence.overall_status &&
+        report.compiled_evidence.overall_status !== 'PASS'
+      ) {
+        steps.push(
+          `Compiled matrix status is ${report.compiled_evidence.overall_status}; review non-pass controls before external compliance assertions.`,
+        );
+      }
+    } else {
+      steps.push(
+        'Compiled evidence envelope is present but failed strict summary checks; inspect compiled invalid markers before treating any compiled outcomes as authoritative.',
+      );
+    }
+  }
+
   steps.push(`Canonical offline verifier command: ${report.verify_command}`);
   if (report.warnings.length > 0) {
     steps.push('Review the bucketed warning/action cards before treating the run as clean reviewer-facing evidence.');
@@ -3386,6 +4206,7 @@ export function buildProofReport(args: {
     claimedTier: harnessTier,
     claimedTrustTier: harnessTrustTier,
   });
+  const compiledEvidence = extractCompiledEvidence(payload).summary;
 
   const base: ProofReportBase = {
     public_layer: publicLayer,
@@ -3411,6 +4232,7 @@ export function buildProofReport(args: {
     network,
     reviewer_signoff: reviewerSignoff,
     privacy_posture: privacyPosture,
+    compiled_evidence: compiledEvidence,
     decrypted_payload_keys: decryptedPayload ? Object.keys(decryptedPayload) : undefined,
   };
 
@@ -3431,6 +4253,7 @@ export function buildProofReport(args: {
       verify_command: verifyCommand,
       privacy_posture: privacyPosture,
       reviewer_signoff: reviewerSignoff,
+      compiled_evidence: compiledEvidence,
     }),
     verify_command: verifyCommand,
   };
@@ -3516,6 +4339,76 @@ export function renderProofReportHtml(report: ProofReport): string {
   ];
   const reviewerDecisionSummary = `approve=${report.reviewer_signoff.decision_counts.approve}, reject=${report.reviewer_signoff.decision_counts.reject}, needs_changes=${report.reviewer_signoff.decision_counts.needs_changes}`;
   const reviewerTargetSummary = `run=${report.reviewer_signoff.target_counts.run}, export_pack=${report.reviewer_signoff.target_counts.export_pack}`;
+  const compiledStatusLabel = !report.compiled_evidence.envelope_present
+    ? 'MISSING'
+    : report.compiled_evidence.authoritative_report_present
+      ? 'AUTHORITATIVE'
+      : 'INVALID';
+  const compiledPillClass = !report.compiled_evidence.envelope_present
+    ? 'info'
+    : report.compiled_evidence.authoritative_report_present
+      ? 'ok'
+      : 'warn';
+  const compiledEvidenceRefItems = [
+    `proof_bundle_hash_b64u: ${report.compiled_evidence.evidence_refs.proof_bundle_hash_b64u ?? 'unknown'}`,
+    `ontology_hash_b64u: ${report.compiled_evidence.evidence_refs.ontology_hash_b64u ?? 'unknown'}`,
+    `mapping_rules_hash_b64u: ${report.compiled_evidence.evidence_refs.mapping_rules_hash_b64u ?? 'unknown'}`,
+    `verify_result_hash_b64u: ${report.compiled_evidence.evidence_refs.verify_result_hash_b64u ?? 'unknown'}`,
+  ];
+  const compiledNarrativeItems = !report.compiled_evidence.narrative.present
+    ? ['No narrative plane embedded in compiled payload.']
+    : [
+      `Narrative present with authoritative=${report.compiled_evidence.narrative.authoritative_flag === null ? 'unknown' : report.compiled_evidence.narrative.authoritative_flag ? 'true' : 'false'}.`,
+      `Disclaimer: ${report.compiled_evidence.narrative.disclaimer ?? 'missing'}`,
+      'Narrative remains non-authoritative explanatory text only.',
+    ];
+  const compiledArtifactItems = report.compiled_evidence.artifact_paths
+    ? [
+      `Envelope: ${report.compiled_evidence.artifact_paths.envelope}`,
+      report.compiled_evidence.artifact_paths.report
+        ? `Report payload: ${report.compiled_evidence.artifact_paths.report}`
+        : null,
+      report.compiled_evidence.artifact_paths.summary
+        ? `Summary: ${report.compiled_evidence.artifact_paths.summary}`
+        : null,
+      report.compiled_evidence.artifact_paths.narrative
+        ? `Narrative: ${report.compiled_evidence.artifact_paths.narrative}`
+        : null,
+    ].filter((item): item is string => item !== null)
+    : ['No export-pack artifact paths available in this report context.'];
+  const compiledCard = report.compiled_evidence.envelope_present
+    ? `<article class="card">
+        <h2>Compiled evidence (authoritative matrix)</h2>
+        ${renderKeyValueRows([
+          ['Compiled status', compiledStatusLabel],
+          ['Report ID', report.compiled_evidence.report_id],
+          ['Compiler version', report.compiled_evidence.compiler_version],
+          ['Overall status', report.compiled_evidence.overall_status],
+          ['Matrix hash', report.compiled_evidence.matrix_hash_b64u],
+          ['Envelope payload hash', report.compiled_evidence.payload_hash_b64u],
+          ['Signer DID', report.compiled_evidence.signer_did],
+          ['Issued at', report.compiled_evidence.issued_at],
+          ['Total controls', report.compiled_evidence.control_outcome_counts.total],
+          ['PASS controls', report.compiled_evidence.control_outcome_counts.pass],
+          ['FAIL controls', report.compiled_evidence.control_outcome_counts.fail],
+          ['PARTIAL controls', report.compiled_evidence.control_outcome_counts.partial],
+          ['INAPPLICABLE controls', report.compiled_evidence.control_outcome_counts.inapplicable],
+          ['FAIL_CLOSED controls', report.compiled_evidence.control_outcome_counts.fail_closed_invalid_evidence],
+        ])}
+        <div class="subheading">Non-pass controls</div>
+        <ul>${renderList(report.compiled_evidence.non_pass_controls)}</ul>
+        <div class="subheading">Evidence refs</div>
+        <ul>${renderList(compiledEvidenceRefItems)}</ul>
+        <div class="subheading">Narrative membrane</div>
+        <ul>${renderList(compiledNarrativeItems)}</ul>
+        <div class="subheading">Artifact linkage</div>
+        <ul>${renderList(compiledArtifactItems)}</ul>
+        ${report.compiled_evidence.invalid_reasons.length > 0 ? `<div class="subheading">Invalid/unsafe markers</div><ul>${renderList(report.compiled_evidence.invalid_reasons)}</ul>` : ''}
+      </article>`
+    : `<article class="card">
+        <h2>Compiled evidence (authoritative matrix)</h2>
+        <p class="subtitle">No compiled report envelope was detected in bundle metadata for this report.</p>
+      </article>`;
   const runComparisonCard = report.run_comparison
     ? `<article class="card">
         <h2>Side-by-side run comparison</h2>
@@ -3611,6 +4504,7 @@ export function renderProofReportHtml(report: ProofReport): string {
         <span class="pill info">Claimed trust tier: ${escapeHtml(report.harness.trust_tier ?? 'unknown')}</span>
         <span class="pill ${warningsClass}">Reviewer actions: ${reviewerActionCount}</span>
         <span class="pill ${privacyPillClass}">Privacy verdict: ${escapeHtml(report.privacy_posture.overall_verdict.toUpperCase())}</span>
+        <span class="pill ${compiledPillClass}">Compiled matrix: ${escapeHtml(compiledStatusLabel)}</span>
         <span class="pill ok">Signed gateway receipts: ${report.gateway.signed_count}</span>
       </div>
     </section>
@@ -3647,6 +4541,8 @@ export function renderProofReportHtml(report: ProofReport): string {
         <div class="subheading">What Is Not Proven</div>
         <ul>${renderList(report.privacy_posture.not_proven_claims)}</ul>
       </article>
+
+      ${compiledCard}
 
       <article class="card">
         <h2>Allowed processors and blocked routes</h2>
@@ -3959,6 +4855,57 @@ export function renderProofReportText(report: ProofReport): string {
   for (const claim of report.privacy_posture.not_proven_claims) {
     lines.push(`    - ${claim}`);
   }
+
+  lines.push('');
+  lines.push('Compiled evidence (authoritative matrix):');
+  lines.push(`  Envelope present            : ${report.compiled_evidence.envelope_present ? 'yes' : 'no'}`);
+  lines.push(`  Authoritative report        : ${report.compiled_evidence.authoritative_report_present ? 'yes' : 'no'}`);
+  lines.push(`  Source metadata path        : ${report.compiled_evidence.metadata_path ?? 'none'}`);
+  lines.push(`  Report ID                   : ${report.compiled_evidence.report_id ?? 'unknown'}`);
+  lines.push(`  Compiler version            : ${report.compiled_evidence.compiler_version ?? 'unknown'}`);
+  lines.push(`  Overall status              : ${report.compiled_evidence.overall_status ?? 'unknown'}`);
+  lines.push(`  Matrix hash                 : ${report.compiled_evidence.matrix_hash_b64u ?? 'unknown'}`);
+  lines.push(`  Envelope payload hash       : ${report.compiled_evidence.payload_hash_b64u ?? 'unknown'}`);
+  lines.push(`  Signer DID                  : ${report.compiled_evidence.signer_did ?? 'unknown'}`);
+  lines.push(`  Issued at                   : ${report.compiled_evidence.issued_at ?? 'unknown'}`);
+  lines.push(`  Control counts              : total=${report.compiled_evidence.control_outcome_counts.total}, pass=${report.compiled_evidence.control_outcome_counts.pass}, fail=${report.compiled_evidence.control_outcome_counts.fail}, partial=${report.compiled_evidence.control_outcome_counts.partial}, inapplicable=${report.compiled_evidence.control_outcome_counts.inapplicable}, fail_closed=${report.compiled_evidence.control_outcome_counts.fail_closed_invalid_evidence}`);
+  lines.push('  Evidence refs:');
+  lines.push(`    - proof_bundle_hash_b64u: ${report.compiled_evidence.evidence_refs.proof_bundle_hash_b64u ?? 'unknown'}`);
+  lines.push(`    - ontology_hash_b64u: ${report.compiled_evidence.evidence_refs.ontology_hash_b64u ?? 'unknown'}`);
+  lines.push(`    - mapping_rules_hash_b64u: ${report.compiled_evidence.evidence_refs.mapping_rules_hash_b64u ?? 'unknown'}`);
+  lines.push(`    - verify_result_hash_b64u: ${report.compiled_evidence.evidence_refs.verify_result_hash_b64u ?? 'unknown'}`);
+  lines.push('  Non-pass controls:');
+  if (report.compiled_evidence.non_pass_controls.length === 0) {
+    lines.push('    - none');
+  } else {
+    for (const control of report.compiled_evidence.non_pass_controls) {
+      lines.push(`    - ${control}`);
+    }
+  }
+  lines.push(`  Narrative plane             : ${report.compiled_evidence.narrative.present ? `present (authoritative=${report.compiled_evidence.narrative.authoritative_flag === null ? 'unknown' : report.compiled_evidence.narrative.authoritative_flag ? 'true' : 'false'})` : 'not present'}`);
+  if (report.compiled_evidence.narrative.present) {
+    lines.push(`  Narrative disclaimer        : ${report.compiled_evidence.narrative.disclaimer ?? 'missing'}`);
+  }
+  if (report.compiled_evidence.artifact_paths) {
+    lines.push('  Artifact paths:');
+    lines.push(`    - envelope: ${report.compiled_evidence.artifact_paths.envelope}`);
+    if (report.compiled_evidence.artifact_paths.report) {
+      lines.push(`    - report: ${report.compiled_evidence.artifact_paths.report}`);
+    }
+    if (report.compiled_evidence.artifact_paths.summary) {
+      lines.push(`    - summary: ${report.compiled_evidence.artifact_paths.summary}`);
+    }
+    if (report.compiled_evidence.artifact_paths.narrative) {
+      lines.push(`    - narrative: ${report.compiled_evidence.artifact_paths.narrative}`);
+    }
+  }
+  if (report.compiled_evidence.invalid_reasons.length > 0) {
+    lines.push('  Invalid/unsafe markers:');
+    for (const reason of report.compiled_evidence.invalid_reasons) {
+      lines.push(`    - ${reason}`);
+    }
+  }
+
   if (report.run_comparison) {
     lines.push('');
     lines.push('Run comparison highlights:');
