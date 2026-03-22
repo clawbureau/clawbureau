@@ -83,3 +83,36 @@ Started: 2026-03-21T17:45:00Z
   - Runtime v1 is now **6/10 shipped stories**.
   - Wave 3 (`CEC-RT-007`..`CEC-RT-008`) is the next dependency-cleared tranche.
 ---
+
+## 2026-03-22T00:35:00Z - Wave 3 assurance pack shipped
+- What shipped
+  - Merged PR #520 — `feat(clawcompiler): add assurance pack semantics`
+  - Closed the feature lane for:
+    - `CEC-RT-007` AI execution assurance control pack
+    - `CEC-RT-008` waiver + compensating-control semantics
+  - Added the first narrow, versioned execution-assurance pack in `packages/clawverify-core/src/compliance.ts`:
+    - framework: `CLAW_AI_EXECUTION_ASSURANCE_V1`
+    - pack id: `claw.ai_execution_assurance.v1`
+  - Added deterministic authoritative controls for policy binding, approval evidence, egress hygiene, DLP/privacy handling, attestation posture, and reviewer signoff evidence
+  - Added signed waiver semantics that are scope-bound, signer-bound, expiry-bound, and can only conservatively degrade `FAIL -> PARTIAL`
+  - Tightened core/service/schema compiled-report validation so wave3 partial/waiver semantics stay fail-closed and `overall_status` must match the authoritative control matrix
+  - Refreshed compiled-evidence conformance fixtures to the current wave2/wave3 contract
+- Reviewer + follow-up notes
+  - Reviewer verdict: **PASS WITH FIXES**
+  - Reviewer fixed overclaiming in `AXA.POLICY.1`, required bundle-bound policy evidence, tightened wave3 partial/waiver invariants, and aligned service validation with core.
+  - Post-review packaging follow-up fixed one missed schema strict-types issue and refreshed conformance fixtures accordingly.
+- Validation
+  - `npm --prefix packages/clawverify-core run typecheck`
+  - `npm --prefix packages/clawverify-core run build`
+  - `npm --prefix packages/clawsig-sdk run build`
+  - `npm --prefix packages/clawverify-cli run typecheck`
+  - `npm --prefix packages/clawverify-cli run build`
+  - `npm --prefix packages/clawverify-cli test -- test/compliance-cmd-wave1.test.ts`
+  - `npm --prefix services/clawverify run typecheck`
+  - `npm --prefix services/clawverify test -- test/compiled-report.test.ts`
+  - `npm --prefix services/clawverify test -- test/clawcompiler-schema-conformance.test.ts`
+  - `git diff --check`
+- Status
+  - Runtime v1 is now **8/10 shipped stories**.
+  - Wave 4 (`CEC-RT-009`..`CEC-RT-010`) is the next dependency-cleared tranche and the first real parallel split.
+---

@@ -40,8 +40,11 @@ Turn Clawcompiler into the service that can honestly say:
   - `CEC-RT-004` deterministic compiled report generation
   - `CEC-RT-005` signed compiler service/runtime
   - `CEC-RT-006` compiled-report verification in CLI/service
-- Current roadmap progress: **6/10 shipped stories**
-- Next up: **Wave 3** (`CEC-RT-007`..`CEC-RT-008`)
+- **Wave 3 shipped** via PR #520:
+  - `CEC-RT-007` AI execution assurance control pack
+  - `CEC-RT-008` waiver + compensating-control semantics
+- Current roadmap progress: **8/10 shipped stories**
+- Next up: **Wave 4** (`CEC-RT-009`..`CEC-RT-010`)
 
 ## Tracks
 
