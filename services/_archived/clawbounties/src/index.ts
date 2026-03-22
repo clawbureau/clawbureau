@@ -876,6 +876,7 @@ interface ArenaInlineReviewSummaryView {
     review_paste: string | null;
     manager_review: string | null;
   };
+  compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
 }
 
 type ArenaOutcomeStatusView = 'ACCEPTED' | 'OVERRIDDEN' | 'REWORK' | 'REJECTED' | 'DISPUTED';
@@ -942,12 +943,14 @@ interface ArenaDecisionCaptureView {
     reviewer_rationale_path: string;
     decision_taxonomy_tags_path: string;
   };
+  compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
 }
 
 interface BountyReviewArenaFlowView {
   start_arena: ArenaStartActionTemplateView;
   latest_arena: ArenaInlineReviewSummaryView | null;
   decision_capture: ArenaDecisionCaptureView | null;
+  compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
 }
 
 type CompiledEvidenceAttachmentKind = 'envelope' | 'reference';
@@ -1069,6 +1072,36 @@ interface SubmissionCompiledEvidenceSummaryV1 {
   control_outcome_counts: SubmissionCompiledEvidenceControlOutcomeCounts;
   non_pass_controls: SubmissionCompiledEvidenceNonPassControlSummary[];
   important_reason_codes: string[];
+  warnings: string[];
+}
+
+type SubmissionCompiledEvidenceDecisionPosture =
+  | 'unavailable'
+  | 'authoritative_pass'
+  | 'authoritative_non_pass'
+  | 'authoritative_unverified_or_invalid';
+
+interface SubmissionCompiledEvidenceDecisionSurfaceV1 {
+  schema_version: 'submission_compiled_evidence_decision_surface.v1';
+  available: boolean;
+  posture: SubmissionCompiledEvidenceDecisionPosture;
+  authoritative_report: {
+    authoritative: true;
+    provided: boolean;
+    valid: boolean;
+    report_id: string | null;
+    overall_status: CompiledEvidenceOverallStatus | null;
+    verification_code: string | null;
+    verification_reason: string;
+  } | null;
+  narrative_layer: {
+    authoritative: false;
+    present: boolean;
+    valid: boolean | null;
+    boundary_warning_codes: string[];
+  } | null;
+  important_reason_codes: string[];
+  key_non_pass_controls: SubmissionCompiledEvidenceNonPassControlSummary[];
   warnings: string[];
 }
 
@@ -1348,6 +1381,7 @@ interface ApproveBountyResponseV1 {
   status: 'approved';
   escrow: EscrowReleaseResponse;
   decided_at: string;
+  compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
 }
 
 interface RejectBountyResponseV1 {
@@ -1357,6 +1391,7 @@ interface RejectBountyResponseV1 {
   escrow: EscrowDisputeResponse;
   trial_case: TrialCaseSummary;
   decided_at: string;
+  compiled_evidence_review?: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
 }
 
 type WorkerStatus = 'online' | 'offline' | 'paused';
@@ -6038,6 +6073,96 @@ function deriveCompiledEvidenceSummaryForView(
   );
 }
 
+function deriveCompiledEvidenceDecisionPosture(
+  summary: SubmissionCompiledEvidenceSummaryV1,
+): SubmissionCompiledEvidenceDecisionPosture {
+  if (!summary.authoritative_report.provided || !summary.authoritative_report.valid) {
+    return 'authoritative_unverified_or_invalid';
+  }
+
+  const overallStatus = summary.authoritative_report.overall_status;
+  const hasAuthoritativeNonPass =
+    summary.non_pass_controls.length > 0
+    || overallStatus === 'FAIL'
+    || overallStatus === 'PARTIAL'
+    || overallStatus === 'FAIL_CLOSED_INVALID_EVIDENCE';
+
+  return hasAuthoritativeNonPass
+    ? 'authoritative_non_pass'
+    : 'authoritative_pass';
+}
+
+function buildCompiledEvidenceDecisionSurface(
+  summary: SubmissionCompiledEvidenceSummaryV1 | null,
+  options?: {
+    maxNonPassControls?: number;
+    maxImportantReasonCodes?: number;
+    maxWarnings?: number;
+    maxBoundaryWarningCodes?: number;
+  },
+): SubmissionCompiledEvidenceDecisionSurfaceV1 {
+  if (!summary) {
+    return {
+      schema_version: 'submission_compiled_evidence_decision_surface.v1',
+      available: false,
+      posture: 'unavailable',
+      authoritative_report: null,
+      narrative_layer: null,
+      important_reason_codes: [],
+      key_non_pass_controls: [],
+      warnings: [],
+    };
+  }
+
+  const normalized = normalizeCompiledEvidenceSummaryForView(summary, options);
+
+  return {
+    schema_version: 'submission_compiled_evidence_decision_surface.v1',
+    available: true,
+    posture: deriveCompiledEvidenceDecisionPosture(normalized),
+    authoritative_report: {
+      authoritative: true,
+      provided: normalized.authoritative_report.provided,
+      valid: normalized.authoritative_report.valid,
+      report_id: normalized.authoritative_report.report_id,
+      overall_status: normalized.authoritative_report.overall_status,
+      verification_code: normalized.authoritative_report.verification_code,
+      verification_reason: normalized.authoritative_report.verification_reason,
+    },
+    narrative_layer: {
+      authoritative: false,
+      present: normalized.narrative.present,
+      valid: normalized.narrative.valid,
+      boundary_warning_codes: normalized.narrative.boundary_warning_codes,
+    },
+    important_reason_codes: normalized.important_reason_codes,
+    key_non_pass_controls: normalized.non_pass_controls,
+    warnings: normalized.warnings,
+  };
+}
+
+function deriveCompiledEvidenceDecisionSurfaceForRecord(
+  record: SubmissionRecord,
+  mode: 'detail' | 'list' = 'detail',
+): SubmissionCompiledEvidenceDecisionSurfaceV1 {
+  return buildCompiledEvidenceDecisionSurface(
+    deriveCompiledEvidenceSummaryForView(record, mode),
+    mode === 'list'
+      ? {
+          maxNonPassControls: 3,
+          maxImportantReasonCodes: 6,
+          maxWarnings: 4,
+          maxBoundaryWarningCodes: 4,
+        }
+      : {
+          maxNonPassControls: 8,
+          maxImportantReasonCodes: 10,
+          maxWarnings: 8,
+          maxBoundaryWarningCodes: 8,
+        },
+  );
+}
+
 export const __submissionCompiledEvidenceInternals = {
   parseCompiledEvidenceAttachmentInput,
   parseCompiledEvidenceReferenceInput,
@@ -6047,6 +6172,8 @@ export const __submissionCompiledEvidenceInternals = {
   buildCompiledEvidenceSummaryFromReference,
   buildCompiledEvidenceSummaryFromEnvelope,
   normalizeCompiledEvidenceSummaryForView,
+  buildCompiledEvidenceDecisionSurface,
+  deriveCompiledEvidenceDecisionPosture,
 };
 
 function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
@@ -6646,6 +6773,32 @@ function buildSubmissionFixReason(
   if (isNonEmptyString(record.commit_proof_verify_reason)) {
     reasons.push(`Commit proof: ${record.commit_proof_verify_reason.trim()}`);
   }
+
+  const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(record, 'detail');
+  if (compiledEvidenceReview.available) {
+    if (compiledEvidenceReview.posture === 'authoritative_non_pass') {
+      const topControl = compiledEvidenceReview.key_non_pass_controls[0] ?? null;
+      if (topControl) {
+        reasons.push(
+          `Compiled evidence authoritative non-pass: ${topControl.control_id} (${topControl.status})`,
+        );
+      } else {
+        reasons.push('Compiled evidence authoritative matrix reports non-pass controls');
+      }
+    } else if (compiledEvidenceReview.posture === 'authoritative_unverified_or_invalid') {
+      const verificationCode = compiledEvidenceReview.authoritative_report?.verification_code;
+      reasons.push(
+        verificationCode
+          ? `Compiled evidence authoritative report is unverified (${verificationCode})`
+          : 'Compiled evidence authoritative report is unavailable or invalid',
+      );
+    }
+
+    if ((compiledEvidenceReview.narrative_layer?.boundary_warning_codes.length ?? 0) > 0) {
+      reasons.push('Compiled evidence narrative boundary warnings present (non-authoritative layer)');
+    }
+  }
+
   if (reasons.length > 0) {
     return reasons.join('; ');
   }
@@ -6661,6 +6814,7 @@ function buildSubmissionFixDetails(
     submission_status: record.status,
     reason_codes: assuranceGating?.reason_codes ?? [],
     assurance_gating: assuranceGating,
+    compiled_evidence_review: deriveCompiledEvidenceDecisionSurfaceForRecord(record, 'detail'),
     proof_bundle: {
       status: record.proof_verify_status,
       reason: record.proof_verify_reason,
@@ -6679,6 +6833,8 @@ function buildSubmitNextActions(
   assuranceGating: SubmissionAssuranceGatingView | null,
   payoutReviewPolicy: SubmissionPayoutReviewPolicyView | null,
 ): NextAction[] {
+  const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(record, 'detail');
+
   if (assuranceGating?.status === 'quarantined') {
     return [
       {
@@ -6689,6 +6845,7 @@ function buildSubmitNextActions(
           reason_codes: assuranceGating.reason_codes,
           assurance_gating: assuranceGating,
           payout_review_policy: payoutReviewPolicy,
+          compiled_evidence_review: compiledEvidenceReview,
         },
       },
     ];
@@ -6719,11 +6876,10 @@ function buildSubmitNextActions(
               ? 'Submission is on assurance hold pending required evidence verification'
               : 'Submission is not currently reviewable for payout',
       poll_url: `/v1/submissions/${record.submission_id}`,
-      details: payoutReviewPolicy
-        ? {
-            payout_review_policy: payoutReviewPolicy,
-          }
-        : undefined,
+      details: {
+        ...(payoutReviewPolicy ? { payout_review_policy: payoutReviewPolicy } : {}),
+        compiled_evidence_review: compiledEvidenceReview,
+      },
     },
   ];
 }
@@ -6733,6 +6889,8 @@ function buildSubmissionStatusNextActions(
   assuranceGating: SubmissionAssuranceGatingView | null,
   payoutReviewPolicy: SubmissionPayoutReviewPolicyView | null,
 ): NextAction[] {
+  const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(record, 'detail');
+
   if (assuranceGating?.status === 'quarantined') {
     return [
       {
@@ -6743,6 +6901,7 @@ function buildSubmissionStatusNextActions(
           reason_codes: assuranceGating.reason_codes,
           assurance_gating: assuranceGating,
           payout_review_policy: payoutReviewPolicy,
+          compiled_evidence_review: compiledEvidenceReview,
         },
       },
     ];
@@ -6771,11 +6930,10 @@ function buildSubmissionStatusNextActions(
               ? 'Submission is on assurance hold pending required evidence verification'
               : 'Submission is pending review',
         poll_url: `/v1/submissions/${record.submission_id}`,
-        details: payoutReviewPolicy
-          ? {
-              payout_review_policy: payoutReviewPolicy,
-            }
-          : undefined,
+        details: {
+          ...(payoutReviewPolicy ? { payout_review_policy: payoutReviewPolicy } : {}),
+          compiled_evidence_review: compiledEvidenceReview,
+        },
       },
     ];
   }
@@ -8734,6 +8892,7 @@ function buildArenaInlineReviewSummaryView(
   run: ArenaRunRecord | null,
   winnerContender: ArenaContenderResult | null,
   arenaExplorerBaseUrl: string,
+  compiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null,
 ): ArenaInlineReviewSummaryView | null {
   if (!run) return null;
 
@@ -8763,7 +8922,71 @@ function buildArenaInlineReviewSummaryView(
     winner_confidence: winnerConfidence,
     tradeoffs,
     review_links: reviewLinks,
+    compiled_evidence_review: compiledEvidenceReview,
   };
+}
+
+function scopeArenaInlineReviewSummaryToSubmission(
+  summary: ArenaInlineReviewSummaryView | null,
+  run: ArenaRunRecord | null,
+  submission: SubmissionRecord,
+): ArenaInlineReviewSummaryView | null {
+  if (!summary) return null;
+
+  const runSubmissionId = run ? deriveArenaRunSubmissionId(run) : null;
+  if (!runSubmissionId || runSubmissionId !== submission.submission_id) {
+    return {
+      ...summary,
+      compiled_evidence_review: null,
+    };
+  }
+
+  return summary;
+}
+
+function scopeArenaPayloadCompiledEvidenceToSubmission(
+  payload: Record<string, unknown> | null,
+  run: ArenaRunRecord | null,
+  submission: SubmissionRecord,
+): Record<string, unknown> | null {
+  if (!payload) return null;
+
+  const runSubmissionId = run ? deriveArenaRunSubmissionId(run) : null;
+  if (!runSubmissionId || runSubmissionId !== submission.submission_id) {
+    const scopedDelegationInsights = isRecord(payload.delegation_insights)
+      ? payload.delegation_insights
+      : null;
+    const scopedManagerRouting = scopedDelegationInsights && isRecord(scopedDelegationInsights.manager_routing)
+      ? scopedDelegationInsights.manager_routing
+      : null;
+
+    return {
+      ...payload,
+      submission_compiled_evidence_review: null,
+      contenders: Array.isArray(payload.contenders)
+        ? payload.contenders.map((entry) => (isRecord(entry)
+          ? {
+              ...entry,
+              submission_compiled_evidence_review: null,
+            }
+          : entry))
+        : payload.contenders,
+      delegation_insights: scopedDelegationInsights
+        ? {
+            ...scopedDelegationInsights,
+            compiled_evidence_review: null,
+            manager_routing: scopedManagerRouting
+              ? {
+                  ...scopedManagerRouting,
+                  compiled_evidence_review: null,
+                }
+              : scopedDelegationInsights.manager_routing,
+          }
+        : payload.delegation_insights,
+    };
+  }
+
+  return payload;
 }
 
 function buildArenaOutcomeStatusOptions(): ArenaOutcomeStatusOptionView[] {
@@ -8862,6 +9085,8 @@ function buildArenaDecisionCaptureView(
       ? 'REWORK'
       : 'REJECTED';
 
+  const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail');
+
   return {
     outcome_endpoint: {
       endpoint: `/v1/bounties/${submission.bounty_id}/arena/outcome`,
@@ -8900,19 +9125,22 @@ function buildArenaDecisionCaptureView(
       reviewer_rationale_path: 'reviewer_rationale',
       decision_taxonomy_tags_path: 'decision_taxonomy_tags',
     },
+    compiled_evidence_review: compiledEvidenceReview,
   };
 }
 
 async function buildBountyReviewArenaFlowView(
   bounty: BountyV2,
   submission: SubmissionRecord,
+  latestArenaRun: ArenaRunRecord | null,
   latestArena: ArenaInlineReviewSummaryView | null,
   decisionCapture: ArenaDecisionCaptureView | null,
 ): Promise<BountyReviewArenaFlowView> {
   return {
     start_arena: await buildArenaStartActionTemplateView(bounty, submission),
-    latest_arena: latestArena,
+    latest_arena: scopeArenaInlineReviewSummaryToSubmission(latestArena, latestArenaRun, submission),
     decision_capture: decisionCapture,
+    compiled_evidence_review: deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail'),
   };
 }
 
@@ -12269,6 +12497,65 @@ function buildLiveArenaBaselineContender(bounty: BountyV2, submission: Submissio
   const skills = parseStringList(agentPack?.skills, 32, 120, true) ?? [];
   const plugins = parseStringList(agentPack?.plugins, 32, 120, true) ?? [];
 
+  const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail');
+  const compiledPostureReasonCode = !compiledEvidenceReview.available
+    ? 'ARENA_COMPILED_EVIDENCE_UNAVAILABLE'
+    : compiledEvidenceReview.posture === 'authoritative_pass'
+      ? 'ARENA_COMPILED_EVIDENCE_AUTHORITATIVE_PASS'
+      : compiledEvidenceReview.posture === 'authoritative_non_pass'
+        ? 'ARENA_COMPILED_EVIDENCE_AUTHORITATIVE_NON_PASS'
+        : 'ARENA_COMPILED_EVIDENCE_AUTHORITATIVE_UNVERIFIED';
+
+  const compiledReasonCodes = compiledEvidenceReview.available
+    ? compiledEvidenceReview.important_reason_codes.slice(0, 4)
+    : [];
+  const compiledWarnings = compiledEvidenceReview.available
+    ? compiledEvidenceReview.warnings.slice(0, 3)
+    : [];
+  const narrativeWarnings = compiledEvidenceReview.narrative_layer
+    ? compiledEvidenceReview.narrative_layer.boundary_warning_codes.slice(0, 3)
+    : [];
+
+  const compiledBottlenecks = compiledEvidenceReview.posture === 'authoritative_non_pass'
+    ? compiledEvidenceReview.key_non_pass_controls
+      .slice(0, 3)
+      .map((control) => `Compiled evidence non-pass: ${control.control_id} (${control.status})`)
+    : [];
+
+  const compiledContractImprovements = compiledEvidenceReview.posture === 'authoritative_unverified_or_invalid'
+    ? ['Ensure authoritative compiled evidence envelope is attached and verifiable before approval.']
+    : compiledEvidenceReview.posture === 'unavailable'
+      ? ['Collect compiled evidence before relying on arena-generated reviewer guidance.']
+      : [];
+
+  const compiledNextHints = compiledEvidenceReview.posture === 'authoritative_pass'
+    ? ['Maintain authoritative compiled evidence posture while benchmarking contender score.']
+    : compiledEvidenceReview.posture === 'authoritative_non_pass'
+      ? ['Prioritize authoritative compiled evidence findings when resolving arena outcomes.']
+      : compiledEvidenceReview.posture === 'authoritative_unverified_or_invalid'
+        ? ['Do not treat narrative or reference-only compiled evidence as authoritative; request a verifiable envelope before approval.']
+        : ['Compiled evidence is unavailable; avoid inferring reviewer posture from arena-only signals.'];
+
+  const reviewPasteLines = [
+    'Live arena trigger created from submission; contender evaluation pending.',
+    `Compiled evidence posture: ${compiledEvidenceReview.posture}.`,
+    compiledEvidenceReview.authoritative_report
+      ? `Authoritative report: provided=${compiledEvidenceReview.authoritative_report.provided}, valid=${compiledEvidenceReview.authoritative_report.valid}, overall_status=${compiledEvidenceReview.authoritative_report.overall_status ?? 'unknown'}.`
+      : 'Authoritative report: unavailable.',
+    compiledEvidenceReview.narrative_layer
+      ? `Narrative layer (non-authoritative): present=${compiledEvidenceReview.narrative_layer.present}, valid=${compiledEvidenceReview.narrative_layer.valid ?? 'unknown'}.`
+      : 'Narrative layer: unavailable.',
+    compiledEvidenceReview.key_non_pass_controls.length > 0
+      ? `Key non-pass controls: ${compiledEvidenceReview.key_non_pass_controls
+        .slice(0, 3)
+        .map((control) => `${control.control_id}:${control.status}`)
+        .join(', ')}`
+      : null,
+    compiledEvidenceReview.narrative_layer && compiledEvidenceReview.narrative_layer.boundary_warning_codes.length > 0
+      ? `Narrative boundary warnings: ${compiledEvidenceReview.narrative_layer.boundary_warning_codes.slice(0, 3).join(', ')}`
+      : null,
+  ].filter((line): line is string => Boolean(line));
+
   return {
     contender_id: `contender_submission_${submission.submission_id.slice(-12)}`,
     label: 'Live bounty submission',
@@ -12294,17 +12581,23 @@ function buildLiveArenaBaselineContender(bounty: BountyV2, submission: Submissio
     check_results: [],
     score_explain: {
       final_score: 0,
-      reason_codes: ['ARENA_LIVE_TRIGGERED'],
+      reason_codes: dedupeStrings([
+        'ARENA_LIVE_TRIGGERED',
+        compiledPostureReasonCode,
+        ...compiledReasonCodes,
+        ...compiledWarnings,
+        ...narrativeWarnings,
+      ]).slice(0, 20),
       evidence_links: buildSubmissionEvidenceLinks(submission),
     },
     insights: {
-      bottlenecks: [],
-      contract_improvements: [],
-      next_delegation_hints: [],
+      bottlenecks: compiledBottlenecks,
+      contract_improvements: compiledContractImprovements,
+      next_delegation_hints: compiledNextHints,
     },
     proof_pack: null,
     manager_review: null,
-    review_paste: 'Live arena trigger created from submission; contender evaluation pending.',
+    review_paste: reviewPasteLines.join('\n'),
   };
 }
 
@@ -13016,9 +13309,40 @@ function buildArenaCalibrationSummary(
   };
 }
 
+function extractSubmissionIdFromArenaIdentifier(value: string): string | null {
+  const match = value.match(/sub_[a-f0-9-]{8,}/);
+  if (!match) return null;
+  const submissionId = match[0];
+  return submissionId.startsWith('sub_') ? submissionId : null;
+}
+
+function deriveArenaRunSubmissionId(run: ArenaRunRecord): string | null {
+  const fromArenaId = extractSubmissionIdFromArenaIdentifier(run.arena_id);
+  if (fromArenaId) return fromArenaId;
+
+  const fromContractId = extractSubmissionIdFromArenaIdentifier(run.contract_id);
+  if (fromContractId) return fromContractId;
+
+  return null;
+}
+
+async function resolveArenaRunCompiledEvidenceReview(
+  db: D1Database,
+  run: ArenaRunRecord,
+): Promise<SubmissionCompiledEvidenceDecisionSurfaceV1 | null> {
+  const submissionId = deriveArenaRunSubmissionId(run);
+  if (!submissionId) return null;
+
+  const submission = await getSubmissionById(db, submissionId);
+  if (!submission) return null;
+
+  return deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'list');
+}
+
 function buildArenaDelegationInsights(
   contenders: ArenaContenderResult[],
   winnerContenderId: string | null,
+  compiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null,
 ): Record<string, unknown> {
   const winner = winnerContenderId
     ? contenders.find((contender) => contender.contender_id === winnerContenderId) ?? null
@@ -13041,9 +13365,11 @@ function buildArenaDelegationInsights(
     bottlenecks: allBottlenecks,
     contract_improvements: allContractImprovements,
     next_delegation_hints: allNextHints,
+    compiled_evidence_review: compiledEvidenceReview,
     manager_routing: {
       default_contender_id: winnerContenderId,
       backup_contenders: eligibleBackups,
+      compiled_evidence_review: compiledEvidenceReview,
     },
     contenders: contenders
       .sort((a, b) => b.score - a.score)
@@ -13076,6 +13402,7 @@ async function buildArenaPayloadFromRun(
 
   const reasonCodes = run.reason_codes_json ? (parseJsonStringArray(run.reason_codes_json) ?? []) : [];
   const tradeoffs = run.tradeoffs_json ? (parseJsonStringArray(run.tradeoffs_json) ?? []) : [];
+  const runCompiledEvidenceReview = await resolveArenaRunCompiledEvidenceReview(db, run);
 
   let generatedAt = run.updated_at;
   let reportScoreExplain: Record<string, unknown> | null = null;
@@ -13148,6 +13475,7 @@ async function buildArenaPayloadFromRun(
         insights: contender.insights,
         review_paste: contender.review_paste,
         manager_review_json: contender.manager_review,
+        submission_compiled_evidence_review: runCompiledEvidenceReview,
       };
     }),
     winner: {
@@ -13156,7 +13484,8 @@ async function buildArenaPayloadFromRun(
     },
     tradeoffs,
     reason_codes: reasonCodes,
-    delegation_insights: buildArenaDelegationInsights(contenderViews, run.winner_contender_id),
+    submission_compiled_evidence_review: runCompiledEvidenceReview,
+    delegation_insights: buildArenaDelegationInsights(contenderViews, run.winner_contender_id, runCompiledEvidenceReview),
   };
 }
 
@@ -16810,6 +17139,16 @@ async function handleApproveBounty(
     const now = new Date().toISOString();
     const resolvedSubmissionId = bounty.approved_submission_id ?? submission_id;
 
+    let resolvedSubmissionCompiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null;
+    try {
+      const resolvedSubmission = await getSubmissionById(env.BOUNTIES_DB, resolvedSubmissionId);
+      if (resolvedSubmission) {
+        resolvedSubmissionCompiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(resolvedSubmission, 'detail');
+      }
+    } catch {
+      resolvedSubmissionCompiledEvidenceReview = null;
+    }
+
     try {
       await updateSubmissionStatus(env.BOUNTIES_DB, resolvedSubmissionId, 'approved', now, 'pending_review');
     } catch (err) {
@@ -16830,6 +17169,7 @@ async function handleApproveBounty(
       status: 'approved',
       escrow: escrowResponse,
       decided_at: bounty.approved_at ?? bounty.updated_at,
+      compiled_evidence_review: resolvedSubmissionCompiledEvidenceReview,
     };
 
     const sourceId = `clawbounties:approve:${bounty.bounty_id}:${resolvedSubmissionId}:${
@@ -16891,6 +17231,8 @@ async function handleApproveBounty(
     return errorResponse('BOUNTY_METADATA_INVALID', payoutPolicy.message, 500, undefined, version);
   }
 
+  const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail');
+
   if (!payoutPolicy.policy.payout_ready) {
     return errorResponse(
       'SUBMISSION_INVALID',
@@ -16900,6 +17242,7 @@ async function handleApproveBounty(
         reason_codes: payoutPolicy.policy.blocked_reason_codes,
         payout_review_policy: payoutPolicy.policy.view,
         assurance_gating: payoutPolicy.assurance_gating,
+        compiled_evidence_review: compiledEvidenceReview,
       },
       version,
     );
@@ -16999,6 +17342,7 @@ async function handleApproveBounty(
     status: 'approved',
     escrow: escrowResponse,
     decided_at: decidedAt,
+    compiled_evidence_review: compiledEvidenceReview,
   };
 
   await emitClawrepLoopEvent(env, {
@@ -17262,6 +17606,7 @@ async function handleRejectBounty(
       escrow: escrowResponse,
       trial_case: trialCase,
       decided_at: bounty.rejected_at ?? bounty.updated_at,
+      compiled_evidence_review: deriveCompiledEvidenceDecisionSurfaceForRecord(resolvedSubmission, 'detail'),
     };
 
     const sourceId = `clawbounties:reject:${bounty.bounty_id}:${resolvedSubmissionId}:${
@@ -17427,6 +17772,7 @@ async function handleRejectBounty(
     escrow: escrowResponse,
     trial_case: trialCase,
     decided_at: decidedAt,
+    compiled_evidence_review: deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'detail'),
   };
 
   await emitClawrepLoopEvent(env, {
@@ -23782,6 +24128,7 @@ async function handlePostArenaDeskDecisionLoop(
       continue;
     }
 
+    const compiledEvidenceReview = deriveCompiledEvidenceDecisionSurfaceForRecord(submission, 'list');
     const eligibleForApproval = payoutPolicyResult.policy.payout_ready;
 
     let action: 'approve' | 'reject' | null = null;
@@ -23804,6 +24151,7 @@ async function handlePostArenaDeskDecisionLoop(
         decision_mode: decisionMode,
         payout_blocked_reason_codes: payoutPolicyResult.policy.blocked_reason_codes,
         payout_review_policy: payoutPolicyResult.policy.view,
+        compiled_evidence_review: compiledEvidenceReview,
       });
       continue;
     }
@@ -23834,6 +24182,7 @@ async function handlePostArenaDeskDecisionLoop(
         commit_proof_verify_status: submission.commit_proof_verify_status,
         payout_blocked_reason_codes: payoutPolicyResult.policy.blocked_reason_codes,
         payout_review_policy: payoutPolicyResult.policy.view,
+        compiled_evidence_review: compiledEvidenceReview,
       });
       continue;
     }
@@ -23879,6 +24228,7 @@ async function handlePostArenaDeskDecisionLoop(
         idempotency_key: idempotencyKey,
         http_status: response.status,
         payout_review_policy: payoutPolicyResult.policy.view,
+        compiled_evidence_review: compiledEvidenceReview,
         response: responsePayload,
       });
     } else {
@@ -23891,6 +24241,7 @@ async function handlePostArenaDeskDecisionLoop(
         idempotency_key: idempotencyKey,
         http_status: response.status,
         payout_review_policy: payoutPolicyResult.policy.view,
+        compiled_evidence_review: compiledEvidenceReview,
         response: responsePayload,
       });
     }
@@ -25795,6 +26146,9 @@ async function handleArenaManagerRoute(
     latest_hard_gate_pass: boolean;
     last_seen_at: string;
     sample_run_ids: string[];
+    compiled_evidence_available_samples: number;
+    compiled_evidence_non_pass_samples: number;
+    latest_compiled_evidence_review: SubmissionCompiledEvidenceDecisionSurfaceV1 | null;
   };
 
   type OutcomeAggregate = {
@@ -25815,6 +26169,8 @@ async function handleArenaManagerRoute(
     if (run.winner_contender_id) {
       winnerCounts.set(run.winner_contender_id, (winnerCounts.get(run.winner_contender_id) ?? 0) + 1);
     }
+
+    const runCompiledEvidenceReview = await resolveArenaRunCompiledEvidenceReview(env.BOUNTIES_DB, run);
 
     const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, run.run_id);
     for (const contenderRow of contenderRows) {
@@ -25839,6 +26195,9 @@ async function handleArenaManagerRoute(
           latest_hard_gate_pass: contender.hard_gate_pass,
           last_seen_at: run.updated_at,
           sample_run_ids: [run.run_id],
+          compiled_evidence_available_samples: runCompiledEvidenceReview?.available ? 1 : 0,
+          compiled_evidence_non_pass_samples: runCompiledEvidenceReview?.posture === 'authoritative_non_pass' ? 1 : 0,
+          latest_compiled_evidence_review: runCompiledEvidenceReview,
         });
       } else {
         existing.appearances += 1;
@@ -25848,9 +26207,17 @@ async function handleArenaManagerRoute(
         existing.avg_risk_sum += contender.metrics.risk_score;
         existing.avg_quality_sum += contender.metrics.quality_score;
 
+        if (runCompiledEvidenceReview?.available) {
+          existing.compiled_evidence_available_samples += 1;
+        }
+        if (runCompiledEvidenceReview?.posture === 'authoritative_non_pass') {
+          existing.compiled_evidence_non_pass_samples += 1;
+        }
+
         if (run.updated_at >= existing.last_seen_at) {
           existing.last_seen_at = run.updated_at;
           existing.latest_hard_gate_pass = contender.hard_gate_pass;
+          existing.latest_compiled_evidence_review = runCompiledEvidenceReview;
         }
 
         if (existing.sample_run_ids.length < 10) {
@@ -25930,6 +26297,16 @@ async function handleArenaManagerRoute(
 
       const topOverrideReasonCode = overrideReasonBreakdown[0]?.reason_code ?? null;
 
+      const latestCompiledEvidenceReview = entry.latest_compiled_evidence_review;
+      const compiledEvidenceAvailableSamples = entry.compiled_evidence_available_samples;
+      const compiledEvidenceNonPassSamples = entry.compiled_evidence_non_pass_samples;
+      const compiledEvidenceAvailabilityRate = appearances > 0
+        ? compiledEvidenceAvailableSamples / appearances
+        : 0;
+      const compiledEvidenceNonPassRate = compiledEvidenceAvailableSamples > 0
+        ? compiledEvidenceNonPassSamples / compiledEvidenceAvailableSamples
+        : 0;
+
       const baseRoutingScore =
         (avgScore * 0.65) +
         (winRate * 25) +
@@ -25952,6 +26329,14 @@ async function handleArenaManagerRoute(
       if (calibrationGap <= -0.2) coachingRecommendations.push('Predicted confidence appears conservative; contender may be under-utilized.');
       if (avgRisk >= 40) coachingRecommendations.push('Risk profile elevated; enforce stricter safety gates and staged rollout.');
       if (hardGatePassRate < 1) coachingRecommendations.push('Mandatory checks not consistently passing; fix contract compliance first.');
+
+      if (latestCompiledEvidenceReview?.available) {
+        if (latestCompiledEvidenceReview.posture === 'authoritative_non_pass') {
+          coachingRecommendations.push('Latest compiled evidence includes authoritative non-pass controls; require reviewer attention before auto-route.');
+        } else if (latestCompiledEvidenceReview.posture === 'authoritative_unverified_or_invalid') {
+          coachingRecommendations.push('Latest compiled evidence is unverified/unavailable; avoid treating narrative as authoritative signal.');
+        }
+      }
 
       if (topOverrideReasonCode && overrideRate > 0) {
         const hint = ARENA_OVERRIDE_REASON_REGISTRY[topOverrideReasonCode];
@@ -25985,6 +26370,13 @@ async function handleArenaManagerRoute(
         top_override_reason_code: topOverrideReasonCode,
         override_reason_breakdown: overrideReasonBreakdown,
         coaching_recommendations: coachingRecommendations,
+        compiled_evidence: {
+          available_samples: compiledEvidenceAvailableSamples,
+          non_pass_samples: compiledEvidenceNonPassSamples,
+          availability_rate: Number(compiledEvidenceAvailabilityRate.toFixed(4)),
+          non_pass_rate: Number(compiledEvidenceNonPassRate.toFixed(4)),
+          latest_review: latestCompiledEvidenceReview,
+        },
         last_seen_at: entry.last_seen_at,
         sample_run_ids: entry.sample_run_ids,
       };
@@ -26059,6 +26451,8 @@ async function handleArenaManagerRoute(
     ...policyOptimizerReasonCodes,
   ];
 
+  const recommendedCompiledEvidenceReview = recommended.compiled_evidence.latest_review;
+
   const backups = selectedPool
     .filter((entry) => entry.contender_id !== recommended.contender_id)
     .slice(0, 3);
@@ -26088,6 +26482,18 @@ async function handleArenaManagerRoute(
     reasonCodes.push('ARENA_ROUTING_FLEET_UNAVAILABLE');
   }
 
+  if (recommendedCompiledEvidenceReview?.available) {
+    if (recommendedCompiledEvidenceReview.posture === 'authoritative_non_pass') {
+      reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_NON_PASS');
+    } else if (recommendedCompiledEvidenceReview.posture === 'authoritative_unverified_or_invalid') {
+      reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_UNVERIFIED');
+    } else {
+      reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_PASS');
+    }
+  } else {
+    reasonCodes.push('ARENA_ROUTING_COMPILED_EVIDENCE_UNAVAILABLE');
+  }
+
   const topWinner = [...winnerCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
   const winnerStabilityRatio = topWinner && runs.length > 0 ? topWinner[1] / runs.length : 0;
 
@@ -26107,6 +26513,16 @@ async function handleArenaManagerRoute(
     globalCoachRecommendations.push(`Policy-learning signal (${topReasonCode}): ${hint.contract_rewrite}`);
     globalCoachRecommendations.push(`Prompt-learning signal: ${hint.prompt_rewrite}`);
   }
+
+  if (recommendedCompiledEvidenceReview?.available) {
+    if (recommendedCompiledEvidenceReview.posture === 'authoritative_non_pass') {
+      globalCoachRecommendations.push('Compiled evidence indicates authoritative non-pass controls; maintain manual reviewer checkpoints.');
+    }
+    if ((recommendedCompiledEvidenceReview.narrative_layer?.boundary_warning_codes.length ?? 0) > 0) {
+      globalCoachRecommendations.push('Narrative boundary warnings present; keep authoritative/non-authoritative evidence layers distinct in review UI.');
+    }
+  }
+
   if (globalCoachRecommendations.length === 0) {
     globalCoachRecommendations.push('Routing profile appears stable; continue autonomous routing with periodic calibration checks.');
   }
@@ -26162,6 +26578,7 @@ async function handleArenaManagerRoute(
           top_override_reason_code: recommended.top_override_reason_code,
           override_reason_breakdown: recommended.override_reason_breakdown,
           coaching_recommendations: recommended.coaching_recommendations,
+          compiled_evidence: recommended.compiled_evidence,
           last_seen_at: recommended.last_seen_at,
           sample_run_ids: recommended.sample_run_ids,
         },
@@ -26185,6 +26602,7 @@ async function handleArenaManagerRoute(
           top_override_reason_code: entry.top_override_reason_code,
           override_reason_breakdown: entry.override_reason_breakdown,
           coaching_recommendations: entry.coaching_recommendations,
+          compiled_evidence: entry.compiled_evidence,
         })),
       },
     },
@@ -26226,6 +26644,7 @@ async function buildArenaManagerAutopilotPayload(
   const reworkRate = d1Number(evidence.rework_rate) ?? 0;
   const calibrationGap = d1Number(evidence.calibration_gap) ?? 0;
   const latestHardGatePass = evidence.latest_hard_gate_pass === true;
+  const compiledEvidence = isRecord(evidence.compiled_evidence) ? evidence.compiled_evidence : null;
 
   const guardrails = {
     min_runs: 2,
@@ -26348,6 +26767,20 @@ async function buildArenaManagerAutopilotPayload(
     ? ['ARENA_AUTOPILOT_ENABLED', 'ARENA_AUTOPILOT_GUARDRAILS_PASSED', ...fleetReasonCodes]
     : ['ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED', ...fleetReasonCodes];
 
+  const compiledEvidenceLatestReview = compiledEvidence && isRecord(compiledEvidence.latest_review)
+    ? compiledEvidence.latest_review
+    : null;
+  const compiledEvidencePosture = d1String(compiledEvidenceLatestReview?.posture) ?? null;
+  if (compiledEvidencePosture === 'authoritative_non_pass') {
+    reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_NON_PASS');
+  } else if (compiledEvidencePosture === 'authoritative_unverified_or_invalid') {
+    reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_UNVERIFIED');
+  } else if (compiledEvidencePosture === 'authoritative_pass') {
+    reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_PASS');
+  } else {
+    reasonCodes.push('ARENA_AUTOPILOT_COMPILED_EVIDENCE_UNAVAILABLE');
+  }
+
   if (circuitStatus !== null) {
     reasonCodes.push(circuitStatus === 'PASS'
       ? 'ARENA_AUTOPILOT_CIRCUIT_BREAKER_PASS'
@@ -26385,6 +26818,7 @@ async function buildArenaManagerAutopilotPayload(
       guardrails,
       violations,
       reason_codes: dedupeStrings(reasonCodes),
+      compiled_evidence: compiledEvidence,
       circuit_breaker: circuit
         ? {
             status: circuitStatus,
@@ -26490,6 +26924,12 @@ function buildArenaAutopilotPreview(
     ? managerRouting.backup_contenders.filter((entry): entry is string => typeof entry === 'string')
     : [];
 
+  const compiledEvidenceReview = delegationInsights && isRecord(delegationInsights.compiled_evidence_review)
+    ? delegationInsights.compiled_evidence_review
+    : managerRouting && isRecord(managerRouting.compiled_evidence_review)
+      ? managerRouting.compiled_evidence_review
+      : null;
+
   const totals = isRecord(calibration.totals) ? calibration.totals : null;
   const winnerStability = Array.isArray(calibration.winner_stability)
     ? calibration.winner_stability.find((entry) => isRecord(entry) && d1String(entry.task_fingerprint) === run.task_fingerprint)
@@ -26514,6 +26954,15 @@ function buildArenaAutopilotPreview(
 
   const status = violations.length === 0 ? 'auto_route_enabled' : 'manual_review_required';
 
+  const compiledEvidencePosture = d1String(compiledEvidenceReview?.posture) ?? 'unavailable';
+  const compiledEvidenceReasonCode = compiledEvidencePosture === 'authoritative_non_pass'
+    ? 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_NON_PASS'
+    : compiledEvidencePosture === 'authoritative_unverified_or_invalid'
+      ? 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_UNVERIFIED'
+      : compiledEvidencePosture === 'authoritative_pass'
+        ? 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_PASS'
+        : 'ARENA_AUTOPILOT_PREVIEW_COMPILED_EVIDENCE_UNAVAILABLE';
+
   return {
     schema_version: 'arena_autopilot_preview.v1',
     status,
@@ -26526,9 +26975,13 @@ function buildArenaAutopilotPreview(
       rework_rate: Number(reworkRate.toFixed(4)),
       winner_stability_ratio: Number(stabilityRatio.toFixed(4)),
     },
-    reason_codes: status === 'auto_route_enabled'
-      ? ['ARENA_AUTOPILOT_PREVIEW_ENABLED']
-      : ['ARENA_AUTOPILOT_PREVIEW_MANUAL_REVIEW'],
+    reason_codes: dedupeStrings([
+      ...(status === 'auto_route_enabled'
+        ? ['ARENA_AUTOPILOT_PREVIEW_ENABLED']
+        : ['ARENA_AUTOPILOT_PREVIEW_MANUAL_REVIEW']),
+      compiledEvidenceReasonCode,
+    ]),
+    compiled_evidence_review: compiledEvidenceReview,
     violations,
   };
 }
@@ -26681,9 +27134,12 @@ async function handleListBountySubmissions(
   let latestArenaWinnerContender: ArenaContenderResult | null = null;
   let latestArenaThreadForWinner: ArenaReviewThreadEntry | null = null;
   let latestArenaSummary: ArenaInlineReviewSummaryView | null = null;
+  let latestArenaCompiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null;
   try {
     latestArenaRun = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, bounty.bounty_id);
     if (latestArenaRun) {
+      latestArenaCompiledEvidenceReview = await resolveArenaRunCompiledEvidenceReview(env.BOUNTIES_DB, latestArenaRun);
+
       const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, latestArenaRun.run_id);
       if (latestArenaRun.winner_contender_id) {
         const winnerRow = contenderRows.find((row) => row.contender_id === latestArenaRun?.winner_contender_id) ?? null;
@@ -26700,6 +27156,7 @@ async function handleListBountySubmissions(
         latestArenaRun,
         latestArenaWinnerContender,
         arenaExplorerBaseUrl,
+        latestArenaCompiledEvidenceReview,
       );
     }
   } catch (err) {
@@ -26717,7 +27174,13 @@ async function handleListBountySubmissions(
         latestArenaWinnerContender,
         latestArenaThreadForWinner,
       );
-      const arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, record, latestArenaSummary, decisionCapture);
+      const arenaReviewFlow = await buildBountyReviewArenaFlowView(
+        bounty,
+        record,
+        latestArenaRun,
+        latestArenaSummary,
+        decisionCapture,
+      );
       const assuranceEvaluation = evaluateSubmissionAssuranceRequirements(bountyAssuranceRequirements, record);
       const payoutPolicy = evaluateSubmissionPayoutPolicy(bounty, record, assuranceEvaluation.view);
       views.push(toSubmissionSummaryView(
@@ -26826,11 +27289,13 @@ async function handleGetSubmissionDetail(
   let latestArenaRun: ArenaRunRecord | null = null;
   let latestArenaWinnerContender: ArenaContenderResult | null = null;
   let latestArenaThreadForWinner: ArenaReviewThreadEntry | null = null;
+  let latestArenaCompiledEvidenceReview: SubmissionCompiledEvidenceDecisionSurfaceV1 | null = null;
 
   try {
     latestArenaRun = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, submission.bounty_id);
     if (latestArenaRun) {
       latestArenaPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, latestArenaRun);
+      latestArenaCompiledEvidenceReview = await resolveArenaRunCompiledEvidenceReview(env.BOUNTIES_DB, latestArenaRun);
 
       const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, latestArenaRun.run_id);
       if (latestArenaRun.winner_contender_id) {
@@ -26848,6 +27313,7 @@ async function handleGetSubmissionDetail(
         latestArenaRun,
         latestArenaWinnerContender,
         arenaExplorerBaseUrl,
+        latestArenaCompiledEvidenceReview,
       );
     }
   } catch (err) {
@@ -26863,7 +27329,13 @@ async function handleGetSubmissionDetail(
       latestArenaWinnerContender,
       latestArenaThreadForWinner,
     );
-    arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, submission, latestArenaSummary, decisionCapture);
+    arenaReviewFlow = await buildBountyReviewArenaFlowView(
+      bounty,
+      submission,
+      latestArenaRun,
+      latestArenaSummary,
+      decisionCapture,
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('INTERNAL_ERROR', message, 500, undefined, version);
@@ -26879,7 +27351,7 @@ async function handleGetSubmissionDetail(
     payoutPolicy.view,
   );
   if (latestArenaPayload) {
-    view.arena = latestArenaPayload;
+    view.arena = scopeArenaPayloadCompiledEvidenceToSubmission(latestArenaPayload, latestArenaRun, submission);
   }
 
   return jsonResponse(
