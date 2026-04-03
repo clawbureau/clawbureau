@@ -141,7 +141,7 @@ preview_bucket_name = "clawea-www-staging"
 name = "clawea-www-staging"
 workers_dev = true
 routes = [
-  { pattern = "staging-www.clawea.com/*", zone_name = "clawea.com" }
+  { pattern = "staging-www.clawea.com", custom_domain = true }
 ]
 
 [env.staging.triggers]
