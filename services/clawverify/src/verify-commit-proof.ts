@@ -21,9 +21,11 @@ import {
 import {
   computeHash,
   base64UrlDecode,
+  base64UrlEncode,
   extractPublicKeyFromDidKey,
   verifySignature,
 } from './crypto';
+import { jcsCanonicalize } from './jcs';
 
 export interface CommitProofVerifierOptions {
   /**
@@ -104,6 +106,105 @@ function isRepoClaimAllowlisted(
  * - Ensure repo claim exists in clawclaim
  * - Return repo + commit + signer DID
  */
+/**
+ * Detect legacy message_signature format and normalize to signed-envelope.
+ * This mirrors the normalization in the bounties service so the clawverify
+ * endpoint can accept commit proofs produced by skill-did-work/sign-message.mjs
+ * (which outputs the legacy format).
+ */
+async function normalizeLegacyCommitProof(input: unknown): Promise<unknown> {
+  if (typeof input !== 'object' || input === null) return input;
+  const obj = input as Record<string, unknown>;
+
+  // Already looks like a signed envelope — pass through
+  if ('envelope_version' in obj && 'envelope_type' in obj) return input;
+
+  // Legacy message_signature: { version, type: 'message_signature', algo, did, message: 'commit:<sha>', createdAt, signature }
+  if (obj.type === 'message_signature' && typeof obj.message === 'string') {
+    const match = (obj.message as string).trim().match(/^commit:([a-f0-9]{7,64})$/i);
+    if (!match) return input; // not a commit proof message_signature
+
+    const commitSha = match[1]!.toLowerCase();
+    const signerDid = typeof obj.did === 'string' ? (obj.did as string).trim() : '';
+    const issuedAt = typeof obj.createdAt === 'string' ? (obj.createdAt as string).trim() : new Date().toISOString();
+    const signatureRaw = typeof obj.signature === 'string' ? (obj.signature as string).trim() : '';
+
+    // Convert base64 standard to base64url
+    const signatureB64u = signatureRaw
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    const payload = {
+      proof_version: '1',
+      commit_sha: commitSha,
+      repo_claim_id: 'legacy',
+      repository: 'unknown',
+      message: obj.message,
+    };
+
+    let payloadHashB64u: string;
+    try {
+      const encoded = new TextEncoder().encode(jcsCanonicalize(payload));
+      const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+      payloadHashB64u = base64UrlEncode(new Uint8Array(hashBuffer));
+    } catch {
+      return input; // fail open to let the normal validator produce a precise error
+    }
+
+    return {
+      envelope_version: '1',
+      envelope_type: 'commit_proof',
+      payload,
+      payload_hash_b64u: payloadHashB64u,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signatureB64u,
+      algorithm: 'Ed25519',
+      signer_did: signerDid,
+      issued_at: issuedAt,
+    };
+  }
+
+  // Legacy commit_proof envelope (has envelope_type but missing some fields)
+  if (obj.envelope_type === 'commit_proof' && !('payload_hash_b64u' in obj)) {
+    const payload = typeof obj.payload === 'object' && obj.payload !== null ? obj.payload as Record<string, unknown> : {};
+    const signerDid = [
+      obj.signer_did,
+      payload.agent_did,
+      payload.signer_did,
+      payload.did,
+    ].find((c) => typeof c === 'string' && (c as string).trim().startsWith('did:')) as string | undefined;
+
+    const issuedAt = [
+      obj.issued_at,
+      payload.timestamp,
+      payload.issued_at,
+      payload.created_at,
+      payload.createdAt,
+    ].find((c) => typeof c === 'string' && (c as string).trim().length > 0) as string | undefined;
+
+    const normalized: Record<string, unknown> = { ...obj };
+    if (signerDid && !normalized.signer_did) normalized.signer_did = signerDid.trim();
+    if (issuedAt && !normalized.issued_at) normalized.issued_at = (issuedAt as string).trim();
+    if (!normalized.hash_algorithm) normalized.hash_algorithm = 'SHA-256';
+    if (!normalized.algorithm) normalized.algorithm = 'Ed25519';
+
+    if (!normalized.payload_hash_b64u) {
+      try {
+        const encoded = new TextEncoder().encode(jcsCanonicalize(payload));
+        const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+        normalized.payload_hash_b64u = base64UrlEncode(new Uint8Array(hashBuffer));
+      } catch {
+        // Let the normal validator produce a precise error
+      }
+    }
+
+    return normalized;
+  }
+
+  return input;
+}
+
 export async function verifyCommitProof(
   envelope: unknown,
   options: CommitProofVerifierOptions = {}
@@ -117,8 +218,11 @@ export async function verifyCommitProof(
 }> {
   const now = new Date().toISOString();
 
+  // 0. Normalize legacy formats before structural validation
+  const normalizedEnvelope = await normalizeLegacyCommitProof(envelope);
+
   // 1. Validate envelope structure
-  if (!validateEnvelopeStructure(envelope)) {
+  if (!validateEnvelopeStructure(normalizedEnvelope)) {
     return {
       result: {
         status: 'INVALID',
@@ -132,44 +236,47 @@ export async function verifyCommitProof(
     };
   }
 
+  // Use the normalized (and now type-narrowed) envelope for all remaining checks
+  const envelope_ = normalizedEnvelope;
+
   // 2. Fail-closed: reject unknown envelope version
-  if (!isAllowedVersion(envelope.envelope_version)) {
+  if (!isAllowedVersion(envelope_.envelope_version)) {
     return {
       result: {
         status: 'INVALID',
-        reason: `Unknown envelope version: ${envelope.envelope_version}`,
+        reason: `Unknown envelope version: ${envelope_.envelope_version}`,
         verified_at: now,
       },
       error: {
         code: 'UNKNOWN_ENVELOPE_VERSION',
-        message: `Envelope version "${envelope.envelope_version}" is not in the allowlist`,
+        message: `Envelope version "${envelope_.envelope_version}" is not in the allowlist`,
         field: 'envelope_version',
       },
     };
   }
 
   // 3. Fail-closed: reject unknown envelope type
-  if (!isAllowedType(envelope.envelope_type)) {
+  if (!isAllowedType(envelope_.envelope_type)) {
     return {
       result: {
         status: 'INVALID',
-        reason: `Unknown envelope type: ${envelope.envelope_type}`,
+        reason: `Unknown envelope type: ${envelope_.envelope_type}`,
         verified_at: now,
       },
       error: {
         code: 'UNKNOWN_ENVELOPE_TYPE',
-        message: `Envelope type "${envelope.envelope_type}" is not in the allowlist`,
+        message: `Envelope type "${envelope_.envelope_type}" is not in the allowlist`,
         field: 'envelope_type',
       },
     };
   }
 
   // 4. Verify this is a commit_proof envelope
-  if (envelope.envelope_type !== 'commit_proof') {
+  if (envelope_.envelope_type !== 'commit_proof') {
     return {
       result: {
         status: 'INVALID',
-        reason: `Expected commit_proof envelope, got: ${envelope.envelope_type}`,
+        reason: `Expected commit_proof envelope, got: ${envelope_.envelope_type}`,
         verified_at: now,
       },
       error: {
@@ -181,43 +288,43 @@ export async function verifyCommitProof(
   }
 
   // 5. Fail-closed: reject unknown signature algorithm
-  if (!isAllowedAlgorithm(envelope.algorithm)) {
+  if (!isAllowedAlgorithm(envelope_.algorithm)) {
     return {
       result: {
         status: 'INVALID',
-        reason: `Unknown signature algorithm: ${envelope.algorithm}`,
+        reason: `Unknown signature algorithm: ${envelope_.algorithm}`,
         verified_at: now,
       },
       error: {
         code: 'UNKNOWN_ALGORITHM',
-        message: `Signature algorithm "${envelope.algorithm}" is not in the allowlist`,
+        message: `Signature algorithm "${envelope_.algorithm}" is not in the allowlist`,
         field: 'algorithm',
       },
     };
   }
 
   // 6. Fail-closed: reject unknown hash algorithm
-  if (!isAllowedHashAlgorithm(envelope.hash_algorithm)) {
+  if (!isAllowedHashAlgorithm(envelope_.hash_algorithm)) {
     return {
       result: {
         status: 'INVALID',
-        reason: `Unknown hash algorithm: ${envelope.hash_algorithm}`,
+        reason: `Unknown hash algorithm: ${envelope_.hash_algorithm}`,
         verified_at: now,
       },
       error: {
         code: 'UNKNOWN_HASH_ALGORITHM',
-        message: `Hash algorithm "${envelope.hash_algorithm}" is not in the allowlist`,
+        message: `Hash algorithm "${envelope_.hash_algorithm}" is not in the allowlist`,
         field: 'hash_algorithm',
       },
     };
   }
 
   // 7. Validate signer DID format
-  if (!isValidDidFormat(envelope.signer_did)) {
+  if (!isValidDidFormat(envelope_.signer_did)) {
     return {
       result: {
         status: 'INVALID',
-        reason: `Invalid DID format: ${envelope.signer_did}`,
+        reason: `Invalid DID format: ${envelope_.signer_did}`,
         verified_at: now,
       },
       error: {
@@ -230,7 +337,7 @@ export async function verifyCommitProof(
   }
 
   // 8. Validate issued_at format
-  if (!isValidIsoDate(envelope.issued_at)) {
+  if (!isValidIsoDate(envelope_.issued_at)) {
     return {
       result: {
         status: 'INVALID',
@@ -246,7 +353,7 @@ export async function verifyCommitProof(
   }
 
   // 9. Validate base64url fields
-  if (!isValidBase64Url(envelope.payload_hash_b64u)) {
+  if (!isValidBase64Url(envelope_.payload_hash_b64u)) {
     return {
       result: {
         status: 'INVALID',
@@ -261,7 +368,7 @@ export async function verifyCommitProof(
     };
   }
 
-  if (!isValidBase64Url(envelope.signature_b64u)) {
+  if (!isValidBase64Url(envelope_.signature_b64u)) {
     return {
       result: {
         status: 'INVALID',
@@ -277,7 +384,7 @@ export async function verifyCommitProof(
   }
 
   // 10. Validate commit proof payload
-  if (!validateCommitProofPayload(envelope.payload)) {
+  if (!validateCommitProofPayload(envelope_.payload)) {
     return {
       result: {
         status: 'INVALID',
@@ -300,10 +407,10 @@ export async function verifyCommitProof(
         reason: 'Repo claim registry not configured (cannot verify repo_claim_id)',
         verified_at: now,
       },
-      repository: envelope.payload.repository,
-      commit_sha: envelope.payload.commit_sha,
-      signer_did: envelope.signer_did,
-      repo_claim_id: envelope.payload.repo_claim_id,
+      repository: envelope_.payload.repository,
+      commit_sha: envelope_.payload.commit_sha,
+      signer_did: envelope_.signer_did,
+      repo_claim_id: envelope_.payload.repo_claim_id,
       error: {
         code: 'DEPENDENCY_NOT_CONFIGURED',
         message:
@@ -313,20 +420,20 @@ export async function verifyCommitProof(
     };
   }
 
-  if (!isRepoClaimAllowlisted(envelope.payload.repo_claim_id, options.allowlistedRepoClaimIds)) {
+  if (!isRepoClaimAllowlisted(envelope_.payload.repo_claim_id, options.allowlistedRepoClaimIds)) {
     return {
       result: {
         status: 'INVALID',
         reason: 'Repo claim not found in clawclaim',
         verified_at: now,
       },
-      repository: envelope.payload.repository,
-      commit_sha: envelope.payload.commit_sha,
-      signer_did: envelope.signer_did,
-      repo_claim_id: envelope.payload.repo_claim_id,
+      repository: envelope_.payload.repository,
+      commit_sha: envelope_.payload.commit_sha,
+      signer_did: envelope_.signer_did,
+      repo_claim_id: envelope_.payload.repo_claim_id,
       error: {
         code: 'CLAIM_NOT_FOUND',
-        message: `Repo claim '${envelope.payload.repo_claim_id}' was not found in the allowlisted clawclaim registry`,
+        message: `Repo claim '${envelope_.payload.repo_claim_id}' was not found in the allowlisted clawclaim registry`,
         field: 'payload.repo_claim_id',
       },
     };
@@ -334,19 +441,19 @@ export async function verifyCommitProof(
 
   // 12. Recompute hash and verify it matches
   try {
-    const computedHash = await computeHash(envelope.payload, envelope.hash_algorithm);
+    const computedHash = await computeHash(envelope_.payload, envelope_.hash_algorithm);
 
-    if (computedHash !== envelope.payload_hash_b64u) {
+    if (computedHash !== envelope_.payload_hash_b64u) {
       return {
         result: {
           status: 'INVALID',
           reason: 'Payload hash mismatch: envelope may have been tampered with',
           verified_at: now,
         },
-        repository: envelope.payload.repository,
-        commit_sha: envelope.payload.commit_sha,
-        signer_did: envelope.signer_did,
-        repo_claim_id: envelope.payload.repo_claim_id,
+        repository: envelope_.payload.repository,
+        commit_sha: envelope_.payload.commit_sha,
+        signer_did: envelope_.signer_did,
+        repo_claim_id: envelope_.payload.repo_claim_id,
         error: {
           code: 'HASH_MISMATCH',
           message: 'Computed payload hash does not match envelope hash',
@@ -360,10 +467,10 @@ export async function verifyCommitProof(
         reason: `Hash computation failed: ${err instanceof Error ? err.message : 'unknown error'}`,
         verified_at: now,
       },
-      repository: envelope.payload.repository,
-      commit_sha: envelope.payload.commit_sha,
-      signer_did: envelope.signer_did,
-      repo_claim_id: envelope.payload.repo_claim_id,
+      repository: envelope_.payload.repository,
+      commit_sha: envelope_.payload.commit_sha,
+      signer_did: envelope_.signer_did,
+      repo_claim_id: envelope_.payload.repo_claim_id,
       error: {
         code: 'HASH_MISMATCH',
         message: 'Failed to compute payload hash',
@@ -372,7 +479,7 @@ export async function verifyCommitProof(
   }
 
   // 13. Extract public key from DID
-  const publicKeyBytes = extractPublicKeyFromDidKey(envelope.signer_did);
+  const publicKeyBytes = extractPublicKeyFromDidKey(envelope_.signer_did);
   if (!publicKeyBytes) {
     return {
       result: {
@@ -380,10 +487,10 @@ export async function verifyCommitProof(
         reason: 'Could not extract public key from signer DID',
         verified_at: now,
       },
-      repository: envelope.payload.repository,
-      commit_sha: envelope.payload.commit_sha,
-      signer_did: envelope.signer_did,
-      repo_claim_id: envelope.payload.repo_claim_id,
+      repository: envelope_.payload.repository,
+      commit_sha: envelope_.payload.commit_sha,
+      signer_did: envelope_.signer_did,
+      repo_claim_id: envelope_.payload.repo_claim_id,
       error: {
         code: 'INVALID_DID_FORMAT',
         message:
@@ -395,11 +502,11 @@ export async function verifyCommitProof(
 
   // 14. Verify signature
   try {
-    const signatureBytes = base64UrlDecode(envelope.signature_b64u);
-    const messageBytes = new TextEncoder().encode(envelope.payload_hash_b64u);
+    const signatureBytes = base64UrlDecode(envelope_.signature_b64u);
+    const messageBytes = new TextEncoder().encode(envelope_.payload_hash_b64u);
 
     const isValid = await verifySignature(
-      envelope.algorithm,
+      envelope_.algorithm,
       publicKeyBytes,
       signatureBytes,
       messageBytes
@@ -412,10 +519,10 @@ export async function verifyCommitProof(
           reason: 'Signature verification failed',
           verified_at: now,
         },
-        repository: envelope.payload.repository,
-        commit_sha: envelope.payload.commit_sha,
-        signer_did: envelope.signer_did,
-        repo_claim_id: envelope.payload.repo_claim_id,
+        repository: envelope_.payload.repository,
+        commit_sha: envelope_.payload.commit_sha,
+        signer_did: envelope_.signer_did,
+        repo_claim_id: envelope_.payload.repo_claim_id,
         error: {
           code: 'SIGNATURE_INVALID',
           message: 'The Ed25519 signature does not match the payload hash',
@@ -429,10 +536,10 @@ export async function verifyCommitProof(
         reason: `Signature verification error: ${err instanceof Error ? err.message : 'unknown error'}`,
         verified_at: now,
       },
-      repository: envelope.payload.repository,
-      commit_sha: envelope.payload.commit_sha,
-      signer_did: envelope.signer_did,
-      repo_claim_id: envelope.payload.repo_claim_id,
+      repository: envelope_.payload.repository,
+      commit_sha: envelope_.payload.commit_sha,
+      signer_did: envelope_.signer_did,
+      repo_claim_id: envelope_.payload.repo_claim_id,
       error: {
         code: 'SIGNATURE_INVALID',
         message: 'Failed to verify signature',
@@ -445,13 +552,13 @@ export async function verifyCommitProof(
     result: {
       status: 'VALID',
       reason: 'Commit proof verified successfully',
-      envelope_type: envelope.envelope_type,
-      signer_did: envelope.signer_did,
+      envelope_type: envelope_.envelope_type,
+      signer_did: envelope_.signer_did,
       verified_at: now,
     },
-    repository: envelope.payload.repository,
-    commit_sha: envelope.payload.commit_sha,
-    signer_did: envelope.signer_did,
-    repo_claim_id: envelope.payload.repo_claim_id,
+    repository: envelope_.payload.repository,
+    commit_sha: envelope_.payload.commit_sha,
+    signer_did: envelope_.signer_did,
+    repo_claim_id: envelope_.payload.repo_claim_id,
   };
 }
